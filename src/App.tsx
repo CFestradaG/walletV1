@@ -20,7 +20,7 @@ import { AnalyticsView } from './features/analytics/AnalyticsView';
 import { MoreView } from './features/settings/MoreView';
 import { TransactionModal } from './features/transactions/TransactionModal';
 import { PeriodsModal } from './features/financial_periods/PeriodsModal';
-import { BudgetsModal } from './features/budgets/BudgetsModal';
+import { AnnualBudgetModal } from './features/annual_budget/AnnualBudgetModal';
 import { Transaction, TransactionType } from './core/types/models';
 
 type MainTab = 'inicio' | 'cuentas' | 'transacciones' | 'analisis' | 'mas';
@@ -33,6 +33,10 @@ const WalletAppShell: React.FC = () => {
     setThemeMode,
     settings,
     syncError,
+    isOnline,
+    isSyncing,
+    pendingOfflineCount,
+    forceSyncNow,
   } = useWallet();
 
   const isDark = resolvedTheme === 'dark';
@@ -50,9 +54,9 @@ const WalletAppShell: React.FC = () => {
     string | undefined
   >(undefined);
 
-  // Periods & Budgets Modals State
+  // Periods & Unified Annual Budget Modals State
   const [isPeriodsModalOpen, setIsPeriodsModalOpen] = useState(false);
-  const [isBudgetsModalOpen, setIsBudgetsModalOpen] = useState(false);
+  const [isAnnualBudgetModalOpen, setIsAnnualBudgetModalOpen] = useState(false);
 
   if (!isAuthenticated) {
     return <AuthScreen />;
@@ -178,19 +182,48 @@ const WalletAppShell: React.FC = () => {
           <button
             type="button"
             onClick={() => handleOpenNewTransaction()}
-            className="min-h-[38px] px-3 md:px-3.5 rounded-xl bg-[#10B981] text-[#002113] font-display text-xs font-bold flex items-center gap-1.5 hover:opacity-95 active:scale-95 transition-all cursor-pointer whitespace-nowrap shadow-xs"
+            title="Agregar transacción"
+            aria-label="Agregar transacción"
+            className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-300 text-slate-950 flex items-center justify-center hover:scale-105 active:scale-95 transition-all duration-200 shadow-md shadow-emerald-500/25 hover:shadow-emerald-500/40 border border-emerald-400/30 group cursor-pointer"
           >
-            <Plus className="w-4 h-4" />
-            <span className="hidden md:inline">Agregar transacción</span>
-            <span className="md:hidden">Nueva</span>
+            <Plus className="w-5 h-5 stroke-[2.75] transition-transform duration-200 group-hover:rotate-90" />
           </button>
         </div>
       </header>
 
+      {!isOnline && (
+        <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-1.5 text-xs text-amber-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+            <span>
+              Modo sin conexión. {pendingOfflineCount > 0 ? `${pendingOfflineCount} cambio(s) guardado(s) localmente.` : 'Tus cambios se sincronizarán al reconectar.'}
+            </span>
+          </div>
+        </div>
+      )}
+
+      {isOnline && isSyncing && (
+        <div className="bg-emerald-500/10 border-b border-emerald-500/20 px-4 py-1 text-xs text-emerald-300 flex items-center gap-2">
+          <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+          <span>Sincronizando con la nube {pendingOfflineCount > 0 ? `(${pendingOfflineCount} pendiente${pendingOfflineCount > 1 ? 's' : ''})` : ''}...</span>
+        </div>
+      )}
+
       {syncError && (
-        <div role="alert" className="bg-rose-500/15 border-b border-rose-500/30 px-4 py-2 text-xs text-rose-200 flex items-center gap-2">
-          <AlertTriangle className="w-4 h-4 shrink-0" />
-          <span>{syncError}</span>
+        <div role="alert" className="bg-rose-500/15 border-b border-rose-500/30 px-4 py-2 text-xs text-rose-200 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 shrink-0" />
+            <span>{syncError}</span>
+          </div>
+          {isOnline && (
+            <button
+              type="button"
+              onClick={() => void forceSyncNow()}
+              className="underline hover:text-white font-semibold cursor-pointer text-[11px] shrink-0 ml-2"
+            >
+              Reintentar
+            </button>
+          )}
         </div>
       )}
 
@@ -201,8 +234,8 @@ const WalletAppShell: React.FC = () => {
             onOpenNewTransaction={() => handleOpenNewTransaction()}
             onEditTransaction={handleEditTransaction}
             onOpenPeriodsModal={() => setIsPeriodsModalOpen(true)}
-            onOpenBudgetsModal={() => setIsBudgetsModalOpen(true)}
             onNavigateTab={setActiveTab}
+            onOpenAnnualBudgetModal={() => setIsAnnualBudgetModalOpen(true)}
           />
         )}
 
@@ -235,15 +268,16 @@ const WalletAppShell: React.FC = () => {
         {activeTab === 'analisis' && (
           <AnalyticsView
             onOpenPeriodsModal={() => setIsPeriodsModalOpen(true)}
-            onOpenBudgetsModal={() => setIsBudgetsModalOpen(true)}
+            onOpenBudgetsModal={() => setIsAnnualBudgetModalOpen(true)}
             onOpenNewTransaction={() => handleOpenNewTransaction()}
+            onOpenAnnualBudgetModal={() => setIsAnnualBudgetModalOpen(true)}
           />
         )}
 
         {activeTab === 'mas' && (
           <MoreView
             onOpenPeriodsModal={() => setIsPeriodsModalOpen(true)}
-            onOpenBudgetsModal={() => setIsBudgetsModalOpen(true)}
+            onOpenBudgetsModal={() => setIsAnnualBudgetModalOpen(true)}
           />
         )}
       </main>
@@ -314,9 +348,9 @@ const WalletAppShell: React.FC = () => {
         onClose={() => setIsPeriodsModalOpen(false)}
       />
 
-      <BudgetsModal
-        isOpen={isBudgetsModalOpen}
-        onClose={() => setIsBudgetsModalOpen(false)}
+      <AnnualBudgetModal
+        isOpen={isAnnualBudgetModalOpen}
+        onClose={() => setIsAnnualBudgetModalOpen(false)}
       />
     </div>
   );

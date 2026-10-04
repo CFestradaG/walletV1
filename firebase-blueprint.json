@@ -24,7 +24,8 @@
         "currencySymbolPosition": { "type": "string", "enum": ["prefix", "suffix"] },
         "decimalPlaces": { "type": "number" },
         "themeMode": { "type": "string", "enum": ["light", "dark", "system"] },
-        "hideBalances": { "type": "boolean" }
+        "hideBalances": { "type": "boolean" },
+        "activePeriodId": { "type": "string", "maxLength": 128 }
       },
       "required": ["userId", "currency", "themeMode"]
     },

@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   BarChart3,
   Download,
+  FileSpreadsheet,
   Landmark,
   PieChart,
   SlidersHorizontal,
@@ -19,11 +20,13 @@ interface AnalyticsViewProps {
   onOpenPeriodsModal: () => void;
   onOpenBudgetsModal: () => void;
   onOpenNewTransaction: () => void;
+  onOpenAnnualBudgetModal?: () => void;
 }
 
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   onOpenPeriodsModal,
   onOpenBudgetsModal,
+  onOpenAnnualBudgetModal,
 }) => {
   const {
     activePeriod,
@@ -235,20 +238,32 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             : 'bg-white border-slate-200 shadow-xs'
         }`}
       >
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <div className="flex items-center gap-2">
             <BarChart3 className="w-5 h-5 text-emerald-400" />
             <h1 className="font-display font-bold text-base">Análisis Financiero</h1>
           </div>
 
-          <button
-            type="button"
-            onClick={exportSummaryCSV}
-            className="px-3 py-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-medium flex items-center gap-1.5 cursor-pointer text-slate-300"
-          >
-            <Download className="w-3.5 h-3.5" />
-            <span>Exportar CSV</span>
-          </button>
+          <div className="flex items-center gap-2">
+            {onOpenAnnualBudgetModal && (
+              <button
+                type="button"
+                onClick={onOpenAnnualBudgetModal}
+                className="px-3 py-1.5 rounded-xl bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/30 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <FileSpreadsheet className="w-3.5 h-3.5" />
+                <span>Panorama Anual</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={exportSummaryCSV}
+              className="px-3 py-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-medium flex items-center gap-1.5 cursor-pointer text-slate-300"
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span>Exportar CSV</span>
+            </button>
+          </div>
         </div>
 
         {/* 3 Metrics Row */}
@@ -386,10 +401,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             </div>
             <button
               type="button"
-              onClick={onOpenBudgetsModal}
+              onClick={onOpenAnnualBudgetModal || onOpenBudgetsModal}
               className="text-[11px] text-emerald-400 hover:underline cursor-pointer"
             >
-              Configurar
+              Panorama Anual
             </button>
           </div>
 

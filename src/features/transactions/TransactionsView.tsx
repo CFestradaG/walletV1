@@ -60,7 +60,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     if (periodFilterMode === 'all' || !activePeriod) {
       return transactions;
     }
-    let scoped = transactions.filter((t) => t.periodId === activePeriod.id || !t.periodId);
+    let scoped = transactions.filter(
+      (t) =>
+        t.periodId === activePeriod.id ||
+        (t.date >= activePeriod.startDate && t.date <= activePeriod.endDate)
+    );
     if (filterSubperiodId) {
       const subperiod = activePeriod.subperiods.find((item) => item.id === filterSubperiodId);
       scoped = scoped.filter((t) => t.subperiodId === filterSubperiodId ||
@@ -188,10 +192,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         <button
           type="button"
           onClick={onOpenNewTransaction}
-          className="min-h-[32px] px-3 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-1.5 hover:bg-emerald-500/25 transition-colors cursor-pointer"
+          title="Nueva transacción"
+          aria-label="Nueva transacción"
+          className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-slate-950 flex items-center justify-center hover:scale-105 active:scale-95 transition-all cursor-pointer shadow-xs border border-emerald-400/30 group"
         >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Nueva transacción</span>
+          <Plus className="w-4 h-4 stroke-[2.75] transition-transform duration-200 group-hover:rotate-90" />
         </button>
       </div>
 

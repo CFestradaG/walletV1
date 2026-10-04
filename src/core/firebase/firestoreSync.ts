@@ -122,10 +122,59 @@ export async function syncTransaction(userId: string, tx: Transaction): Promise<
   }
 }
 
+/**
+ * Atomically commits a transaction and all affected accounts in a single Firestore writeBatch.
+ * Guarantees that neither accounts nor the transaction get out-of-sync on Firestore.
+ */
+export async function syncTransactionWithAccounts(
+  userId: string,
+  tx: Transaction,
+  accounts: Account[]
+): Promise<void> {
+  const path = `users/${userId}/transactions/${tx.id}`;
+  try {
+    const batch = writeBatch(db);
+    // Write transaction
+    const txRef = doc(db, 'users', userId, 'transactions', tx.id);
+    batch.set(txRef, ownedRecord(tx, userId));
+    // Write accounts
+    for (const account of accounts) {
+      const accRef = doc(db, 'users', userId, 'accounts', account.id);
+      batch.set(accRef, ownedRecord(account, userId));
+    }
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
 export async function deleteTransactionFromDb(userId: string, txId: string): Promise<void> {
   const path = `users/${userId}/transactions/${txId}`;
   try {
     await deleteDoc(doc(db, 'users', userId, 'transactions', txId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+/**
+ * Atomically deletes a transaction and updates the reverted account balances in a single writeBatch.
+ */
+export async function deleteTransactionWithAccounts(
+  userId: string,
+  txId: string,
+  accounts: Account[]
+): Promise<void> {
+  const path = `users/${userId}/transactions/${txId}`;
+  try {
+    const batch = writeBatch(db);
+    const txRef = doc(db, 'users', userId, 'transactions', txId);
+    batch.delete(txRef);
+    for (const account of accounts) {
+      const accRef = doc(db, 'users', userId, 'accounts', account.id);
+      batch.set(accRef, ownedRecord(account, userId));
+    }
+    await batch.commit();
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, path);
   }
@@ -175,11 +224,14 @@ export async function seedUserInitialData(userId: string, initialStore: UserData
         pendingWrites += 1;
       }
     };
+    const hasExistingPeriods = existingDocs[collections.indexOf('periods')].docs.length > 0;
+    const hasExistingCategories = existingDocs[collections.indexOf('categories')].docs.length > 0;
+
     const records: [typeof collections[number], string, InitialRecord][] = [
       ['settings', 'default', initialStore.settings],
       ...initialStore.accounts.map((item): [typeof collections[number], string, InitialRecord] => ['accounts', item.id, item]),
-      ...initialStore.categories.map((item): [typeof collections[number], string, InitialRecord] => ['categories', item.id, item]),
-      ...initialStore.periods.map((item): [typeof collections[number], string, InitialRecord] => ['periods', item.id, item]),
+      ...(hasExistingCategories ? [] : initialStore.categories.map((item): [typeof collections[number], string, InitialRecord] => ['categories', item.id, item])),
+      ...(hasExistingPeriods ? [] : initialStore.periods.map((item): [typeof collections[number], string, InitialRecord] => ['periods', item.id, item])),
       ...initialStore.transactions.map((item): [typeof collections[number], string, InitialRecord] => ['transactions', item.id, item]),
       ...initialStore.budgets.map((item): [typeof collections[number], string, InitialRecord] => ['budgets', item.id, item]),
     ];

@@ -63,6 +63,7 @@ import {
   deleteCategoryFromDb,
   deletePeriodFromDb,
   deleteTransactionFromDb,
+  deleteTransactionWithAccounts,
   seedUserInitialData,
   syncAccount,
   syncBudget,
@@ -71,7 +72,12 @@ import {
   syncProfile,
   syncSettings,
   syncTransaction,
+  syncTransactionWithAccounts,
 } from '../firebase/firestoreSync';
+import {
+  offlineQueue,
+  loadQueueFromStorage,
+} from '../sync/offlineQueue';
 
 const STORAGE_KEY = 'wallet_app_v4_store';
 const SESSION_USER_KEY = 'wallet_app_v4_user_id';
@@ -299,6 +305,12 @@ interface WalletContextValue {
   updateSettings: (partial: Partial<UserSettings>) => void;
   deleteCategory: (categoryId: string) => { ok: boolean; error?: string };
   deleteAccount: (accountId: string) => void;
+
+  isOnline: boolean;
+  isSyncing: boolean;
+  pendingOfflineCount: number;
+  lastSyncTime: number | null;
+  forceSyncNow: () => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -338,6 +350,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [db, setDb] = useState<StoredDatabase>(() => loadInitialDatabase());
   const [remoteTransactionsLoaded, setRemoteTransactionsLoaded] = useState(false);
   const [syncError, setSyncError] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState<boolean>(() =>
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
+  const [isSyncing, setIsSyncing] = useState<boolean>(false);
+  const [pendingOfflineCount, setPendingOfflineCount] = useState<number>(0);
+  const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => {
     try {
       const saved = localStorage.getItem(SESSION_USER_KEY);
@@ -348,6 +366,34 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     return null;
   });
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      if (currentUserId) void offlineQueue.processUserQueue(currentUserId);
+    };
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [currentUserId]);
+
+  useEffect(() => {
+    const unsub = offlineQueue.subscribe((status) => {
+      setIsSyncing(status.isProcessing);
+      setPendingOfflineCount(status.pendingCount);
+      if (status.lastSyncTime) setLastSyncTime(status.lastSyncTime);
+      if (status.lastError) setSyncError(status.lastError);
+      else if (status.pendingCount === 0) setSyncError(null);
+    });
+    if (currentUserId) {
+      setPendingOfflineCount(offlineQueue.getPendingCount(currentUserId));
+    }
+    return () => unsub();
+  }, [currentUserId]);
 
   const [systemPrefersDark, setSystemPrefersDark] = useState<boolean>(() => {
     if (typeof window !== 'undefined' && window.matchMedia) {
@@ -481,11 +527,45 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           collection(firestoreDb, 'users', uid, 'accounts'),
           (snap) => {
             const remoteAccs = normalizeOwnedDocuments<Account>(snap.docs, uid, (account) => {
-              trackSync(syncAccount(uid, account), 'reparación del propietario de una cuenta');
+              offlineQueue.enqueue(uid, 'SAVE_ACCOUNT', { account });
             });
+
+            // Reconcile with pending offline mutations
+            const pendingQueue = loadQueueFromStorage(uid);
+            const pendingAccountSaves = new Map<string, Account>();
+            for (const item of pendingQueue) {
+              if (item.type === 'SAVE_ACCOUNT') {
+                pendingAccountSaves.set(item.payload.account.id, item.payload.account);
+              } else if (item.type === 'SAVE_TX_AND_ACCOUNTS' || item.type === 'DELETE_TX_AND_ACCOUNTS') {
+                if (Array.isArray(item.payload.accounts)) {
+                  for (const acc of item.payload.accounts) {
+                    pendingAccountSaves.set(acc.id, acc);
+                  }
+                }
+              }
+            }
+            const pendingAccountDeletes = new Set(
+              pendingQueue
+                .filter((m) => m.type === 'DELETE_ACCOUNT')
+                .map((m) => m.payload.accountId)
+            );
+
+            let reconciled = remoteAccs.filter((acc) => !pendingAccountDeletes.has(acc.id));
+            reconciled = reconciled.map((acc) => {
+              if (pendingAccountSaves.has(acc.id)) {
+                const localVersion = pendingAccountSaves.get(acc.id)!;
+                pendingAccountSaves.delete(acc.id);
+                return localVersion;
+              }
+              return acc;
+            });
+            for (const localAcc of pendingAccountSaves.values()) {
+              reconciled.push(localAcc);
+            }
+
             setDb((prev) => {
               const current = prev.users[uid] || initialStore;
-              return { ...prev, users: { ...prev.users, [uid]: { ...current, accounts: remoteAccs } } };
+              return { ...prev, users: { ...prev.users, [uid]: { ...current, accounts: reconciled } } };
             });
           },
           (err) => reportReadError(err, 'las cuentas', `users/${uid}/accounts`)
@@ -497,11 +577,36 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           collection(firestoreDb, 'users', uid, 'categories'),
           (snap) => {
             const remoteCats = normalizeOwnedDocuments<Category>(snap.docs, uid, (category) => {
-              trackSync(syncCategory(uid, category), 'reparación del propietario de una categoría');
+              offlineQueue.enqueue(uid, 'SAVE_CATEGORY', { category });
             });
+            const pendingQueue = loadQueueFromStorage(uid);
+            const pendingDeletes = new Set(
+              pendingQueue
+                .filter((m) => m.type === 'DELETE_CATEGORY')
+                .map((m) => m.payload.categoryId)
+            );
+            const pendingSaves = new Map<string, Category>(
+              pendingQueue
+                .filter((m) => m.type === 'SAVE_CATEGORY')
+                .map((m) => [m.payload.category.id, m.payload.category])
+            );
+
+            let reconciled = remoteCats.filter((c) => !pendingDeletes.has(c.id));
+            reconciled = reconciled.map((c) => {
+              if (pendingSaves.has(c.id)) {
+                const local = pendingSaves.get(c.id)!;
+                pendingSaves.delete(c.id);
+                return local;
+              }
+              return c;
+            });
+            for (const localCat of pendingSaves.values()) {
+              reconciled.push(localCat);
+            }
+
             setDb((prev) => {
               const current = prev.users[uid] || initialStore;
-              return { ...prev, users: { ...prev.users, [uid]: { ...current, categories: remoteCats } } };
+              return { ...prev, users: { ...prev.users, [uid]: { ...current, categories: reconciled } } };
             });
           },
           (err) => reportReadError(err, 'las categorías', `users/${uid}/categories`)
@@ -513,12 +618,50 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           collection(firestoreDb, 'users', uid, 'periods'),
           (snap) => {
             const remotePers = normalizeOwnedDocuments<FinancialPeriod>(snap.docs, uid, (period) => {
-              trackSync(syncPeriod(uid, period), 'reparación del propietario de un período');
+              offlineQueue.enqueue(uid, 'SAVE_PERIOD', { period });
             });
+            const pendingQueue = loadQueueFromStorage(uid);
+            const pendingDeletes = new Set(
+              pendingQueue
+                .filter((m) => m.type === 'DELETE_PERIOD')
+                .map((m) => m.payload.periodId)
+            );
+            const pendingSaves = new Map<string, FinancialPeriod>(
+              pendingQueue
+                .filter((m) => m.type === 'SAVE_PERIOD')
+                .map((m) => [m.payload.period.id, m.payload.period])
+            );
+
+            let reconciled = remotePers.filter((p) => !pendingDeletes.has(p.id));
+            reconciled = reconciled.map((p) => {
+              if (pendingSaves.has(p.id)) {
+                const local = pendingSaves.get(p.id)!;
+                pendingSaves.delete(p.id);
+                return local;
+              }
+              return p;
+            });
+            for (const localPer of pendingSaves.values()) {
+              reconciled.push(localPer);
+            }
+
             setDb((prev) => {
               const current = prev.users[uid] || initialStore;
-              const activeId = remotePers.find((period) => period.isActive)?.id;
-              return { ...prev, users: { ...prev.users, [uid]: { ...current, periods: remotePers, activePeriodId: activeId || current.activePeriodId } } };
+              const preferredActiveId =
+                current.settings?.activePeriodId ||
+                reconciled.find((period) => period.isActive)?.id ||
+                reconciled[0]?.id;
+              return {
+                ...prev,
+                users: {
+                  ...prev.users,
+                  [uid]: {
+                    ...current,
+                    periods: reconciled,
+                    activePeriodId: preferredActiveId || current.activePeriodId,
+                  },
+                },
+              };
             });
           },
           (err) => reportReadError(err, 'los períodos', `users/${uid}/periods`)
@@ -532,9 +675,36 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             const remoteTxs = snap.docs.flatMap((d) => {
               const data = d.data() as Transaction;
               const owned = { ...data, userId: uid };
-              if (data.userId !== uid) trackSync(syncTransaction(uid, owned), 'reparación del propietario de una transacción');
+              if (data.userId !== uid) offlineQueue.enqueue(uid, 'SAVE_TX_AND_ACCOUNTS', { transaction: owned, accounts: [] });
               return [owned];
             });
+
+            // Reconcile with pending offline mutations
+            const pendingQueue = loadQueueFromStorage(uid);
+            const pendingDeletes = new Set(
+              pendingQueue
+                .filter((m) => m.type === 'DELETE_TX_AND_ACCOUNTS')
+                .map((m) => m.payload.transactionId)
+            );
+            const pendingSaves = new Map<string, Transaction>(
+              pendingQueue
+                .filter((m) => m.type === 'SAVE_TX_AND_ACCOUNTS')
+                .map((m) => [m.payload.transaction.id, m.payload.transaction])
+            );
+
+            let reconciled = remoteTxs.filter((tx) => !pendingDeletes.has(tx.id));
+            reconciled = reconciled.map((tx) => {
+              if (pendingSaves.has(tx.id)) {
+                const localVersion = pendingSaves.get(tx.id)!;
+                pendingSaves.delete(tx.id);
+                return localVersion;
+              }
+              return tx;
+            });
+            for (const localTx of pendingSaves.values()) {
+              reconciled.unshift(localTx);
+            }
+
             setDb((prev) => {
               const current = prev.users[uid] || initialStore;
               return {
@@ -543,7 +713,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                   ...prev.users,
                   [uid]: {
                     ...current,
-                    transactions: remoteTxs,
+                    transactions: reconciled,
                   },
                 },
               };
@@ -564,8 +734,33 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           collection(firestoreDb, 'users', uid, 'budgets'),
           (snap) => {
             const remoteBudgets = normalizeOwnedDocuments<Budget>(snap.docs, uid, (budget) => {
-              trackSync(syncBudget(uid, budget), 'reparación del propietario de un presupuesto');
+              offlineQueue.enqueue(uid, 'SAVE_BUDGET', { budget });
             });
+            const pendingQueue = loadQueueFromStorage(uid);
+            const pendingDeletes = new Set(
+              pendingQueue
+                .filter((m) => m.type === 'DELETE_BUDGET')
+                .map((m) => m.payload.budgetId)
+            );
+            const pendingSaves = new Map<string, Budget>(
+              pendingQueue
+                .filter((m) => m.type === 'SAVE_BUDGET')
+                .map((m) => [m.payload.budget.id, m.payload.budget])
+            );
+
+            let reconciled = remoteBudgets.filter((b) => !pendingDeletes.has(b.id));
+            reconciled = reconciled.map((b) => {
+              if (pendingSaves.has(b.id)) {
+                const local = pendingSaves.get(b.id)!;
+                pendingSaves.delete(b.id);
+                return local;
+              }
+              return b;
+            });
+            for (const localB of pendingSaves.values()) {
+              reconciled.push(localB);
+            }
+
             setDb((prev) => {
               const current = prev.users[uid] || initialStore;
               return {
@@ -574,7 +769,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                   ...prev.users,
                   [uid]: {
                     ...current,
-                    budgets: remoteBudgets,
+                    budgets: reconciled,
                   },
                 },
               };
@@ -591,10 +786,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             const remoteSettings = rawSettings;
             if (remoteSettings) {
               const mergedSettings = { ...initialStore.settings, ...remoteSettings, userId: uid };
-              if (remoteSettings.userId !== uid) trackSync(syncSettings(uid, mergedSettings), 'reparación del propietario de la configuración');
+              if (remoteSettings.userId !== uid) offlineQueue.enqueue(uid, 'SAVE_SETTINGS', { settings: mergedSettings });
               setDb((prev) => {
                 const current = prev.users[uid] || initialStore;
-                return { ...prev, users: { ...prev.users, [uid]: { ...current, settings: mergedSettings } } };
+                const nextActivePeriodId = mergedSettings.activePeriodId || current.activePeriodId;
+                return {
+                  ...prev,
+                  users: {
+                    ...prev.users,
+                    [uid]: {
+                      ...current,
+                      settings: mergedSettings,
+                      activePeriodId: nextActivePeriodId,
+                    },
+                  },
+                };
               });
             }
           },
@@ -837,7 +1043,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }));
 
     if (auth.currentUser && auth.currentUser.uid === currentUserId) {
-      trackSync(syncAccount(currentUserId, newAccount), 'la cuenta');
+      offlineQueue.enqueue(currentUserId, 'SAVE_ACCOUNT', { account: newAccount });
     }
 
     return { ok: true };
@@ -858,43 +1064,28 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const cleanName = input.name.trim();
     if (!cleanName) return { ok: false, error: 'El nombre de la cuenta es obligatorio.' };
 
+    const existing = currentUserStore?.accounts.find((a) => a.id === accountId);
+    if (!existing) return { ok: false, error: 'La cuenta no existe.' };
+
+    const updatedAccount: Account = {
+      ...existing,
+      name: cleanName,
+      subtitle: input.subtitle?.trim() || undefined,
+      creditLimit: existing.type === 'credit_card' ? input.creditLimit : undefined,
+      cutoffDay: existing.type === 'credit_card' ? (input.cutoffDay ?? existing.cutoffDay ?? 15) : undefined,
+      paymentDueDay: existing.type === 'credit_card' ? (input.paymentDueDay ?? existing.paymentDueDay ?? 5) : undefined,
+      icon: input.icon,
+      color: input.color,
+      updatedAt: new Date().toISOString(),
+    };
+
     updateCurrentUserStore((store) => ({
       ...store,
-      accounts: store.accounts.map((acc) =>
-        acc.id === accountId
-          ? {
-              ...acc,
-              name: cleanName,
-              subtitle: input.subtitle?.trim() || undefined,
-              creditLimit: acc.type === 'credit_card' ? input.creditLimit : undefined,
-              cutoffDay: acc.type === 'credit_card' ? (input.cutoffDay ?? acc.cutoffDay ?? 15) : undefined,
-              paymentDueDay: acc.type === 'credit_card' ? (input.paymentDueDay ?? acc.paymentDueDay ?? 5) : undefined,
-              icon: input.icon,
-              color: input.color,
-              updatedAt: new Date().toISOString(),
-            }
-          : acc
-      ),
+      accounts: store.accounts.map((acc) => (acc.id === accountId ? updatedAccount : acc)),
     }));
 
     if (auth.currentUser && auth.currentUser.uid === currentUserId) {
-      const existing = currentUserStore?.accounts.find((a) => a.id === accountId);
-      if (existing) {
-        syncAccount(currentUserId, {
-          ...existing,
-          name: cleanName,
-          subtitle: input.subtitle?.trim() || undefined,
-          creditLimit: existing.type === 'credit_card' ? input.creditLimit : undefined,
-          cutoffDay: existing.type === 'credit_card' ? (input.cutoffDay ?? existing.cutoffDay ?? 15) : undefined,
-          paymentDueDay: existing.type === 'credit_card' ? (input.paymentDueDay ?? existing.paymentDueDay ?? 5) : undefined,
-          icon: input.icon,
-          color: input.color,
-          updatedAt: new Date().toISOString(),
-        }).then(() => setSyncError(null)).catch((error) => {
-          console.warn(error);
-          setSyncError('No se pudo sincronizar la cuenta. El cambio sigue guardado en este dispositivo.');
-        });
-      }
+      offlineQueue.enqueue(currentUserId, 'SAVE_ACCOUNT', { account: updatedAccount });
     }
 
     return { ok: true };
@@ -905,14 +1096,16 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!existing) return;
     const updatedAccount = {
       ...existing,
-      status: existing.status === 'active' ? 'archived' as const : 'active' as const,
+      status: existing.status === 'active' ? ('archived' as const) : ('active' as const),
       updatedAt: new Date().toISOString(),
     };
     updateCurrentUserStore((store) => ({
       ...store,
-      accounts: store.accounts.map((acc) => acc.id === accountId ? updatedAccount : acc),
+      accounts: store.accounts.map((acc) => (acc.id === accountId ? updatedAccount : acc)),
     }));
-    if (auth.currentUser?.uid === currentUserId && currentUserId) trackSync(syncAccount(currentUserId, updatedAccount), 'la cuenta');
+    if (auth.currentUser?.uid === currentUserId && currentUserId) {
+      offlineQueue.enqueue(currentUserId, 'SAVE_ACCOUNT', { account: updatedAccount });
+    }
   };
 
   const categories = currentUserStore?.categories ?? [];
@@ -955,7 +1148,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }));
 
     if (auth.currentUser && auth.currentUser.uid === currentUserId) {
-      trackSync(syncCategory(currentUserId, newCat), 'la categoría');
+      offlineQueue.enqueue(currentUserId, 'SAVE_CATEGORY', { category: newCat });
     }
 
     return { ok: true };
@@ -967,9 +1160,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const updatedCategory = { ...category, isActive: !category.isActive };
     updateCurrentUserStore((store) => ({
       ...store,
-      categories: store.categories.map((c) => c.id === categoryId ? updatedCategory : c),
+      categories: store.categories.map((c) => (c.id === categoryId ? updatedCategory : c)),
     }));
-    if (auth.currentUser?.uid === currentUserId && currentUserId) trackSync(syncCategory(currentUserId, updatedCategory), 'la categoría');
+    if (auth.currentUser?.uid === currentUserId && currentUserId) {
+      offlineQueue.enqueue(currentUserId, 'SAVE_CATEGORY', { category: updatedCategory });
+    }
   };
 
   const addSubcategory = (
@@ -987,12 +1182,15 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     const updatedCategory: Category = {
       ...category,
-      subcategories: [...category.subcategories, {
-        id: `sub_${Date.now()}`,
-        categoryId,
-        name: cleanName,
-        icon: icon || '🏷️',
-      }],
+      subcategories: [
+        ...category.subcategories,
+        {
+          id: `sub_${Date.now()}`,
+          categoryId,
+          name: cleanName,
+          icon: icon || '🏷️',
+        },
+      ],
     };
     updateCurrentUserStore((store) => ({
       ...store,
@@ -1000,7 +1198,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         c.id === categoryId ? updatedCategory : c
       ),
     }));
-    if (auth.currentUser?.uid === currentUserId) trackSync(syncCategory(currentUserId, updatedCategory), 'la categoría');
+    if (auth.currentUser?.uid === currentUserId) {
+      offlineQueue.enqueue(currentUserId, 'SAVE_CATEGORY', { category: updatedCategory });
+    }
     return { ok: true };
   };
 
@@ -1010,12 +1210,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!cleanName) return { ok: false, error: 'El nombre de la categoría es obligatorio.' };
     const category = currentUserStore.categories.find((item) => item.id === categoryId);
     if (!category) return { ok: false, error: 'La categoría ya no existe.' };
-    if (currentUserStore.categories.some((item) => item.id !== categoryId && item.type === category.type && item.name.toLowerCase() === cleanName.toLowerCase())) {
+    if (
+      currentUserStore.categories.some(
+        (item) => item.id !== categoryId && item.type === category.type && item.name.toLowerCase() === cleanName.toLowerCase()
+      )
+    ) {
       return { ok: false, error: 'Ya existe una categoría con ese nombre para este tipo.' };
     }
     const updatedCategory = { ...category, name: cleanName };
-    updateCurrentUserStore((store) => ({ ...store, categories: store.categories.map((item) => item.id === categoryId ? updatedCategory : item) }));
-    if (auth.currentUser?.uid === currentUserId) trackSync(syncCategory(currentUserId, updatedCategory), 'la categoría');
+    updateCurrentUserStore((store) => ({
+      ...store,
+      categories: store.categories.map((item) => (item.id === categoryId ? updatedCategory : item)),
+    }));
+    if (auth.currentUser?.uid === currentUserId) {
+      offlineQueue.enqueue(currentUserId, 'SAVE_CATEGORY', { category: updatedCategory });
+    }
     return { ok: true };
   };
 
@@ -1030,10 +1239,15 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
     const updatedCategory = {
       ...category,
-      subcategories: category.subcategories.map((item) => item.id === subcategoryId ? { ...item, name: cleanName } : item),
+      subcategories: category.subcategories.map((item) => (item.id === subcategoryId ? { ...item, name: cleanName } : item)),
     };
-    updateCurrentUserStore((store) => ({ ...store, categories: store.categories.map((item) => item.id === categoryId ? updatedCategory : item) }));
-    if (auth.currentUser?.uid === currentUserId) trackSync(syncCategory(currentUserId, updatedCategory), 'la categoría');
+    updateCurrentUserStore((store) => ({
+      ...store,
+      categories: store.categories.map((item) => (item.id === categoryId ? updatedCategory : item)),
+    }));
+    if (auth.currentUser?.uid === currentUserId) {
+      offlineQueue.enqueue(currentUserId, 'SAVE_CATEGORY', { category: updatedCategory });
+    }
     return { ok: true };
   };
 
@@ -1055,7 +1269,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         c.id === categoryId ? updatedCategory : c
       ),
     }));
-    if (auth.currentUser?.uid === currentUserId) trackSync(syncCategory(currentUserId, updatedCategory), 'la categoría');
+    if (auth.currentUser?.uid === currentUserId) {
+      offlineQueue.enqueue(currentUserId, 'SAVE_CATEGORY', { category: updatedCategory });
+    }
     return { ok: true };
   };
 
@@ -1076,18 +1292,27 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const setActivePeriodId = (periodId: string) => {
     if (!currentUserStore || !currentUserId) return;
+    const updatedSettings: UserSettings = {
+      ...currentUserStore.settings,
+      activePeriodId: periodId,
+      userId: currentUserId,
+    };
     const updatedPeriods = currentUserStore.periods.map((period) => ({
       ...period,
       isActive: period.id === periodId,
-      status: period.id === periodId ? 'active' as const : period.status === 'active' ? 'closed' as const : period.status,
+      status: period.id === periodId ? ('active' as const) : period.status === 'active' ? ('closed' as const) : period.status,
     }));
     updateCurrentUserStore((store) => ({
       ...store,
       activePeriodId: periodId,
+      settings: updatedSettings,
       periods: updatedPeriods,
     }));
     if (auth.currentUser?.uid === currentUserId) {
-      trackSync(Promise.all(updatedPeriods.map((period) => syncPeriod(currentUserId, period))).then(() => undefined), 'el período activo');
+      offlineQueue.enqueue(currentUserId, 'SAVE_SETTINGS', { settings: updatedSettings });
+      for (const p of updatedPeriods) {
+        offlineQueue.enqueue(currentUserId, 'SAVE_PERIOD', { period: p });
+      }
     }
   };
 
@@ -1145,10 +1370,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }));
 
     if (auth.currentUser && auth.currentUser.uid === currentUserId) {
-      trackSync(Promise.all([
-        ...updatedPeriods.map((period) => syncPeriod(currentUserId, period)),
-        ...updatedTransactions.map((tx) => syncTransaction(currentUserId, tx)),
-      ]).then(() => undefined), 'el período y sus transacciones');
+      for (const period of updatedPeriods) {
+        offlineQueue.enqueue(currentUserId, 'SAVE_PERIOD', { period });
+      }
+      for (const tx of updatedTransactions) {
+        offlineQueue.enqueue(currentUserId, 'SAVE_TX_AND_ACCOUNTS', { transaction: tx, accounts: [] });
+      }
     }
 
     return { valid: true };
@@ -1194,10 +1421,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const updatedTransactions = syncTransactionsWithPeriods(currentUserStore.transactions, updatedPeriods);
     updateCurrentUserStore((store) => ({ ...store, periods: updatedPeriods, transactions: updatedTransactions }));
     if (auth.currentUser?.uid === currentUserId && currentUserId) {
-      trackSync(Promise.all([
-        ...updatedPeriods.filter((period) => period.id === periodId).map((period) => syncPeriod(currentUserId, period)),
-        ...updatedTransactions.map((tx) => syncTransaction(currentUserId, tx)),
-      ]).then(() => undefined), 'el período y sus transacciones');
+      for (const period of updatedPeriods) {
+        offlineQueue.enqueue(currentUserId, 'SAVE_PERIOD', { period });
+      }
+      for (const tx of updatedTransactions) {
+        offlineQueue.enqueue(currentUserId, 'SAVE_TX_AND_ACCOUNTS', { transaction: tx, accounts: [] });
+      }
     }
 
     return { valid: true };
@@ -1226,11 +1455,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       transactions: updatedTransactions,
     }));
     if (auth.currentUser?.uid === currentUserId && currentUserId) {
-      trackSync(Promise.all([
-        deletePeriodFromDb(currentUserId, periodId),
-        ...updatedPeriods.map((period) => syncPeriod(currentUserId, period)),
-        ...updatedTransactions.map((tx) => syncTransaction(currentUserId, tx)),
-      ]).then(() => undefined), 'eliminación del período y reasignación de transacciones');
+      offlineQueue.enqueue(currentUserId, 'DELETE_PERIOD', { periodId });
+      for (const period of updatedPeriods) {
+        offlineQueue.enqueue(currentUserId, 'SAVE_PERIOD', { period });
+      }
     }
 
     return { ok: true };
@@ -1334,10 +1562,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     updateCurrentUserStore((store) => {
       const updatedAccounts = applyTransactionToAccounts(newTx, store.accounts);
       if (auth.currentUser && auth.currentUser.uid === currentUserId) {
-        trackSync(Promise.all([
-          syncTransaction(currentUserId, newTx),
-          ...updatedAccounts.map((account) => syncAccount(currentUserId, account)),
-        ]).then(() => undefined), 'la transacción y el saldo de la cuenta');
+        offlineQueue.enqueue(currentUserId, 'SAVE_TX_AND_ACCOUNTS', {
+          transaction: newTx,
+          accounts: updatedAccounts,
+        });
       }
       return {
         ...store,
@@ -1436,16 +1664,18 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     updateCurrentUserStore((store) => {
       const reversedAccounts = reverseTransactionOnAccounts(existingTx, store.accounts);
       const finalAccounts = applyTransactionToAccounts(updatedTx, reversedAccounts);
+      if (auth.currentUser?.uid === currentUserId) {
+        offlineQueue.enqueue(currentUserId, 'SAVE_TX_AND_ACCOUNTS', {
+          transaction: updatedTx,
+          accounts: finalAccounts,
+        });
+      }
       return {
         ...store,
         accounts: finalAccounts,
         transactions: store.transactions.map((t) => (t.id === txId ? updatedTx : t)),
       };
     });
-
-    if (auth.currentUser?.uid === currentUserId) {
-      trackSync(syncTransaction(currentUserId, updatedTx), 'la actualización de la transacción');
-    }
 
     return { valid: true };
   };
@@ -1456,15 +1686,19 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     updateCurrentUserStore((store) => {
       const target = store.transactions.find((t) => t.id === txId);
       if (!target) return store;
+      const revertedAccounts = reverseTransactionOnAccounts(target, store.accounts);
+      if (auth.currentUser?.uid === currentUserId) {
+        offlineQueue.enqueue(currentUserId, 'DELETE_TX_AND_ACCOUNTS', {
+          transactionId: txId,
+          accounts: revertedAccounts,
+        });
+      }
       return {
         ...store,
-        accounts: reverseTransactionOnAccounts(target, store.accounts),
+        accounts: revertedAccounts,
         transactions: store.transactions.filter((t) => t.id !== txId),
       };
     });
-    if (auth.currentUser?.uid === currentUserId) {
-      trackSync(deleteTransactionFromDb(currentUserId, txId), 'la eliminación de la transacción');
-    }
   };
 
   const budgets = currentUserStore?.budgets ?? [];
@@ -1535,10 +1769,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     updateCurrentUserStore((store) => ({
       ...store,
       budgets: existing
-        ? store.budgets.map((item) => item.id === budget.id ? budget : item)
+        ? store.budgets.map((item) => (item.id === budget.id ? budget : item))
         : [...store.budgets, budget],
     }));
-    if (auth.currentUser?.uid === currentUserId) trackSync(syncBudget(currentUserId, budget), 'el presupuesto');
+    if (auth.currentUser?.uid === currentUserId) {
+      offlineQueue.enqueue(currentUserId, 'SAVE_BUDGET', { budget });
+    }
 
     return { ok: true };
   };
@@ -1549,7 +1785,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ...store,
       budgets: store.budgets.filter((b) => b.id !== budgetId),
     }));
-    if (auth.currentUser?.uid === currentUserId) trackSync(deleteBudgetFromDb(currentUserId, budgetId), 'la eliminación del presupuesto');
+    if (auth.currentUser?.uid === currentUserId) {
+      offlineQueue.enqueue(currentUserId, 'DELETE_BUDGET', { budgetId });
+    }
   };
 
   const selectActivePeriod = (periodId: string) => setActivePeriodId(periodId);
@@ -1607,7 +1845,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ...store,
       settings: nextSettings,
     }));
-    if (auth.currentUser?.uid === currentUserId) trackSync(syncSettings(currentUserId, nextSettings), 'la configuración');
+    if (auth.currentUser?.uid === currentUserId) {
+      offlineQueue.enqueue(currentUserId, 'SAVE_SETTINGS', { settings: nextSettings });
+    }
   };
 
   const deleteCategory = (categoryId: string): { ok: boolean; error?: string } => {
@@ -1631,7 +1871,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ...store,
       categories: store.categories.filter((c) => c.id !== categoryId),
     }));
-    if (auth.currentUser?.uid === currentUserId) trackSync(deleteCategoryFromDb(currentUserId, categoryId), 'la eliminación de la categoría');
+    if (auth.currentUser?.uid === currentUserId) {
+      offlineQueue.enqueue(currentUserId, 'DELETE_CATEGORY', { categoryId });
+    }
     return { ok: true };
   };
 
@@ -1648,7 +1890,15 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ...store,
       accounts: store.accounts.filter((a) => a.id !== accountId),
     }));
-    if (auth.currentUser?.uid === currentUserId) trackSync(deleteAccountFromDb(currentUserId, accountId), 'la eliminación de la cuenta');
+    if (auth.currentUser?.uid === currentUserId) {
+      offlineQueue.enqueue(currentUserId, 'DELETE_ACCOUNT', { accountId });
+    }
+  };
+
+  const forceSyncNow = async () => {
+    if (currentUserId) {
+      await offlineQueue.processUserQueue(currentUserId);
+    }
   };
 
   return (
@@ -1670,6 +1920,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         setThemeMode,
         toggleHideBalances,
         syncError,
+
+        isOnline,
+        isSyncing,
+        pendingOfflineCount,
+        lastSyncTime,
+        forceSyncNow,
 
         accounts,
         activeAccounts,

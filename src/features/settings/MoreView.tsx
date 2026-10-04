@@ -276,7 +276,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
             <ChevronRight className="w-4 h-4 text-slate-400" />
           </button>
 
-          {/* Presupuestos */}
+          {/* Presupuesto y Panorama Anual */}
           <button
             type="button"
             onClick={onOpenBudgetsModal}
@@ -288,10 +288,10 @@ export const MoreView: React.FC<MoreViewProps> = ({
               </div>
               <div>
                 <span className="font-bold text-xs text-white block">
-                  Límites y Presupuestos
+                  Presupuesto & Panorama Anual
                 </span>
                 <span className="text-[11px] text-slate-400">
-                  Asignar metas de gasto por categoría
+                  Proyecciones y metas de gasto por categoría
                 </span>
               </div>
             </div>

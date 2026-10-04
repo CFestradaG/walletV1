@@ -129,4 +129,5 @@ export interface UserSettings {
   decimalPlaces: number;
   themeMode: ThemeMode;
   hideBalances: boolean;
+  activePeriodId?: string;
 }
