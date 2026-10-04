@@ -46,8 +46,12 @@ import {
 } from '../firebase/firebase';
 import {
   onAuthStateChanged,
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail,
   signInWithPopup,
   signOut,
+  updateProfile,
 } from 'firebase/auth';
 import {
   collection,
@@ -79,14 +83,14 @@ interface StoredDatabase {
 interface WalletContextValue {
   currentUser: UserProfile | null;
   isAuthenticated: boolean;
-  loginWithEmail: (email: string, password: string) => { ok: boolean; error?: string };
+  loginWithEmail: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   registerUser: (
     name: string,
     email: string,
     password: string
-  ) => { ok: boolean; error?: string };
+  ) => Promise<{ ok: boolean; error?: string }>;
   loginWithGoogle: () => Promise<void> | void;
-  recoverPassword: (email: string) => { ok: boolean; message: string };
+  recoverPassword: (email: string) => Promise<{ ok: boolean; message: string }>;
   logout: () => Promise<void> | void;
   switchUserMode: (mode: 'demo_francisco' | 'clean_new_user') => void;
   updateUserProfile: (name: string, email: string) => void;
@@ -297,7 +301,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } catch {
       // ignore
     }
-    return 'usr_francisco';
+    return null;
   });
 
   const [systemPrefersDark, setSystemPrefersDark] = useState<boolean>(() => {
@@ -392,8 +396,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuario',
           email: firebaseUser.email || '',
           photoUrl: firebaseUser.photoURL || undefined,
-          provider: 'google',
-          createdAt: new Date().toISOString(),
+          provider: firebaseUser.providerData.some((p) => p.providerId === 'google.com') ? 'google' : 'email',
+          createdAt: firebaseUser.metadata.creationTime || new Date().toISOString(),
         };
 
         const initialStore = createCleanUserStore(profile);
@@ -412,6 +416,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         });
 
         // Seed initial data in Firestore if empty
+        syncProfile(uid, profile).catch(console.warn);
         seedUserInitialData(uid, initialStore).catch(console.warn);
 
         // Real-time listener for accounts
@@ -493,7 +498,13 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const unsubTransactions = onSnapshot(
           collection(firestoreDb, 'users', uid, 'transactions'),
           (snap) => {
-            const remoteTxs = snap.docs.map((d) => d.data() as Transaction);
+            const remoteTxs = snap.docs.flatMap((d) => {
+              const data = d.data() as Transaction;
+              if (data.userId && data.userId !== uid) return [];
+              const owned = { ...data, userId: uid };
+              if (!data.userId) syncTransaction(uid, owned).catch(console.warn);
+              return [owned];
+            });
             setDb((prev) => {
               const current = prev.users[uid] || initialStore;
               return {
@@ -534,6 +545,24 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}/budgets`)
         );
         unsubs.push(unsubBudgets);
+
+        const unsubSettings = onSnapshot(
+          collection(firestoreDb, 'users', uid, 'settings'),
+          (snap) => {
+            const remoteSettings = snap.docs.find((d) => d.id === 'default')?.data() as Partial<UserSettings> | undefined;
+            if (remoteSettings) {
+              const mergedSettings = { ...initialStore.settings, ...remoteSettings, userId: uid };
+              setDb((prev) => {
+                const current = prev.users[uid] || initialStore;
+                return { ...prev, users: { ...prev.users, [uid]: { ...current, settings: mergedSettings } } };
+              });
+            }
+          },
+          (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}/settings`)
+        );
+        unsubs.push(unsubSettings);
+      } else {
+        setCurrentUserId(null);
       }
     });
 
@@ -558,52 +587,27 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   };
 
-  const loginWithEmail = (email: string, password: string): { ok: boolean; error?: string } => {
+  const loginWithEmail = async (email: string, password: string): Promise<{ ok: boolean; error?: string }> => {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@')) {
       return { ok: false, error: 'Ingresa un correo electrónico válido.' };
     }
-    if (!password || password.length < 4) {
-      return { ok: false, error: 'La contraseña debe tener al menos 4 caracteres.' };
+    if (!password) {
+      return { ok: false, error: 'Ingresa tu contraseña.' };
     }
-
-    const foundUser = (Object.values(db.users) as UserDataStore[]).find(
-      (u) => u.profile.email.toLowerCase() === cleanEmail
-    );
-
-    if (foundUser) {
-      setCurrentUserId(foundUser.profile.id);
+    try {
+      await signInWithEmailAndPassword(auth, cleanEmail, password);
       return { ok: true };
+    } catch (error: any) {
+      return { ok: false, error: error?.code === 'auth/invalid-credential' ? 'Correo o contraseña incorrectos.' : error?.message || 'No se pudo iniciar sesión.' };
     }
-
-    const newId = `usr_${Date.now()}`;
-    const nameFromEmail = cleanEmail.split('@')[0].replace(/[._]/g, ' ');
-    const displayName = nameFromEmail.charAt(0).toUpperCase() + nameFromEmail.slice(1);
-    const newProfile: UserProfile = {
-      id: newId,
-      name: displayName,
-      email: cleanEmail,
-      provider: 'email',
-      createdAt: new Date().toISOString(),
-    };
-    const newStore = createCleanUserStore(newProfile);
-
-    setDb((prev) => ({
-      ...prev,
-      users: {
-        ...prev.users,
-        [newId]: newStore,
-      },
-    }));
-    setCurrentUserId(newId);
-    return { ok: true };
   };
 
-  const registerUser = (
+  const registerUser = async (
     name: string,
     email: string,
     password: string
-  ): { ok: boolean; error?: string } => {
+  ): Promise<{ ok: boolean; error?: string }> => {
     const cleanName = name.trim();
     const cleanEmail = email.trim().toLowerCase();
 
@@ -617,33 +621,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return { ok: false, error: 'La contraseña debe tener al menos 6 caracteres.' };
     }
 
-    const exists = (Object.values(db.users) as UserDataStore[]).some(
-      (u) => u.profile.email.toLowerCase() === cleanEmail
-    );
-    if (exists) {
-      return { ok: false, error: 'Ya existe una cuenta registrada con este correo.' };
+    try {
+      const credential = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+      await updateProfile(credential.user, { displayName: cleanName });
+      return { ok: true };
+    } catch (error: any) {
+      const message = error?.code === 'auth/email-already-in-use' ? 'Ya existe una cuenta registrada con este correo.' : error?.message || 'No se pudo crear la cuenta.';
+      return { ok: false, error: message };
     }
-
-    const newId = `usr_${Date.now()}`;
-    const newProfile: UserProfile = {
-      id: newId,
-      name: cleanName,
-      email: cleanEmail,
-      provider: 'email',
-      createdAt: new Date().toISOString(),
-    };
-
-    const newStore = createCleanUserStore(newProfile);
-
-    setDb((prev) => ({
-      ...prev,
-      users: {
-        ...prev.users,
-        [newId]: newStore,
-      },
-    }));
-    setCurrentUserId(newId);
-    return { ok: true };
   };
 
   const loginWithGoogle = async () => {
@@ -658,15 +643,17 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
-  const recoverPassword = (email: string): { ok: boolean; message: string } => {
+  const recoverPassword = async (email: string): Promise<{ ok: boolean; message: string }> => {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || !cleanEmail.includes('@')) {
       return { ok: false, message: 'Ingresa un correo electrónico válido.' };
     }
-    return {
-      ok: true,
-      message: `Se ha enviado un enlace de recuperación de contraseña a ${cleanEmail}.`,
-    };
+    try {
+      await sendPasswordResetEmail(auth, cleanEmail);
+      return { ok: true, message: `Se ha enviado un enlace de recuperación de contraseña a ${cleanEmail}.` };
+    } catch (error: any) {
+      return { ok: false, message: error?.message || 'No se pudo enviar el enlace de recuperación.' };
+    }
   };
 
   const logout = async () => {
@@ -1305,6 +1292,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!existingTx) {
       return { valid: false, error: 'La transacción no existe.' };
     }
+    if (existingTx.userId !== currentUserId) {
+      return { valid: false, error: 'La transacción no pertenece al usuario actual.' };
+    }
 
     const validation = validateTransactionInput(
       {
@@ -1373,10 +1363,16 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       };
     });
 
+    if (auth.currentUser?.uid === currentUserId) {
+      syncTransaction(currentUserId, updatedTx).catch(console.warn);
+    }
+
     return { valid: true };
   };
 
   const deleteTransaction = (txId: string) => {
+    const target = currentUserStore?.transactions.find((t) => t.id === txId);
+    if (!target || target.userId !== currentUserId) return;
     updateCurrentUserStore((store) => {
       const target = store.transactions.find((t) => t.id === txId);
       if (!target) return store;
@@ -1386,6 +1382,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         transactions: store.transactions.filter((t) => t.id !== txId),
       };
     });
+    if (auth.currentUser?.uid === currentUserId) {
+      deleteTransactionFromDb(currentUserId, txId).catch(console.warn);
+    }
   };
 
   const budgets = currentUserStore?.budgets ?? [];
@@ -1535,6 +1534,13 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             : store.settings.hideBalances,
       },
     }));
+    if (currentUserId && auth.currentUser?.uid === currentUserId && currentUserStore) {
+      syncSettings(currentUserId, {
+        ...currentUserStore.settings,
+        ...partial,
+        userId: currentUserId,
+      }).catch(console.warn);
+    }
   };
 
   const deleteCategory = (categoryId: string) => {

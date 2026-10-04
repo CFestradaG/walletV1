@@ -1,0 +1,22 @@
+{
+  "hosting": {
+    "public": "dist",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  },
+  "firestore": [
+    {
+      "database": "ai-studio-walletv1-cde1c2b5-f2a2-489f-8062-58e6963a288b",
+      "rules": "firestore.rules"
+    }
+  ]
+}

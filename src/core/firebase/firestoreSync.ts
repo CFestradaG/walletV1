@@ -132,42 +132,22 @@ export async function seedUserInitialData(userId: string, initialStore: UserData
   try {
     const userDocRef = doc(db, 'users', userId);
     const existing = await getDoc(userDocRef);
-    if (existing.exists()) {
-      return; // Already initialized in Firestore
-    }
-
+    const collections = ['settings', 'accounts', 'categories', 'periods', 'transactions', 'budgets'] as const;
+    const existingDocs = await Promise.all(collections.map((name) => getDocs(collection(db, 'users', userId, name))));
+    const existingIds = existingDocs.map((snapshot) => new Set(snapshot.docs.map((item) => item.id)));
     const batch = writeBatch(db);
-
-    // 1. User Profile
-    batch.set(userDocRef, initialStore.profile);
-
-    // 2. Settings
-    batch.set(doc(db, 'users', userId, 'settings', 'default'), initialStore.settings);
-
-    // 3. Accounts
-    for (const acc of initialStore.accounts) {
-      batch.set(doc(db, 'users', userId, 'accounts', acc.id), acc);
-    }
-
-    // 4. Categories
-    for (const cat of initialStore.categories) {
-      batch.set(doc(db, 'users', userId, 'categories', cat.id), cat);
-    }
-
-    // 5. Periods
-    for (const per of initialStore.periods) {
-      batch.set(doc(db, 'users', userId, 'periods', per.id), per);
-    }
-
-    // 6. Transactions
-    for (const tx of initialStore.transactions) {
-      batch.set(doc(db, 'users', userId, 'transactions', tx.id), tx);
-    }
-
-    // 7. Budgets
-    for (const b of initialStore.budgets) {
-      batch.set(doc(db, 'users', userId, 'budgets', b.id), b);
-    }
+    if (!existing.exists()) batch.set(userDocRef, initialStore.profile);
+    const seedIfMissing = <T extends { id?: string }>(name: typeof collections[number], id: string, data: T) => {
+      if (!existingIds[collections.indexOf(name)].has(id)) {
+        batch.set(doc(db, 'users', userId, name, id), data);
+      }
+    };
+    seedIfMissing('settings', 'default', initialStore.settings);
+    initialStore.accounts.forEach((item) => seedIfMissing('accounts', item.id, item));
+    initialStore.categories.forEach((item) => seedIfMissing('categories', item.id, item));
+    initialStore.periods.forEach((item) => seedIfMissing('periods', item.id, item));
+    initialStore.transactions.forEach((item) => seedIfMissing('transactions', item.id, item));
+    initialStore.budgets.forEach((item) => seedIfMissing('budgets', item.id, item));
 
     await batch.commit();
   } catch (error) {

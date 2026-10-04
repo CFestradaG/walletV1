@@ -52,7 +52,13 @@ service cloud.firestore {
 
       // Transactions
       match /transactions/{transactionId} {
-        allow read, write: if isOwner(userId) && isValidId(transactionId);
+        allow read: if isOwner(userId) && isValidId(transactionId);
+        allow create, update: if isOwner(userId)
+          && isValidId(transactionId)
+          && request.resource.data.userId == userId;
+        allow delete: if isOwner(userId)
+          && isValidId(transactionId)
+          && resource.data.userId == userId;
       }
 
       // Budgets

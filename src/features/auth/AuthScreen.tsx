@@ -36,7 +36,8 @@ export const AuthScreen: React.FC = () => {
     setError(null);
     setLoading(true);
     try {
-      await loginWithEmail(email, password);
+      const result = await loginWithEmail(email, password);
+      if (!result.ok) setError(result.error || 'Error al iniciar sesión');
     } catch (err: any) {
       setError(err?.message || 'Error al iniciar sesión');
     } finally {
@@ -49,7 +50,8 @@ export const AuthScreen: React.FC = () => {
     setError(null);
     setLoading(true);
     try {
-      await registerUser(name, email, password);
+      const result = await registerUser(name, email, password);
+      if (!result.ok) setError(result.error || 'Error al registrarse');
     } catch (err: any) {
       setError(err?.message || 'Error al registrarse');
     } finally {
@@ -74,8 +76,9 @@ export const AuthScreen: React.FC = () => {
     setError(null);
     setLoading(true);
     try {
-      await resetPassword(email);
-      setSuccessMsg('Enlace de recuperación enviado. Revisa tu correo.');
+      const result = await resetPassword(email);
+      if (result.ok) setSuccessMsg(result.message);
+      else setError(result.message);
     } catch (err: any) {
       setError(err?.message || 'Error al enviar recuperación');
     } finally {
