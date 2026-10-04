@@ -19,11 +19,6 @@ service cloud.firestore {
       return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Connectivity test path
-    match /test/{docId} {
-      allow read: if true;
-    }
-
     // User profile and private subcollections (Per-User Isolation)
     match /users/{userId} {
       allow get: if isOwner(userId) && isValidId(userId);

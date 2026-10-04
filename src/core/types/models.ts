@@ -64,7 +64,6 @@ export interface Transaction {
   note: string;
   periodId?: string;
   subperiodId?: string;
-  pendingSync?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -130,10 +129,4 @@ export interface UserSettings {
   decimalPlaces: number;
   themeMode: ThemeMode;
   hideBalances: boolean;
-  hideSensitiveBalances?: boolean;
-  offlineSimulation: boolean;
-  appProtection: boolean;
-  biometrics: boolean;
-  hasPin: boolean;
 }
-

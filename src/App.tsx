@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import {
   BarChart3,
-  CloudOff,
   AlertTriangle,
   LayoutDashboard,
   Landmark,
@@ -10,7 +9,6 @@ import {
   MoreHorizontal,
   Plus,
   ReceiptText,
-  RefreshCw,
   Sun,
 } from 'lucide-react';
 import { WalletProvider, useWallet } from './core/state/WalletContext';
@@ -34,8 +32,6 @@ const WalletAppShell: React.FC = () => {
     resolvedTheme,
     setThemeMode,
     settings,
-    pendingSyncCount,
-    syncPendingOperations,
     syncError,
   } = useWallet();
 
@@ -190,30 +186,6 @@ const WalletAppShell: React.FC = () => {
           </button>
         </div>
       </header>
-
-      {/* OFFLINE / PENDING SYNC BANNER (SECCIÓN 36) */}
-      {(settings.offlineSimulation || pendingSyncCount > 0) && (
-        <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2 text-xs flex items-center justify-between max-w-3xl w-full mx-auto">
-          <div className="flex items-center gap-2 text-amber-300">
-            <CloudOff className="w-4 h-4 shrink-0" />
-            <span>
-              {settings.offlineSimulation
-                ? 'Modo sin conexión activo · Guardando en persistencia local.'
-                : `${pendingSyncCount} transacción(es) pendientes de sincronizar.`}
-            </span>
-          </div>
-          {pendingSyncCount > 0 && (
-            <button
-              type="button"
-              onClick={syncPendingOperations}
-              className="px-2.5 py-1 rounded-lg bg-amber-400 text-slate-950 font-semibold flex items-center gap-1 cursor-pointer"
-            >
-              <RefreshCw className="w-3 h-3" />
-              <span>Sincronizar ({pendingSyncCount})</span>
-            </button>
-          )}
-        </div>
-      )}
 
       {syncError && (
         <div role="alert" className="bg-rose-500/15 border-b border-rose-500/30 px-4 py-2 text-xs text-rose-200 flex items-center gap-2">

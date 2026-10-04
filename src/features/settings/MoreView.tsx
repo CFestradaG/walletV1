@@ -3,8 +3,6 @@ import {
   Calendar,
   Check,
   ChevronRight,
-  Cloud,
-  CloudOff,
   Edit3,
   Eye,
   EyeOff,
@@ -13,7 +11,6 @@ import {
   Monitor,
   Moon,
   Plus,
-  RefreshCw,
   ShieldCheck,
   Sun,
   Target,
@@ -52,8 +49,6 @@ export const MoreView: React.FC<MoreViewProps> = ({
     removeSubcategory,
     transactions,
     budgets,
-    pendingSyncCount,
-    syncPendingOperations,
   } = useWallet();
 
   const isDark = resolvedTheme === 'dark';
@@ -346,58 +341,6 @@ export const MoreView: React.FC<MoreViewProps> = ({
               className="rounded text-emerald-500 focus:ring-emerald-500"
             />
           </label>
-        </div>
-      </div>
-
-      {/* 5. BACKUP & OFFLINE SYNC */}
-      <div
-        className={`p-4 rounded-3xl border transition-all ${
-          isDark ? 'bg-[#131927] border-white/10' : 'bg-white border-slate-200 shadow-xs'
-        }`}
-      >
-        <span className="text-xs font-bold block mb-3">Sincronización y Respaldo</span>
-        <div className="space-y-3 text-xs">
-          <label className="flex items-center justify-between p-2.5 rounded-2xl bg-black/20 border border-white/5 cursor-pointer">
-            <div className="flex items-center gap-2.5">
-              {settings.offlineSimulation ? (
-                <CloudOff className="w-4 h-4 text-amber-400" />
-              ) : (
-                <Cloud className="w-4 h-4 text-emerald-400" />
-              )}
-              <div>
-                <span className="font-bold text-white block">
-                  Simulación sin conexión
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  Guardar en persistencia local antes de la nube
-                </span>
-              </div>
-            </div>
-            <input
-              type="checkbox"
-              checked={settings.offlineSimulation}
-              onChange={(e) =>
-                updateSettings({ offlineSimulation: e.target.checked })
-              }
-              className="rounded text-emerald-500 focus:ring-emerald-500"
-            />
-          </label>
-
-          {pendingSyncCount > 0 && (
-            <div className="flex items-center justify-between p-2.5 rounded-2xl bg-amber-500/10 border border-amber-500/20">
-              <span className="text-amber-400 font-medium">
-                {pendingSyncCount} operaciones pendientes
-              </span>
-              <button
-                type="button"
-                onClick={syncPendingOperations}
-                className="px-3 py-1 rounded-xl bg-amber-400 text-slate-950 font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                <span>Sincronizar ahora</span>
-              </button>
-            </div>
-          )}
         </div>
       </div>
 

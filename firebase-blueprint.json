@@ -24,11 +24,7 @@
         "currencySymbolPosition": { "type": "string", "enum": ["prefix", "suffix"] },
         "decimalPlaces": { "type": "number" },
         "themeMode": { "type": "string", "enum": ["light", "dark", "system"] },
-        "hideBalances": { "type": "boolean" },
-        "offlineSimulation": { "type": "boolean" },
-        "appProtection": { "type": "boolean" },
-        "biometrics": { "type": "boolean" },
-        "hasPin": { "type": "boolean" }
+        "hideBalances": { "type": "boolean" }
       },
       "required": ["userId", "currency", "themeMode"]
     },
@@ -118,7 +114,6 @@
         "note": { "type": "string", "maxLength": 300 },
         "periodId": { "type": "string", "maxLength": 128 },
         "subperiodId": { "type": "string", "maxLength": 128 },
-        "pendingSync": { "type": "boolean" },
         "createdAt": { "type": "string", "maxLength": 60 },
         "updatedAt": { "type": "string", "maxLength": 60 }
       },

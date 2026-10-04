@@ -144,9 +144,6 @@ interface WalletContextValue {
   resolvedTheme: 'light' | 'dark';
   setThemeMode: (mode: ThemeMode) => void;
   toggleHideBalances: () => void;
-  toggleOfflineMode: () => void;
-  syncPendingOperations: () => void;
-  pendingSyncCount: number;
   syncError: string | null;
 
   accounts: Account[];
@@ -395,10 +392,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     decimalPlaces: 2,
     themeMode: 'dark',
     hideBalances: false,
-    offlineSimulation: false,
-    appProtection: true,
-    biometrics: true,
-    hasPin: true,
   };
 
   const settings = currentUserStore?.settings ?? defaultSettings;
@@ -778,34 +771,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       settings: nextSettings,
     }));
     if (auth.currentUser?.uid === currentUserId) trackSync(syncSettings(currentUserId, nextSettings), 'la configuración');
-  };
-
-  const toggleOfflineMode = () => {
-    if (!currentUserId || !currentUserStore) return;
-    const nextSettings = { ...currentUserStore.settings, offlineSimulation: !currentUserStore.settings.offlineSimulation };
-    updateCurrentUserStore((store) => ({
-      ...store,
-      settings: nextSettings,
-    }));
-    if (auth.currentUser?.uid === currentUserId) trackSync(syncSettings(currentUserId, nextSettings), 'la configuración');
-  };
-
-  const syncPendingOperations = () => {
-    if (!currentUserId || !currentUserStore) return;
-    const nextSettings = { ...currentUserStore.settings, offlineSimulation: false };
-    const nextTransactions = currentUserStore.transactions.map((tx) => ({ ...tx, pendingSync: false }));
-    updateCurrentUserStore((store) => ({
-      ...store,
-      settings: nextSettings,
-      transactions: nextTransactions,
-    }));
-    if (auth.currentUser?.uid === currentUserId) {
-      trackSync(Promise.all([
-        syncSettings(currentUserId, nextSettings),
-        ...nextTransactions.map((tx) => syncTransaction(currentUserId, tx)),
-        ...currentUserStore.accounts.map((account) => syncAccount(currentUserId, account)),
-      ]).then(() => undefined), 'tus datos pendientes');
-    }
   };
 
   const accounts = currentUserStore?.accounts ?? [];
@@ -1290,11 +1255,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [transactions, activePeriod]
   );
 
-  const pendingSyncCount = useMemo(
-    () => transactions.filter((tx) => tx.pendingSync).length,
-    [transactions]
-  );
-
   const createTransaction = (input: {
     type: TransactionType;
     amount: number;
@@ -1367,7 +1327,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       note: input.note.trim() || (input.type === 'transfer' ? 'Transferencia entre cuentas' : ''),
       periodId: assignedPeriod?.id,
       subperiodId: assignedSubperiod?.id,
-      pendingSync: currentUserStore.settings.offlineSimulation,
       createdAt: now,
       updatedAt: now,
     };
@@ -1471,7 +1430,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       note: input.note.trim(),
       periodId: assignedPeriod?.id,
       subperiodId: assignedSubperiod?.id,
-      pendingSync: currentUserStore.settings.offlineSimulation,
       updatedAt: new Date().toISOString(),
     };
 
@@ -1643,18 +1601,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const nextSettings = {
       ...currentUserStore.settings,
       ...partial,
-      hideBalances:
-        partial.hideSensitiveBalances !== undefined
-          ? partial.hideSensitiveBalances
-          : partial.hideBalances !== undefined
-          ? partial.hideBalances
-          : currentUserStore.settings.hideBalances,
-      hideSensitiveBalances:
-        partial.hideSensitiveBalances !== undefined
-          ? partial.hideSensitiveBalances
-          : partial.hideBalances !== undefined
-          ? partial.hideBalances
-          : currentUserStore.settings.hideBalances,
       userId: currentUserId,
     };
     updateCurrentUserStore((store) => ({
@@ -1723,9 +1669,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         resolvedTheme,
         setThemeMode,
         toggleHideBalances,
-        toggleOfflineMode,
-        syncPendingOperations,
-        pendingSyncCount,
         syncError,
 
         accounts,

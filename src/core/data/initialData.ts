@@ -220,18 +220,30 @@ export function createCleanUserStore(profile: UserProfile): UserDataStore {
   const userId = profile.id;
   const now = new Date().toISOString();
   const categories = createDefaultCategories(userId);
-
-  const defaultPeriodId = `per_oct26_${userId}`;
+  const today = new Date();
+  const periodStart = new Date(today.getFullYear(), today.getMonth(), 1, 12);
+  const periodEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 12);
+  const toISODate = (date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+  const startDate = toISODate(periodStart);
+  const endDate = toISODate(periodEnd);
+  const periodMonth = new Intl.DateTimeFormat('es-GT', { month: 'long', year: 'numeric' }).format(today);
+  const periodName = `${periodMonth.charAt(0).toLocaleUpperCase('es-GT')}${periodMonth.slice(1)}`;
+  const defaultPeriodId = `per_${today.getFullYear()}${String(today.getMonth() + 1).padStart(2, '0')}_${userId}`;
   const defaultPeriod: FinancialPeriod = {
     id: defaultPeriodId,
     userId,
-    name: 'Octubre 2026',
-    startDate: '2026-09-27',
-    endDate: '2026-10-26',
-    subdivisionMode: 'biweekly',
+    name: periodName,
+    startDate,
+    endDate,
+    subdivisionMode: 'monthly',
     status: 'active',
     isActive: true,
-    subperiods: generateSubperiods(defaultPeriodId, '2026-09-27', '2026-10-26', 'biweekly'),
+    subperiods: generateSubperiods(defaultPeriodId, startDate, endDate, 'monthly'),
     createdAt: now,
     updatedAt: now,
   };
@@ -245,10 +257,6 @@ export function createCleanUserStore(profile: UserProfile): UserDataStore {
       decimalPlaces: 2,
       themeMode: 'dark',
       hideBalances: false,
-      offlineSimulation: false,
-      appProtection: true,
-      biometrics: true,
-      hasPin: true,
     },
     accounts: [],
     categories,
@@ -552,10 +560,6 @@ export function createActiveDemoUserStore(): UserDataStore {
       decimalPlaces: 2,
       themeMode: 'dark',
       hideBalances: false,
-      offlineSimulation: false,
-      appProtection: true,
-      biometrics: true,
-      hasPin: true,
     },
     accounts,
     categories,

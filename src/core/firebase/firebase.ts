@@ -3,24 +3,9 @@ import {
   GoogleAuthProvider,
   browserLocalPersistence,
   getAuth,
-  onAuthStateChanged,
   setPersistence,
-  signInWithPopup,
-  signOut,
-  User as FirebaseUser,
 } from 'firebase/auth';
-import {
-  collection,
-  deleteDoc,
-  doc,
-  getDoc,
-  getDocFromServer,
-  getDocs,
-  getFirestore,
-  onSnapshot,
-  setDoc,
-  writeBatch,
-} from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 import firebaseConfig from '../../../firebase-applet-config.json';
 
 // Initialize Firebase App
@@ -91,22 +76,3 @@ export function handleFirestoreError(
   console.error('Firestore Error: ', JSON.stringify(errInfo));
   throw new Error(JSON.stringify(errInfo));
 }
-
-// CRITICAL: Connectivity test on app boot
-export async function testConnection(): Promise<boolean> {
-  const path = 'test/connection';
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    return true;
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase client is offline. Local cache will be used.');
-      return false;
-    }
-    // Non-blocking warning for permissions or missing test doc
-    return true;
-  }
-}
-
-// Run connectivity test
-testConnection();
