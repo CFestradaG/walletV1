@@ -31,3 +31,15 @@
   scrollbar-width: none;
 }
 
+html.dark select option,
+html.dark option {
+  background-color: #131927;
+  color: #FFFFFF;
+}
+
+html:not(.dark) select option,
+html:not(.dark) option {
+  background-color: #FFFFFF;
+  color: #0F172A;
+}
+

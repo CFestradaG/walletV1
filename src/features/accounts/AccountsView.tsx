@@ -363,7 +363,13 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-rose-500/15 text-rose-400 flex items-center justify-center">
+                      <div
+                        className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+                        style={{
+                          backgroundColor: `${card.color || '#F43F5E'}25`,
+                          color: card.color || '#F43F5E',
+                        }}
+                      >
                         <CreditCard className="w-4 h-4" />
                       </div>
                       <div>
@@ -506,6 +512,52 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                 <option value="savings">Ahorro</option>
                 <option value="credit_card">Tarjeta de Crédito</option>
               </select>
+            </div>
+
+            {/* Selector de color */}
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                Color de la cuenta
+              </label>
+              <div className="flex items-center gap-2 flex-wrap">
+                {[
+                  { name: 'Esmeralda', hex: '#10B981' },
+                  { name: 'Azul BI', hex: '#0284C7' },
+                  { name: 'Menta', hex: '#34D399' },
+                  { name: 'Rojo BAC', hex: '#F43F5E' },
+                  { name: 'Púrpura', hex: '#8B5CF6' },
+                  { name: 'Ámbar', hex: '#F59E0B' },
+                  { name: 'Cian', hex: '#06B6D4' },
+                  { name: 'Índigo', hex: '#6366F1' },
+                  { name: 'Fucsia', hex: '#EC4899' },
+                  { name: 'Naranja', hex: '#F97316' },
+                  { name: 'Pizarra', hex: '#64748B' },
+                ].map((c) => (
+                  <button
+                    key={c.hex}
+                    type="button"
+                    onClick={() => setColor(c.hex)}
+                    className={`w-7 h-7 rounded-full transition-all cursor-pointer flex items-center justify-center ${
+                      color === c.hex
+                        ? 'ring-2 ring-white ring-offset-2 ring-offset-[#131927] scale-110 shadow-md'
+                        : 'opacity-80 hover:opacity-100 hover:scale-105'
+                    }`}
+                    style={{ backgroundColor: c.hex }}
+                    title={c.name}
+                  >
+                    {color === c.hex && <Check className="w-3.5 h-3.5 text-white" />}
+                  </button>
+                ))}
+                <div className="relative flex items-center">
+                  <input
+                    type="color"
+                    value={color}
+                    onChange={(e) => setColor(e.target.value)}
+                    className="w-7 h-7 rounded-full cursor-pointer border border-white/20 bg-transparent p-0 overflow-hidden"
+                    title="Color personalizado"
+                  />
+                </div>
+              </div>
             </div>
 
             {type === 'credit_card' ? (

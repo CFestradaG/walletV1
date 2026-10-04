@@ -17,6 +17,18 @@ import {
 import { useWallet } from '../../core/state/WalletContext';
 import { Account, Transaction, TransactionType } from '../../core/types/models';
 import { evaluateArithmetic, formatGTQ, toISODate } from '../../core/utils/formatters';
+import { AccountSelectDropdown } from '../../core/widgets/AccountSelectDropdown';
+
+function getContrastTextColor(hexColor?: string): string {
+  if (!hexColor || !hexColor.startsWith('#')) return '#FFFFFF';
+  const hex = hexColor.replace('#', '');
+  if (hex.length !== 6) return '#FFFFFF';
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  const yiq = (r * 299 + g * 587 + b * 114) / 1000;
+  return yiq >= 155 ? '#0B0F17' : '#FFFFFF';
+}
 
 interface TransactionModalProps {
   isOpen: boolean;
@@ -53,7 +65,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [destinationAccountId, setDestinationAccountId] = useState<string>('');
   const [categoryId, setCategoryId] = useState<string>('');
   const [subcategoryId, setSubcategoryId] = useState<string>('');
-  const [categoryViewLevel, setCategoryViewLevel] = useState<'categories' | 'subcategories'>('subcategories');
+  const [isBrowsingCategories, setIsBrowsingCategories] = useState<boolean>(false);
   const [dateStr, setDateStr] = useState<string>(toISODate(new Date()));
   const [note, setNote] = useState<string>('');
   const [isCreditCardPayment, setIsCreditCardPayment] = useState<boolean>(false);
@@ -78,6 +90,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     return selectedCategory.subcategories.filter((s) => s.isActive !== false);
   }, [selectedCategory]);
 
+  // Active account and dynamic color theme
+  const currentAccount = useMemo(() => {
+    return accounts.find((a) => a.id === accountId);
+  }, [accounts, accountId]);
+
+  const activeAccountColor = currentAccount?.color || '#10B981';
+  const contrastTextColor = getContrastTextColor(activeAccountColor);
+
   // Initialize or reset form when modal opens or editingTx changes
   useEffect(() => {
     if (!isOpen) return;
@@ -93,6 +113,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setNote(editingTransaction.note || '');
       setIsCreditCardPayment(Boolean(editingTransaction.isCreditCardPayment));
       setShowKeypad(false);
+      setIsBrowsingCategories(false);
       setErrorMsg(null);
     } else {
       const activeAccs = accounts.filter((a) => a.status === 'active');
@@ -107,6 +128,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setDateStr(toISODate(new Date()));
       setNote('');
       setShowKeypad(true);
+      setIsBrowsingCategories(false);
       setErrorMsg(null);
 
       if (initialType === 'transfer' && preselectedDestinationCardId) {
@@ -145,6 +167,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const handleTypeChange = (newType: TransactionType) => {
     setType(newType);
     setErrorMsg(null);
+    setIsBrowsingCategories(false);
     if (newType === 'transfer') {
       setCategoryId('');
       setSubcategoryId('');
@@ -170,12 +193,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     } else {
       setSubcategoryId('');
     }
-    setCategoryViewLevel('subcategories');
-  };
-
-  // Return/Up level to categories handler
-  const handleGoBackToCategories = () => {
-    setCategoryViewLevel('categories');
+    setIsBrowsingCategories(false);
   };
 
   // Numeric keypad actions
@@ -292,20 +310,50 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/70 backdrop-blur-xs">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-xs">
       <div
-        className={`w-full max-w-lg max-h-[92vh] flex flex-col rounded-t-3xl sm:rounded-3xl border shadow-2xl overflow-hidden transition-all ${
+        className={`w-full max-w-lg max-h-[92vh] flex flex-col rounded-t-3xl sm:rounded-3xl border shadow-2xl overflow-hidden transition-all duration-300 ${
           isDark
             ? 'bg-[#131927] border-white/10 text-white'
             : 'bg-white border-slate-200 text-slate-900'
         }`}
+        style={{
+          borderColor: currentAccount ? `${activeAccountColor}50` : undefined,
+          boxShadow: currentAccount
+            ? `0 20px 45px -12px ${activeAccountColor}30`
+            : undefined,
+        }}
       >
+        {/* TOP ACCENT STRIPE OF SELECTED ACCOUNT COLOR */}
+        <div
+          className="h-1.5 w-full transition-colors duration-300 shrink-0"
+          style={{ backgroundColor: activeAccountColor }}
+        />
+
         {/* MODAL HEADER */}
-        <div className="flex items-center justify-between px-5 pt-4 pb-2 border-b border-white/5">
-          <h2 className="font-display font-bold text-base">
-            {editingTransaction ? 'Editar transacción' : 'Nueva transacción'}
-          </h2>
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between px-5 pt-3.5 pb-2.5 border-b border-white/5">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <h2 className="font-display font-bold text-base truncate">
+              {editingTransaction ? 'Editar transacción' : 'Nueva transacción'}
+            </h2>
+            {currentAccount && (
+              <div
+                className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border transition-all truncate"
+                style={{
+                  backgroundColor: `${activeAccountColor}18`,
+                  borderColor: `${activeAccountColor}40`,
+                  color: activeAccountColor,
+                }}
+              >
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: activeAccountColor }}
+                />
+                <span className="truncate max-w-[130px]">{currentAccount.name}</span>
+              </div>
+            )}
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
             {editingTransaction && (
               <button
                 type="button"
@@ -387,124 +435,102 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 ? 'bg-black/20 border-white/10 hover:border-emerald-500/40'
                 : 'bg-slate-50 border-slate-200 hover:border-emerald-500/40'
             }`}
+            style={{
+              borderColor: `${activeAccountColor}40`,
+              backgroundColor: `${activeAccountColor}0a`,
+            }}
           >
             <span className="text-[10px] uppercase font-mono tracking-wider text-slate-400">
               Monto ({showKeypad ? 'Teclado activo' : 'Toca para abrir teclado'})
             </span>
-            <div className="font-mono text-3xl font-extrabold tracking-tight mt-0.5 text-emerald-400">
+            <div
+              className="font-mono text-3xl font-extrabold tracking-tight mt-0.5 transition-colors"
+              style={{ color: activeAccountColor }}
+            >
               {amountStr.match(/[+\-*/]/)
                 ? `${amountStr} = ${formatGTQ(evaluatedAmount)}`
                 : formatGTQ(evaluatedAmount)}
             </div>
           </div>
 
-          {/* 3. CATEGORIES & SUBCATEGORIES HIERARCHICAL SELECTOR */}
+          {/* 3. CATEGORIES & SUBCATEGORIES SINGLE-ROW HIERARCHICAL SELECTOR */}
           {type !== 'transfer' && (
             <div
               className={`p-3 rounded-2xl border transition-all space-y-2 ${
                 isDark ? 'bg-black/20 border-white/10' : 'bg-slate-50 border-slate-200'
               }`}
             >
-              {/* Level 1: CATEGORIES BROWSING VIEW */}
-              {categoryViewLevel === 'categories' ? (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-slate-400 px-0.5">
-                    <span className="text-[11px] font-bold uppercase tracking-wider">
-                      Selecciona una Categoría
+              {/* Category Breadcrumb & Change button */}
+              <div className="flex items-center justify-between text-slate-400 px-0.5">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold truncate">
+                  <span className="uppercase tracking-wider">
+                    {isBrowsingCategories ? 'Categoría' : 'Subcategoría'}:
+                  </span>
+                  {selectedCategory ? (
+                    <span
+                      className="font-bold flex items-center gap-1"
+                      style={{ color: selectedCategory.color || '#10B981' }}
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full shrink-0"
+                        style={{ backgroundColor: selectedCategory.color || '#10B981' }}
+                      />
+                      <span>{selectedCategory.name}</span>
                     </span>
-                    {selectedCategory && (
-                      <button
-                        type="button"
-                        onClick={() => setCategoryViewLevel('subcategories')}
-                        className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1 cursor-pointer"
-                      >
-                        <span>Ver subcategorías ({selectedCategory.name})</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
-                      </button>
-                    )}
-                  </div>
+                  ) : (
+                    <span className="text-slate-400 italic">Sin seleccionar</span>
+                  )}
+                  {!isBrowsingCategories && selectedCategory && (
+                    <span className="text-slate-400 truncate">
+                      › {subcategoryId
+                        ? selectedCategory.subcategories.find((s) => s.id === subcategoryId)?.name || 'Personalizada'
+                        : `General (${selectedCategory.name})`}
+                    </span>
+                  )}
+                </div>
 
-                  {/* Categories Grid */}
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                {!isBrowsingCategories && (
+                  <button
+                    type="button"
+                    onClick={() => setIsBrowsingCategories(true)}
+                    className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-0.5 cursor-pointer shrink-0 ml-2"
+                  >
+                    <span>Cambiar</span>
+                  </button>
+                )}
+              </div>
+
+              {/* SINGLE COMPACT ROW FOR NAVIGATION */}
+              <div className="w-full">
+                {isBrowsingCategories ? (
+                  /* Browsing Categories in a single horizontal scrollable row */
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-nowrap py-0.5">
                     {availableCategories.map((cat) => {
                       const isSelected = cat.id === categoryId;
-                      const subsCount = cat.subcategories.filter((s) => s.isActive !== false).length;
                       return (
                         <button
                           key={cat.id}
                           type="button"
                           onClick={() => handleSelectCategory(cat.id)}
-                          className={`p-2 rounded-xl border text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer text-left ${
+                          className={`h-8 px-3 rounded-full border text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
                             isSelected
-                              ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 shadow-xs'
+                              ? 'shadow-xs font-bold'
                               : isDark
-                              ? 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:border-white/20'
+                              ? 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white'
                               : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
                           }`}
-                        >
-                          <span
-                            className="w-2.5 h-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: cat.color || '#10B981' }}
-                          />
-                          <span className="truncate flex-1">{cat.name}</span>
-                          <span className="text-[10px] text-slate-400 shrink-0 font-mono">
-                            {subsCount}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : (
-                /* Level 2: SUBCATEGORIES VIEW WITH BACK / UP LEVEL BUTTON */
-                <div className="space-y-2.5">
-                  {/* Top Bar with the button to go back up to categories */}
-                  <div className="flex items-center justify-between gap-2">
-                    <button
-                      type="button"
-                      onClick={handleGoBackToCategories}
-                      className="px-2.5 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-400 text-xs font-bold flex items-center gap-1.5 hover:bg-emerald-500/25 active:scale-95 transition-all cursor-pointer"
-                      title="Volver a subir de nivel en las categorías"
-                    >
-                      <ArrowLeft className="w-3.5 h-3.5" />
-                      <span>Volver a categorías (Subir nivel)</span>
-                    </button>
-
-                    {selectedCategory && (
-                      <button
-                        type="button"
-                        onClick={handleGoBackToCategories}
-                        className="text-xs font-bold text-slate-300 hover:text-white flex items-center gap-1.5 cursor-pointer"
-                        title="Cambiar categoría"
-                      >
-                        <span
-                          className="w-2.5 h-2.5 rounded-full shrink-0"
-                          style={{ backgroundColor: selectedCategory.color || '#10B981' }}
-                        />
-                        <span className="underline decoration-dotted">{selectedCategory.name}</span>
-                      </button>
-                    )}
-                  </div>
-
-                  {/* Horizontal mini-rail for fast category switching */}
-                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 no-scrollbar py-0.5">
-                    {availableCategories.map((cat) => {
-                      const isSelected = cat.id === categoryId;
-                      return (
-                        <button
-                          key={cat.id}
-                          type="button"
-                          onClick={() => handleSelectCategory(cat.id)}
-                          className={`h-7 px-2.5 rounded-full border text-[11px] font-medium flex items-center gap-1 shrink-0 transition-all cursor-pointer whitespace-nowrap ${
+                          style={
                             isSelected
-                              ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300 font-bold'
-                              : isDark
-                              ? 'bg-white/5 border-white/10 text-slate-400 hover:text-slate-200'
-                              : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900'
-                          }`}
+                              ? {
+                                  backgroundColor: `${cat.color || '#10B981'}25`,
+                                  borderColor: `${cat.color || '#10B981'}60`,
+                                  color: isDark ? '#ffffff' : cat.color || '#10B981',
+                                }
+                              : undefined
+                          }
                         >
                           <span
-                            className="w-1.5 h-1.5 rounded-full shrink-0"
+                            className="w-2 h-2 rounded-full shrink-0"
                             style={{ backgroundColor: cat.color || '#10B981' }}
                           />
                           <span>{cat.name}</span>
@@ -512,31 +538,52 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       );
                     })}
                   </div>
+                ) : (
+                  /* Subcategories row: [Subir on left] + [Horizontal scrollable subcategories in SAME row] */
+                  <div className="flex items-center gap-1.5 w-full">
+                    {/* Subir button on the left */}
+                    <button
+                      type="button"
+                      onClick={() => setIsBrowsingCategories(true)}
+                      title="Subir de nivel para ver todas las categorías"
+                      className={`h-8 px-2.5 rounded-full border text-xs font-bold flex items-center gap-1 shrink-0 transition-all cursor-pointer active:scale-95 ${
+                        isDark
+                          ? 'bg-white/10 border-white/20 text-white hover:bg-white/15'
+                          : 'bg-slate-200 border-slate-300 text-slate-900 hover:bg-slate-300'
+                      }`}
+                    >
+                      <ChevronLeft className="w-3.5 h-3.5" />
+                      <span>Subir</span>
+                    </button>
 
-                  {/* Subcategories list */}
-                  <div className="pt-1">
-                    <div className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
-                      Subcategorías de {selectedCategory?.name || 'la categoría'}
-                    </div>
-
-                    <div className="flex flex-wrap items-center gap-1.5 max-h-36 overflow-y-auto pr-1">
-                      {/* Default "General / Toda la categoría" option */}
+                    {/* Subcategories list in the same single row */}
+                    <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar flex-nowrap flex-1 py-0.5">
+                      {/* Option: General */}
                       <button
                         type="button"
                         onClick={() => setSubcategoryId('')}
-                        className={`h-7 px-3 rounded-full border text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+                        className={`h-8 px-3 rounded-full border text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
                           !subcategoryId
-                            ? 'bg-emerald-500/25 border-emerald-400 text-emerald-300 font-bold shadow-xs'
+                            ? 'shadow-xs font-bold'
                             : isDark
-                            ? 'bg-white/5 border-white/10 text-slate-400 hover:text-white'
-                            : 'bg-white border-slate-200 text-slate-600 hover:text-slate-900'
+                            ? 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white'
+                            : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
                         }`}
+                        style={
+                          !subcategoryId && selectedCategory
+                            ? {
+                                backgroundColor: `${selectedCategory.color || '#10B981'}25`,
+                                borderColor: `${selectedCategory.color || '#10B981'}60`,
+                                color: isDark ? '#ffffff' : selectedCategory.color || '#10B981',
+                              }
+                            : undefined
+                        }
                       >
                         {!subcategoryId && <Check className="w-3 h-3" />}
-                        <span>General ({selectedCategory?.name})</span>
+                        <span>General</span>
                       </button>
 
-                      {/* Explicit subcategories */}
+                      {/* Subcategory chips */}
                       {activeSubcategories.map((sub) => {
                         const isSubSelected = sub.id === subcategoryId;
                         return (
@@ -544,13 +591,22 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                             key={sub.id}
                             type="button"
                             onClick={() => setSubcategoryId(sub.id)}
-                            className={`h-7 px-3 rounded-full border text-xs font-medium flex items-center gap-1.5 transition-all cursor-pointer whitespace-nowrap ${
+                            className={`h-8 px-3 rounded-full border text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer whitespace-nowrap active:scale-95 ${
                               isSubSelected
-                                ? 'bg-emerald-500/25 border-emerald-400 text-emerald-300 font-bold shadow-xs'
+                                ? 'shadow-xs font-bold'
                                 : isDark
                                 ? 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white'
-                                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+                              : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
                             }`}
+                            style={
+                              isSubSelected && selectedCategory
+                                ? {
+                                    backgroundColor: `${selectedCategory.color || '#10B981'}25`,
+                                    borderColor: `${selectedCategory.color || '#10B981'}60`,
+                                    color: isDark ? '#ffffff' : selectedCategory.color || '#10B981',
+                                  }
+                                : undefined
+                            }
                           >
                             {isSubSelected && <Check className="w-3 h-3" />}
                             {sub.icon && <span className="text-xs">{sub.icon}</span>}
@@ -560,8 +616,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       })}
                     </div>
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
           )}
 
@@ -569,60 +625,41 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           {type === 'transfer' ? (
             <div className="space-y-3 pt-1">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
                   Cuenta origen
                 </label>
-                <select
+                <AccountSelectDropdown
+                  accounts={accounts}
                   value={accountId}
-                  onChange={(e) => setAccountId(e.target.value)}
-                  className={`w-full p-2.5 rounded-xl border text-xs font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
-                    isDark
-                      ? 'bg-black/30 border-white/10 text-white'
-                      : 'bg-slate-50 border-slate-200 text-slate-900'
-                  }`}
-                >
-                  <option value="">Selecciona cuenta origen</option>
-                  {accounts
-                    .filter((a) => a.status === 'active')
-                    .map((acc) => (
-                      <option key={acc.id} value={acc.id}>
-                        {acc.name} ({formatGTQ(acc.currentBalance)})
-                      </option>
-                    ))}
-                </select>
+                  onChange={(newId) => setAccountId(newId)}
+                  placeholder="Selecciona cuenta origen"
+                  isDark={isDark}
+                  accentColor={activeAccountColor}
+                />
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
                   Cuenta destino
                 </label>
-                <select
+                <AccountSelectDropdown
+                  accounts={accounts}
                   value={destinationAccountId}
-                  onChange={(e) => setDestinationAccountId(e.target.value)}
-                  className={`w-full p-2.5 rounded-xl border text-xs font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
-                    isDark
-                      ? 'bg-black/30 border-white/10 text-white'
-                      : 'bg-slate-50 border-slate-200 text-slate-900'
-                  }`}
-                >
-                  <option value="">Selecciona cuenta destino</option>
-                  {accounts
-                    .filter((a) => a.status === 'active' && a.id !== accountId)
-                    .map((acc) => (
-                      <option key={acc.id} value={acc.id}>
-                        {acc.name} {acc.type === 'credit_card' ? '(Tarjeta de Crédito)' : `(${formatGTQ(acc.currentBalance)})`}
-                      </option>
-                    ))}
-                </select>
+                  onChange={(newId) => setDestinationAccountId(newId)}
+                  placeholder="Selecciona cuenta destino"
+                  excludeId={accountId}
+                  isDark={isDark}
+                  accentColor={activeAccountColor}
+                />
               </div>
 
               {/* Credit card payment checkbox toggle */}
-              <label className="flex items-center gap-2 p-2 rounded-xl bg-white/5 border border-white/10 cursor-pointer">
+              <label className="flex items-center gap-2 p-2.5 rounded-xl bg-white/5 border border-white/10 cursor-pointer hover:bg-white/10 transition-colors">
                 <input
                   type="checkbox"
                   checked={isCreditCardPayment}
                   onChange={(e) => setIsCreditCardPayment(e.target.checked)}
-                  className="rounded text-emerald-500 focus:ring-emerald-500"
+                  className="rounded text-emerald-500 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
                 />
                 <span className="text-xs font-medium text-slate-300 flex items-center gap-1.5">
                   <CreditCard className="w-3.5 h-3.5 text-sky-400" />
@@ -632,27 +669,17 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           ) : (
             <div>
-              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
                 Cuenta
               </label>
-              <select
+              <AccountSelectDropdown
+                accounts={accounts}
                 value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-                className={`w-full p-2.5 rounded-xl border text-xs font-medium focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
-                  isDark
-                    ? 'bg-black/30 border-white/10 text-white'
-                    : 'bg-slate-50 border-slate-200 text-slate-900'
-                }`}
-              >
-                <option value="">Selecciona una cuenta</option>
-                {accounts
-                  .filter((a) => a.status === 'active')
-                  .map((acc) => (
-                    <option key={acc.id} value={acc.id}>
-                      {acc.name} ({formatGTQ(acc.currentBalance)})
-                    </option>
-                  ))}
-              </select>
+                onChange={(newId) => setAccountId(newId)}
+                placeholder="Selecciona una cuenta"
+                isDark={isDark}
+                accentColor={activeAccountColor}
+              />
             </div>
           )}
 
@@ -826,7 +853,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           <button
             type="button"
             onClick={handleSave}
-            className="flex-2 py-3 px-4 rounded-xl bg-[#10B981] hover:bg-[#059669] text-[#002113] font-display text-xs font-bold transition-all shadow-md cursor-pointer active:scale-98"
+            style={{
+              backgroundColor: activeAccountColor,
+              color: contrastTextColor,
+            }}
+            className="flex-2 py-3 px-4 rounded-xl font-display text-xs font-bold transition-all shadow-md cursor-pointer active:scale-98 hover:brightness-105"
           >
             {editingTransaction ? 'Actualizar' : 'Guardar transacción'}
           </button>
