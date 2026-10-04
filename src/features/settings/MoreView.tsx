@@ -46,8 +46,12 @@ export const MoreView: React.FC<MoreViewProps> = ({
     categories,
     createCategory,
     deleteCategory,
+    updateCategoryName,
+    updateSubcategoryName,
     addSubcategory,
     removeSubcategory,
+    transactions,
+    budgets,
     pendingSyncCount,
     syncPendingOperations,
   } = useWallet();
@@ -63,6 +67,11 @@ export const MoreView: React.FC<MoreViewProps> = ({
   const [newCatColor, setNewCatColor] = useState('#10B981');
   const [newSubName, setNewSubName] = useState('');
   const [targetCatForSub, setTargetCatForSub] = useState<Category | null>(null);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [categoryNameDraft, setCategoryNameDraft] = useState('');
+  const [editingSubcategory, setEditingSubcategory] = useState<{ categoryId: string; subcategoryId: string } | null>(null);
+  const [subcategoryNameDraft, setSubcategoryNameDraft] = useState('');
+  const [categoryManagerNotice, setCategoryManagerNotice] = useState<string | null>(null);
 
   const filteredCategories = useMemo(() => {
     return categories.filter((c) => c.type === catManagerType);
@@ -71,27 +80,68 @@ export const MoreView: React.FC<MoreViewProps> = ({
   const handleCreateCategory = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCatName.trim()) return;
-    createCategory({
+    const result = createCategory({
       name: newCatName.trim(),
       type: catManagerType,
       color: newCatColor,
       icon: '🏷️',
     });
+    if (!result.ok) {
+      setCategoryManagerNotice(result.error || 'No se pudo crear la categoría.');
+      return;
+    }
     setNewCatName('');
     setIsNewCatModalOpen(false);
+    setCategoryManagerNotice(null);
   };
 
   const handleAddSubcategory = (e: React.FormEvent) => {
     e.preventDefault();
     if (!targetCatForSub || !newSubName.trim()) return;
-    addSubcategory(targetCatForSub.id, newSubName.trim(), '🏷️');
+    const result = addSubcategory(targetCatForSub.id, newSubName.trim(), '🏷️');
+    if (!result.ok) {
+      setCategoryManagerNotice(result.error || 'No se pudo agregar la subcategoría.');
+      return;
+    }
     setNewSubName('');
     setTargetCatForSub(null);
+    setCategoryManagerNotice(null);
   };
 
   const deleteSubcategory = (cat: Category, subId: string) => {
-    removeSubcategory(cat.id, subId);
+    const result = removeSubcategory(cat.id, subId);
+    setCategoryManagerNotice(result.error || 'Subcategoría eliminada.');
   };
+
+  const saveCategoryName = (categoryId: string) => {
+    const result = updateCategoryName(categoryId, categoryNameDraft);
+    if (!result.ok) {
+      setCategoryManagerNotice(result.error || 'No se pudo cambiar el nombre.');
+      return;
+    }
+    setEditingCategoryId(null);
+    setCategoryManagerNotice(null);
+  };
+
+  const saveSubcategoryName = (categoryId: string, subcategoryId: string) => {
+    const result = updateSubcategoryName(categoryId, subcategoryId, subcategoryNameDraft);
+    if (!result.ok) {
+      setCategoryManagerNotice(result.error || 'No se pudo cambiar el nombre.');
+      return;
+    }
+    setEditingSubcategory(null);
+    setCategoryManagerNotice(null);
+  };
+
+  const categoryHasRecords = (category: Category) => {
+    const subcategoryIds = new Set(category.subcategories.map((item) => item.id));
+    return transactions.some((item) => item.categoryId === category.id || (!!item.subcategoryId && subcategoryIds.has(item.subcategoryId))) ||
+      budgets.some((item) => item.categoryId === category.id || (!!item.subcategoryId && subcategoryIds.has(item.subcategoryId)));
+  };
+
+  const subcategoryHasRecords = (subcategoryId: string) =>
+    transactions.some((item) => item.subcategoryId === subcategoryId) ||
+    budgets.some((item) => item.subcategoryId === subcategoryId);
 
   return (
     <div className="space-y-4">
@@ -416,13 +466,21 @@ export const MoreView: React.FC<MoreViewProps> = ({
 
             {/* Category list */}
             <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3">
+              {categoryManagerNotice && (
+                <div role="status" className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs">
+                  {categoryManagerNotice}
+                </div>
+              )}
               <div className="flex justify-between items-center">
                 <span className="text-xs text-slate-400 font-medium">
                   Categorías registradas
                 </span>
                 <button
                   type="button"
-                  onClick={() => setIsNewCatModalOpen(true)}
+                  onClick={() => {
+                    setCategoryManagerNotice(null);
+                    setIsNewCatModalOpen(true);
+                  }}
                   className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-xs font-bold flex items-center gap-1 cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -441,16 +499,50 @@ export const MoreView: React.FC<MoreViewProps> = ({
                         className="w-3 h-3 rounded-full"
                         style={{ backgroundColor: cat.color }}
                       />
-                      <span className="font-bold text-white">{cat.name}</span>
+                      {editingCategoryId === cat.id ? (
+                        <>
+                          <input
+                            autoFocus
+                            value={categoryNameDraft}
+                            onChange={(e) => setCategoryNameDraft(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveCategoryName(cat.id);
+                              if (e.key === 'Escape') setEditingCategoryId(null);
+                            }}
+                            aria-label="Nombre de la categoría"
+                            className="min-w-0 w-32 px-2 py-1 rounded-lg bg-black/30 border border-white/10 text-xs text-white"
+                          />
+                          <button type="button" onClick={() => saveCategoryName(cat.id)} aria-label="Guardar nombre de categoría" className="text-emerald-400 hover:text-emerald-300"><Check className="w-3.5 h-3.5" /></button>
+                          <button type="button" onClick={() => setEditingCategoryId(null)} aria-label="Cancelar edición de categoría" className="text-slate-400 hover:text-white"><X className="w-3.5 h-3.5" /></button>
+                        </>
+                      ) : (
+                        <>
+                          <span className="font-bold text-white">{cat.name}</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingCategoryId(cat.id);
+                              setCategoryNameDraft(cat.name);
+                              setCategoryManagerNotice(null);
+                            }}
+                            aria-label={`Editar categoría ${cat.name}`}
+                            className="text-slate-400 hover:text-emerald-400"
+                          ><Edit3 className="w-3 h-3" /></button>
+                        </>
+                      )}
                       <span className="text-[10px] text-slate-400">
                         ({cat.subcategories.length} subcategorías)
                       </span>
+                      {categoryHasRecords(cat) && <span className="text-[9px] text-amber-400">En uso</span>}
                     </div>
 
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
-                        onClick={() => setTargetCatForSub(cat)}
+                        onClick={() => {
+                          setCategoryManagerNotice(null);
+                          setTargetCatForSub(cat);
+                        }}
                         className="px-2 py-0.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-[11px] flex items-center gap-1 cursor-pointer"
                       >
                         <Plus className="w-3 h-3" />
@@ -458,8 +550,13 @@ export const MoreView: React.FC<MoreViewProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => deleteCategory(cat.id)}
-                        className="p-1 rounded text-rose-400 hover:bg-rose-500/10 cursor-pointer"
+                        disabled={categoryHasRecords(cat)}
+                        title={categoryHasRecords(cat) ? 'Tiene transacciones o presupuestos asociados; puedes cambiarle el nombre.' : 'Eliminar categoría'}
+                        onClick={() => {
+                          const result = deleteCategory(cat.id);
+                          setCategoryManagerNotice(result.error || 'Categoría eliminada.');
+                        }}
+                        className="p-1 rounded text-rose-400 hover:bg-rose-500/10 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                       >
                         <Trash2 className="w-3 h-3" />
                       </button>
@@ -469,21 +566,54 @@ export const MoreView: React.FC<MoreViewProps> = ({
                   {/* Subcategories list */}
                   {cat.subcategories.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 pt-1 border-t border-white/5">
-                      {cat.subcategories.map((sub) => (
-                        <div
-                          key={sub.id}
-                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-slate-300"
-                        >
-                          <span>{sub.name}</span>
-                          <button
-                            type="button"
-                            onClick={() => deleteSubcategory(cat, sub.id)}
-                            className="text-slate-500 hover:text-rose-400 cursor-pointer"
-                          >
-                            <X className="w-3 h-3" />
-                          </button>
-                        </div>
-                      ))}
+                      {cat.subcategories.map((sub) => {
+                        const isEditing = editingSubcategory?.categoryId === cat.id && editingSubcategory.subcategoryId === sub.id;
+                        const hasRecords = subcategoryHasRecords(sub.id);
+                        return (
+                          <div key={sub.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-slate-300">
+                            {isEditing ? (
+                              <>
+                                <input
+                                  autoFocus
+                                  value={subcategoryNameDraft}
+                                  onChange={(e) => setSubcategoryNameDraft(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') saveSubcategoryName(cat.id, sub.id);
+                                    if (e.key === 'Escape') setEditingSubcategory(null);
+                                  }}
+                                  aria-label="Nombre de la subcategoría"
+                                  className="w-28 px-1 py-0.5 rounded bg-black/30 border border-white/10 text-[11px] text-white"
+                                />
+                                <button type="button" onClick={() => saveSubcategoryName(cat.id, sub.id)} aria-label="Guardar nombre de subcategoría" className="text-emerald-400"><Check className="w-3 h-3" /></button>
+                                <button type="button" onClick={() => setEditingSubcategory(null)} aria-label="Cancelar edición de subcategoría" className="text-slate-400"><X className="w-3 h-3" /></button>
+                              </>
+                            ) : (
+                              <>
+                                <span>{sub.name}</span>
+                                {hasRecords && <span className="text-[9px] text-amber-400">En uso</span>}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingSubcategory({ categoryId: cat.id, subcategoryId: sub.id });
+                                    setSubcategoryNameDraft(sub.name);
+                                    setCategoryManagerNotice(null);
+                                  }}
+                                  aria-label={`Editar subcategoría ${sub.name}`}
+                                  className="text-slate-400 hover:text-emerald-400"
+                                ><Edit3 className="w-3 h-3" /></button>
+                                <button
+                                  type="button"
+                                  disabled={hasRecords || cat.subcategories.length <= 1}
+                                  title={hasRecords ? 'Tiene transacciones o presupuestos asociados; puedes cambiarle el nombre.' : cat.subcategories.length <= 1 ? 'La categoría debe conservar al menos una subcategoría.' : 'Eliminar subcategoría'}
+                                  onClick={() => deleteSubcategory(cat, sub.id)}
+                                  aria-label={`Eliminar subcategoría ${sub.name}`}
+                                  className="text-slate-500 hover:text-rose-400 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                                ><X className="w-3 h-3" /></button>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -523,6 +653,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
               placeholder="Nombre de la categoría"
               className="w-full p-2.5 rounded-xl border border-white/10 bg-black/30 text-xs text-white"
             />
+            {categoryManagerNotice && <p role="alert" className="text-xs text-rose-400">{categoryManagerNotice}</p>}
             <div className="flex items-center gap-2">
               <span className="text-xs text-slate-400">Color:</span>
               <input
@@ -571,6 +702,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
               placeholder="Nombre de la subcategoría"
               className="w-full p-2.5 rounded-xl border border-white/10 bg-black/30 text-xs text-white"
             />
+            {categoryManagerNotice && <p role="alert" className="text-xs text-rose-400">{categoryManagerNotice}</p>}
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"

@@ -78,7 +78,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
 
   const totalCreditDebt = creditAccounts
     .filter((a) => a.status === 'active')
-    .reduce((sum, a) => sum + Math.max(0, a.currentBalance ?? a.balance ?? 0), 0);
+    .reduce((sum, a) => sum + Math.max(0, -(a.currentBalance ?? a.balance ?? 0)), 0);
 
   const startCreate = () => {
     setEditingAccount(null);
@@ -344,7 +344,7 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
         ) : (
           <div className="space-y-2.5">
             {creditAccounts.map((card) => {
-              const debt = Math.max(0, card.currentBalance || 0);
+              const debt = Math.max(0, -(card.currentBalance ?? card.balance ?? 0));
               const limit = card.creditLimit || 0;
               const available = Math.max(0, limit - debt);
               const utilization = limit > 0 ? Math.min(100, Math.round((debt / limit) * 100)) : 0;

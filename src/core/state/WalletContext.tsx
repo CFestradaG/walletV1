@@ -80,6 +80,50 @@ interface StoredDatabase {
   users: Record<string, UserDataStore>;
 }
 
+function readLocalUserStore(userId: string): UserDataStore | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as StoredDatabase;
+    return parsed?.users?.[userId] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function mergeLocalStoreForUpload(defaultStore: UserDataStore, localStore: UserDataStore | null, uid: string): UserDataStore {
+  if (!localStore) return defaultStore;
+  const mergeById = <T extends { id: string }>(defaults: T[], local: T[]) => {
+    const records = new Map(defaults.map((item) => [item.id, item]));
+    local.forEach((item) => records.set(item.id, item));
+    return [...records.values()];
+  };
+  return {
+    ...defaultStore,
+    ...localStore,
+    profile: { ...localStore.profile, ...defaultStore.profile, id: uid },
+    settings: { ...defaultStore.settings, ...localStore.settings, userId: uid },
+    accounts: mergeById(defaultStore.accounts, localStore.accounts || []),
+    categories: mergeById(defaultStore.categories, localStore.categories || []),
+    periods: mergeById(defaultStore.periods, localStore.periods || []),
+    transactions: (localStore.transactions || []).map((tx) => ({ ...tx, userId: uid })),
+    budgets: mergeById(defaultStore.budgets, localStore.budgets || []),
+  };
+}
+
+function normalizeOwnedDocuments<T extends { userId?: string }>(
+  documents: Array<{ data: () => unknown }>,
+  uid: string,
+  repairMissingOwner: (record: T) => void
+): T[] {
+  return documents.flatMap((document) => {
+    const record = document.data() as T;
+    const ownedRecord = { ...record, userId: uid } as T;
+    if (record.userId !== uid) repairMissingOwner(ownedRecord);
+    return [ownedRecord];
+  });
+}
+
 interface WalletContextValue {
   currentUser: UserProfile | null;
   isAuthenticated: boolean;
@@ -103,6 +147,7 @@ interface WalletContextValue {
   toggleOfflineMode: () => void;
   syncPendingOperations: () => void;
   pendingSyncCount: number;
+  syncError: string | null;
 
   accounts: Account[];
   activeAccounts: Account[];
@@ -141,13 +186,15 @@ interface WalletContextValue {
     icon: string;
     color: string;
   }) => { ok: boolean; error?: string };
+  updateCategoryName: (categoryId: string, name: string) => { ok: boolean; error?: string };
+  updateSubcategoryName: (categoryId: string, subcategoryId: string, name: string) => { ok: boolean; error?: string };
   toggleCategoryActive: (categoryId: string) => void;
   addSubcategory: (
     categoryId: string,
     name: string,
     icon: string
   ) => { ok: boolean; error?: string };
-  removeSubcategory: (categoryId: string, subcategoryId: string) => void;
+  removeSubcategory: (categoryId: string, subcategoryId: string) => { ok: boolean; error?: string };
 
   periods: FinancialPeriod[];
   activePeriod: FinancialPeriod | null;
@@ -251,10 +298,9 @@ interface WalletContextValue {
       amount: number;
     }
   ) => { ok: boolean; error?: string };
-  resetPassword: (email: string) => { ok: boolean; message: string };
+  resetPassword: (email: string) => Promise<{ ok: boolean; message: string }>;
   updateSettings: (partial: Partial<UserSettings>) => void;
-  deleteCategory: (categoryId: string) => void;
-  updateCategory: (categoryId: string, input: Partial<Category>) => void;
+  deleteCategory: (categoryId: string) => { ok: boolean; error?: string };
   deleteAccount: (accountId: string) => void;
 }
 
@@ -293,6 +339,8 @@ function loadInitialDatabase(): StoredDatabase {
 
 export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [db, setDb] = useState<StoredDatabase>(() => loadInitialDatabase());
+  const [remoteTransactionsLoaded, setRemoteTransactionsLoaded] = useState(false);
+  const [syncError, setSyncError] = useState<string | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => {
     try {
       const saved = localStorage.getItem(SESSION_USER_KEY);
@@ -389,6 +437,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
       if (firebaseUser) {
         const uid = firebaseUser.uid;
+        const reportReadError = (error: unknown, label: string, path: string): never => {
+          const code = (error as { code?: string })?.code;
+          setSyncError(`No se pudieron descargar ${label}${code ? ` (${code})` : ''}.`);
+          return handleFirestoreError(error, OperationType.GET, path);
+        };
+        setRemoteTransactionsLoaded(false);
         setCurrentUserId(uid);
 
         const profile: UserProfile = {
@@ -415,32 +469,33 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           return prev;
         });
 
-        // Seed initial data in Firestore if empty
-        syncProfile(uid, profile).catch(console.warn);
-        seedUserInitialData(uid, initialStore).catch(console.warn);
+        // Upload data saved locally for this Firebase user before remote snapshots
+        // replace the local state. This recovers records created before cloud sync.
+        const uploadStore = mergeLocalStoreForUpload(initialStore, readLocalUserStore(uid), uid);
+        try {
+          await Promise.all([syncProfile(uid, profile), seedUserInitialData(uid, uploadStore)]);
+          if (auth.currentUser?.uid === uid) setSyncError(null);
+        } catch (error) {
+          console.error('No se pudieron sincronizar los datos locales con Firestore:', error);
+          if (auth.currentUser?.uid === uid) {
+            setSyncError('No se pudieron guardar tus datos en la nube. Se conservan en este dispositivo; revisa tu conexión e inténtalo de nuevo.');
+          }
+        }
+        if (auth.currentUser?.uid !== uid) return;
 
         // Real-time listener for accounts
         const unsubAccounts = onSnapshot(
           collection(firestoreDb, 'users', uid, 'accounts'),
           (snap) => {
-            const remoteAccs = snap.docs.map((d) => d.data() as Account);
-            if (remoteAccs.length > 0) {
-              setDb((prev) => {
-                const current = prev.users[uid] || initialStore;
-                return {
-                  ...prev,
-                  users: {
-                    ...prev.users,
-                    [uid]: {
-                      ...current,
-                      accounts: remoteAccs,
-                    },
-                  },
-                };
-              });
-            }
+            const remoteAccs = normalizeOwnedDocuments<Account>(snap.docs, uid, (account) => {
+              trackSync(syncAccount(uid, account), 'reparación del propietario de una cuenta');
+            });
+            setDb((prev) => {
+              const current = prev.users[uid] || initialStore;
+              return { ...prev, users: { ...prev.users, [uid]: { ...current, accounts: remoteAccs } } };
+            });
           },
-          (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}/accounts`)
+          (err) => reportReadError(err, 'las cuentas', `users/${uid}/accounts`)
         );
         unsubs.push(unsubAccounts);
 
@@ -448,24 +503,15 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const unsubCategories = onSnapshot(
           collection(firestoreDb, 'users', uid, 'categories'),
           (snap) => {
-            const remoteCats = snap.docs.map((d) => d.data() as Category);
-            if (remoteCats.length > 0) {
-              setDb((prev) => {
-                const current = prev.users[uid] || initialStore;
-                return {
-                  ...prev,
-                  users: {
-                    ...prev.users,
-                    [uid]: {
-                      ...current,
-                      categories: remoteCats,
-                    },
-                  },
-                };
-              });
-            }
+            const remoteCats = normalizeOwnedDocuments<Category>(snap.docs, uid, (category) => {
+              trackSync(syncCategory(uid, category), 'reparación del propietario de una categoría');
+            });
+            setDb((prev) => {
+              const current = prev.users[uid] || initialStore;
+              return { ...prev, users: { ...prev.users, [uid]: { ...current, categories: remoteCats } } };
+            });
           },
-          (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}/categories`)
+          (err) => reportReadError(err, 'las categorías', `users/${uid}/categories`)
         );
         unsubs.push(unsubCategories);
 
@@ -473,24 +519,16 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const unsubPeriods = onSnapshot(
           collection(firestoreDb, 'users', uid, 'periods'),
           (snap) => {
-            const remotePers = snap.docs.map((d) => d.data() as FinancialPeriod);
-            if (remotePers.length > 0) {
-              setDb((prev) => {
-                const current = prev.users[uid] || initialStore;
-                return {
-                  ...prev,
-                  users: {
-                    ...prev.users,
-                    [uid]: {
-                      ...current,
-                      periods: remotePers,
-                    },
-                  },
-                };
-              });
-            }
+            const remotePers = normalizeOwnedDocuments<FinancialPeriod>(snap.docs, uid, (period) => {
+              trackSync(syncPeriod(uid, period), 'reparación del propietario de un período');
+            });
+            setDb((prev) => {
+              const current = prev.users[uid] || initialStore;
+              const activeId = remotePers.find((period) => period.isActive)?.id;
+              return { ...prev, users: { ...prev.users, [uid]: { ...current, periods: remotePers, activePeriodId: activeId || current.activePeriodId } } };
+            });
           },
-          (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}/periods`)
+          (err) => reportReadError(err, 'los períodos', `users/${uid}/periods`)
         );
         unsubs.push(unsubPeriods);
 
@@ -500,9 +538,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           (snap) => {
             const remoteTxs = snap.docs.flatMap((d) => {
               const data = d.data() as Transaction;
-              if (data.userId && data.userId !== uid) return [];
               const owned = { ...data, userId: uid };
-              if (!data.userId) syncTransaction(uid, owned).catch(console.warn);
+              if (data.userId !== uid) trackSync(syncTransaction(uid, owned), 'reparación del propietario de una transacción');
               return [owned];
             });
             setDb((prev) => {
@@ -518,8 +555,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 },
               };
             });
+            setRemoteTransactionsLoaded(true);
           },
-          (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}/transactions`)
+          (err) => {
+            console.error('No se pudieron cargar las transacciones desde Firestore:', err);
+            const errorCode = (err as { code?: string }).code;
+            setSyncError(`No se pudieron cargar tus transacciones desde la nube${errorCode ? ` (${errorCode})` : ''}. Revisa tu conexión.`);
+            handleFirestoreError(err, OperationType.GET, `users/${uid}/transactions`);
+          }
         );
         unsubs.push(unsubTransactions);
 
@@ -527,7 +570,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const unsubBudgets = onSnapshot(
           collection(firestoreDb, 'users', uid, 'budgets'),
           (snap) => {
-            const remoteBudgets = snap.docs.map((d) => d.data() as Budget);
+            const remoteBudgets = normalizeOwnedDocuments<Budget>(snap.docs, uid, (budget) => {
+              trackSync(syncBudget(uid, budget), 'reparación del propietario de un presupuesto');
+            });
             setDb((prev) => {
               const current = prev.users[uid] || initialStore;
               return {
@@ -542,26 +587,29 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
               };
             });
           },
-          (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}/budgets`)
+          (err) => reportReadError(err, 'los presupuestos', `users/${uid}/budgets`)
         );
         unsubs.push(unsubBudgets);
 
         const unsubSettings = onSnapshot(
           collection(firestoreDb, 'users', uid, 'settings'),
           (snap) => {
-            const remoteSettings = snap.docs.find((d) => d.id === 'default')?.data() as Partial<UserSettings> | undefined;
+            const rawSettings = snap.docs.find((d) => d.id === 'default')?.data() as Partial<UserSettings> | undefined;
+            const remoteSettings = rawSettings;
             if (remoteSettings) {
               const mergedSettings = { ...initialStore.settings, ...remoteSettings, userId: uid };
+              if (remoteSettings.userId !== uid) trackSync(syncSettings(uid, mergedSettings), 'reparación del propietario de la configuración');
               setDb((prev) => {
                 const current = prev.users[uid] || initialStore;
                 return { ...prev, users: { ...prev.users, [uid]: { ...current, settings: mergedSettings } } };
               });
             }
           },
-          (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}/settings`)
+          (err) => reportReadError(err, 'la configuración', `users/${uid}/settings`)
         );
         unsubs.push(unsubSettings);
       } else {
+        setRemoteTransactionsLoaded(false);
         setCurrentUserId(null);
       }
     });
@@ -584,6 +632,14 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           [currentUserId]: updater(existing),
         },
       };
+    });
+  };
+
+  const trackSync = (operation: Promise<void>, label: string) => {
+    void operation.then(() => setSyncError(null)).catch((error) => {
+      console.error(`Falló la sincronización de ${label}:`, error);
+      const errorCode = (error as { code?: string })?.code;
+      setSyncError(`No se pudo sincronizar ${label}${errorCode ? ` (${errorCode})` : ''}. El cambio sigue guardado en este dispositivo.`);
     });
   };
 
@@ -695,58 +751,61 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const updateUserProfile = (name: string, email: string) => {
     if (!name.trim() || !email.trim()) return;
+    if (!currentUserStore || !currentUserId) return;
+    const profile = { ...currentUserStore.profile, name: name.trim(), email: email.trim() };
     updateCurrentUserStore((store) => ({
       ...store,
-      profile: {
-        ...store.profile,
-        name: name.trim(),
-        email: email.trim(),
-      },
+      profile,
     }));
+    if (auth.currentUser?.uid === currentUserId) trackSync(syncProfile(currentUserId, profile), 'el perfil');
   };
 
   const setThemeMode = (mode: ThemeMode) => {
+    if (!currentUserId || !currentUserStore) return;
+    const nextSettings = { ...currentUserStore.settings, themeMode };
     updateCurrentUserStore((store) => ({
       ...store,
-      settings: {
-        ...store.settings,
-        themeMode: mode,
-      },
+      settings: nextSettings,
     }));
+    if (auth.currentUser?.uid === currentUserId) trackSync(syncSettings(currentUserId, nextSettings), 'la configuración');
   };
 
   const toggleHideBalances = () => {
+    if (!currentUserId || !currentUserStore) return;
+    const nextSettings = { ...currentUserStore.settings, hideBalances: !currentUserStore.settings.hideBalances };
     updateCurrentUserStore((store) => ({
       ...store,
-      settings: {
-        ...store.settings,
-        hideBalances: !store.settings.hideBalances,
-      },
+      settings: nextSettings,
     }));
+    if (auth.currentUser?.uid === currentUserId) trackSync(syncSettings(currentUserId, nextSettings), 'la configuración');
   };
 
   const toggleOfflineMode = () => {
+    if (!currentUserId || !currentUserStore) return;
+    const nextSettings = { ...currentUserStore.settings, offlineSimulation: !currentUserStore.settings.offlineSimulation };
     updateCurrentUserStore((store) => ({
       ...store,
-      settings: {
-        ...store.settings,
-        offlineSimulation: !store.settings.offlineSimulation,
-      },
+      settings: nextSettings,
     }));
+    if (auth.currentUser?.uid === currentUserId) trackSync(syncSettings(currentUserId, nextSettings), 'la configuración');
   };
 
   const syncPendingOperations = () => {
+    if (!currentUserId || !currentUserStore) return;
+    const nextSettings = { ...currentUserStore.settings, offlineSimulation: false };
+    const nextTransactions = currentUserStore.transactions.map((tx) => ({ ...tx, pendingSync: false }));
     updateCurrentUserStore((store) => ({
       ...store,
-      settings: {
-        ...store.settings,
-        offlineSimulation: false,
-      },
-      transactions: store.transactions.map((tx) => ({
-        ...tx,
-        pendingSync: false,
-      })),
+      settings: nextSettings,
+      transactions: nextTransactions,
     }));
+    if (auth.currentUser?.uid === currentUserId) {
+      trackSync(Promise.all([
+        syncSettings(currentUserId, nextSettings),
+        ...nextTransactions.map((tx) => syncTransaction(currentUserId, tx)),
+        ...currentUserStore.accounts.map((account) => syncAccount(currentUserId, account)),
+      ]).then(() => undefined), 'tus datos pendientes');
+    }
   };
 
   const accounts = currentUserStore?.accounts ?? [];
@@ -813,7 +872,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }));
 
     if (auth.currentUser && auth.currentUser.uid === currentUserId) {
-      syncAccount(currentUserId, newAccount).catch(console.warn);
+      trackSync(syncAccount(currentUserId, newAccount), 'la cuenta');
     }
 
     return { ok: true };
@@ -866,7 +925,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           icon: input.icon,
           color: input.color,
           updatedAt: new Date().toISOString(),
-        }).catch(console.warn);
+        }).then(() => setSyncError(null)).catch((error) => {
+          console.warn(error);
+          setSyncError('No se pudo sincronizar la cuenta. El cambio sigue guardado en este dispositivo.');
+        });
       }
     }
 
@@ -874,18 +936,18 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const toggleArchiveAccount = (accountId: string) => {
+    const existing = currentUserStore?.accounts.find((acc) => acc.id === accountId);
+    if (!existing) return;
+    const updatedAccount = {
+      ...existing,
+      status: existing.status === 'active' ? 'archived' as const : 'active' as const,
+      updatedAt: new Date().toISOString(),
+    };
     updateCurrentUserStore((store) => ({
       ...store,
-      accounts: store.accounts.map((acc) =>
-        acc.id === accountId
-          ? {
-              ...acc,
-              status: acc.status === 'active' ? 'archived' : 'active',
-              updatedAt: new Date().toISOString(),
-            }
-          : acc
-      ),
+      accounts: store.accounts.map((acc) => acc.id === accountId ? updatedAccount : acc),
     }));
+    if (auth.currentUser?.uid === currentUserId && currentUserId) trackSync(syncAccount(currentUserId, updatedAccount), 'la cuenta');
   };
 
   const categories = currentUserStore?.categories ?? [];
@@ -899,6 +961,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!currentUserId) return { ok: false, error: 'No autenticado.' };
     const cleanName = input.name.trim();
     if (!cleanName) return { ok: false, error: 'El nombre de la categoría es obligatorio.' };
+    if (currentUserStore?.categories.some((item) => item.type === input.type && item.name.toLowerCase() === cleanName.toLowerCase())) {
+      return { ok: false, error: 'Ya existe una categoría con ese nombre para este tipo.' };
+    }
 
     const catId = `cat_${Date.now()}`;
     const newCat: Category = {
@@ -925,19 +990,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }));
 
     if (auth.currentUser && auth.currentUser.uid === currentUserId) {
-      syncCategory(currentUserId, newCat).catch(console.warn);
+      trackSync(syncCategory(currentUserId, newCat), 'la categoría');
     }
 
     return { ok: true };
   };
 
   const toggleCategoryActive = (categoryId: string) => {
+    const category = currentUserStore?.categories.find((item) => item.id === categoryId);
+    if (!category) return;
+    const updatedCategory = { ...category, isActive: !category.isActive };
     updateCurrentUserStore((store) => ({
       ...store,
-      categories: store.categories.map((c) =>
-        c.id === categoryId ? { ...c, isActive: !c.isActive } : c
-      ),
+      categories: store.categories.map((c) => c.id === categoryId ? updatedCategory : c),
     }));
+    if (auth.currentUser?.uid === currentUserId && currentUserId) trackSync(syncCategory(currentUserId, updatedCategory), 'la categoría');
   };
 
   const addSubcategory = (
@@ -945,43 +1012,86 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     name: string,
     icon: string
   ): { ok: boolean; error?: string } => {
+    if (!currentUserId || !currentUserStore) return { ok: false, error: 'Usuario no autenticado.' };
     const cleanName = name.trim();
     if (!cleanName) return { ok: false, error: 'El nombre de la subcategoría es obligatorio.' };
-
+    const category = currentUserStore.categories.find((item) => item.id === categoryId);
+    if (!category) return { ok: false, error: 'La categoría ya no existe.' };
+    if (category.subcategories.some((item) => item.name.toLowerCase() === cleanName.toLowerCase())) {
+      return { ok: false, error: 'Ya existe una subcategoría con ese nombre en esta categoría.' };
+    }
+    const updatedCategory: Category = {
+      ...category,
+      subcategories: [...category.subcategories, {
+        id: `sub_${Date.now()}`,
+        categoryId,
+        name: cleanName,
+        icon: icon || '🏷️',
+      }],
+    };
     updateCurrentUserStore((store) => ({
       ...store,
       categories: store.categories.map((c) =>
-        c.id === categoryId
-          ? {
-              ...c,
-              subcategories: [
-                ...c.subcategories,
-                {
-                  id: `sub_${Date.now()}`,
-                  categoryId,
-                  name: cleanName,
-                  icon: icon || '🏷️',
-                },
-              ],
-            }
-          : c
+        c.id === categoryId ? updatedCategory : c
       ),
     }));
+    if (auth.currentUser?.uid === currentUserId) trackSync(syncCategory(currentUserId, updatedCategory), 'la categoría');
     return { ok: true };
   };
 
-  const removeSubcategory = (categoryId: string, subcategoryId: string) => {
+  const updateCategoryName = (categoryId: string, name: string): { ok: boolean; error?: string } => {
+    if (!currentUserId || !currentUserStore) return { ok: false, error: 'Usuario no autenticado.' };
+    const cleanName = name.trim();
+    if (!cleanName) return { ok: false, error: 'El nombre de la categoría es obligatorio.' };
+    const category = currentUserStore.categories.find((item) => item.id === categoryId);
+    if (!category) return { ok: false, error: 'La categoría ya no existe.' };
+    if (currentUserStore.categories.some((item) => item.id !== categoryId && item.type === category.type && item.name.toLowerCase() === cleanName.toLowerCase())) {
+      return { ok: false, error: 'Ya existe una categoría con ese nombre para este tipo.' };
+    }
+    const updatedCategory = { ...category, name: cleanName };
+    updateCurrentUserStore((store) => ({ ...store, categories: store.categories.map((item) => item.id === categoryId ? updatedCategory : item) }));
+    if (auth.currentUser?.uid === currentUserId) trackSync(syncCategory(currentUserId, updatedCategory), 'la categoría');
+    return { ok: true };
+  };
+
+  const updateSubcategoryName = (categoryId: string, subcategoryId: string, name: string): { ok: boolean; error?: string } => {
+    if (!currentUserId || !currentUserStore) return { ok: false, error: 'Usuario no autenticado.' };
+    const cleanName = name.trim();
+    if (!cleanName) return { ok: false, error: 'El nombre de la subcategoría es obligatorio.' };
+    const category = currentUserStore.categories.find((item) => item.id === categoryId);
+    if (!category || !category.subcategories.some((item) => item.id === subcategoryId)) return { ok: false, error: 'La subcategoría ya no existe.' };
+    if (category.subcategories.some((item) => item.id !== subcategoryId && item.name.toLowerCase() === cleanName.toLowerCase())) {
+      return { ok: false, error: 'Ya existe una subcategoría con ese nombre en esta categoría.' };
+    }
+    const updatedCategory = {
+      ...category,
+      subcategories: category.subcategories.map((item) => item.id === subcategoryId ? { ...item, name: cleanName } : item),
+    };
+    updateCurrentUserStore((store) => ({ ...store, categories: store.categories.map((item) => item.id === categoryId ? updatedCategory : item) }));
+    if (auth.currentUser?.uid === currentUserId) trackSync(syncCategory(currentUserId, updatedCategory), 'la categoría');
+    return { ok: true };
+  };
+
+  const removeSubcategory = (categoryId: string, subcategoryId: string): { ok: boolean; error?: string } => {
+    if (!currentUserId || !currentUserStore) return { ok: false, error: 'Usuario no autenticado.' };
+    if (auth.currentUser?.uid === currentUserId && !remoteTransactionsLoaded) {
+      return { ok: false, error: 'Espera a que termine la sincronización antes de eliminar una subcategoría.' };
+    }
+    const category = currentUserStore.categories.find((item) => item.id === categoryId);
+    if (!category || !category.subcategories.some((item) => item.id === subcategoryId)) return { ok: false, error: 'La subcategoría ya no existe.' };
+    if (category.subcategories.length <= 1) return { ok: false, error: 'Cada categoría debe conservar al menos una subcategoría.' };
+    const hasTransactions = currentUserStore.transactions.some((item) => item.subcategoryId === subcategoryId);
+    const hasBudgets = currentUserStore.budgets.some((item) => item.subcategoryId === subcategoryId);
+    if (hasTransactions || hasBudgets) return { ok: false, error: 'No se puede eliminar: esta subcategoría tiene transacciones o presupuestos asociados.' };
+    const updatedCategory = { ...category, subcategories: category.subcategories.filter((item) => item.id !== subcategoryId) };
     updateCurrentUserStore((store) => ({
       ...store,
       categories: store.categories.map((c) =>
-        c.id === categoryId && c.subcategories.length > 1
-          ? {
-              ...c,
-              subcategories: c.subcategories.filter((s) => s.id !== subcategoryId),
-            }
-          : c
+        c.id === categoryId ? updatedCategory : c
       ),
     }));
+    if (auth.currentUser?.uid === currentUserId) trackSync(syncCategory(currentUserId, updatedCategory), 'la categoría');
+    return { ok: true };
   };
 
   const periods = useMemo(() => {
@@ -1000,15 +1110,20 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, [periods, currentUserStore]);
 
   const setActivePeriodId = (periodId: string) => {
+    if (!currentUserStore || !currentUserId) return;
+    const updatedPeriods = currentUserStore.periods.map((period) => ({
+      ...period,
+      isActive: period.id === periodId,
+      status: period.id === periodId ? 'active' as const : period.status === 'active' ? 'closed' as const : period.status,
+    }));
     updateCurrentUserStore((store) => ({
       ...store,
       activePeriodId: periodId,
-      periods: store.periods.map((p) => ({
-        ...p,
-        isActive: p.id === periodId,
-        status: p.id === periodId ? 'active' : p.status === 'active' ? 'closed' : p.status,
-      })),
+      periods: updatedPeriods,
     }));
+    if (auth.currentUser?.uid === currentUserId) {
+      trackSync(Promise.all(updatedPeriods.map((period) => syncPeriod(currentUserId, period))).then(() => undefined), 'el período activo');
+    }
   };
 
   const createFinancialPeriod = (input: {
@@ -1052,23 +1167,23 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       updatedAt: now,
     };
 
-    updateCurrentUserStore((store) => {
-      const updatedPeriods = [
-        ...store.periods.map((p) =>
-          shouldActivate ? { ...p, isActive: false } : p
-        ),
-        newPeriod,
-      ];
-      return {
-        ...store,
-        periods: updatedPeriods,
-        activePeriodId: shouldActivate ? newPeriodId : store.activePeriodId,
-        transactions: syncTransactionsWithPeriods(store.transactions, updatedPeriods),
-      };
-    });
+    const updatedPeriods = [
+      ...currentUserStore.periods.map((period) => shouldActivate ? { ...period, isActive: false } : period),
+      newPeriod,
+    ];
+    const updatedTransactions = syncTransactionsWithPeriods(currentUserStore.transactions, updatedPeriods);
+    updateCurrentUserStore((store) => ({
+      ...store,
+      periods: updatedPeriods,
+      activePeriodId: shouldActivate ? newPeriodId : store.activePeriodId,
+      transactions: updatedTransactions,
+    }));
 
     if (auth.currentUser && auth.currentUser.uid === currentUserId) {
-      syncPeriod(currentUserId, newPeriod).catch(console.warn);
+      trackSync(Promise.all([
+        ...updatedPeriods.map((period) => syncPeriod(currentUserId, period)),
+        ...updatedTransactions.map((tx) => syncTransaction(currentUserId, tx)),
+      ]).then(() => undefined), 'el período y sus transacciones');
     }
 
     return { valid: true };
@@ -1099,27 +1214,26 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       input.subdivisionMode
     );
 
-    updateCurrentUserStore((store) => {
-      const updatedPeriods = store.periods.map((p) =>
-        p.id === periodId
-          ? {
-              ...p,
-              name: input.name.trim(),
-              startDate: input.startDate,
-              endDate: input.endDate,
-              subdivisionMode: input.subdivisionMode,
-              subperiods: newSubperiods,
-              updatedAt: new Date().toISOString(),
-            }
-          : p
-      );
-
-      return {
-        ...store,
-        periods: updatedPeriods,
-        transactions: syncTransactionsWithPeriods(store.transactions, updatedPeriods),
-      };
-    });
+    const updatedPeriods = currentUserStore.periods.map((period) => period.id === periodId
+      ? {
+          ...period,
+          name: input.name.trim(),
+          startDate: input.startDate,
+          endDate: input.endDate,
+          subdivisionMode: input.subdivisionMode,
+          subperiods: newSubperiods,
+          updatedAt: new Date().toISOString(),
+        }
+      : period
+    );
+    const updatedTransactions = syncTransactionsWithPeriods(currentUserStore.transactions, updatedPeriods);
+    updateCurrentUserStore((store) => ({ ...store, periods: updatedPeriods, transactions: updatedTransactions }));
+    if (auth.currentUser?.uid === currentUserId && currentUserId) {
+      trackSync(Promise.all([
+        ...updatedPeriods.filter((period) => period.id === periodId).map((period) => syncPeriod(currentUserId, period)),
+        ...updatedTransactions.map((tx) => syncTransaction(currentUserId, tx)),
+      ]).then(() => undefined), 'el período y sus transacciones');
+    }
 
     return { valid: true };
   };
@@ -1132,21 +1246,27 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         error: 'Debe existir al menos un período financiero activo.',
       };
     }
+    if (currentUserStore.budgets.some((budget) => budget.periodId === periodId)) {
+      return { ok: false, error: 'No se puede eliminar: el período tiene presupuestos asociados.' };
+    }
 
-    updateCurrentUserStore((store) => {
-      const remaining = store.periods.filter((p) => p.id !== periodId);
-      const nextActiveId =
-        store.activePeriodId === periodId ? remaining[0].id : store.activePeriodId;
-      return {
-        ...store,
-        periods: remaining.map((p) => ({
-          ...p,
-          isActive: p.id === nextActiveId,
-        })),
-        activePeriodId: nextActiveId,
-        transactions: syncTransactionsWithPeriods(store.transactions, remaining),
-      };
-    });
+    const remaining = currentUserStore.periods.filter((period) => period.id !== periodId);
+    const nextActiveId = currentUserStore.activePeriodId === periodId ? remaining[0].id : currentUserStore.activePeriodId;
+    const updatedPeriods = remaining.map((period) => ({ ...period, isActive: period.id === nextActiveId }));
+    const updatedTransactions = syncTransactionsWithPeriods(currentUserStore.transactions, updatedPeriods);
+    updateCurrentUserStore((store) => ({
+      ...store,
+      periods: updatedPeriods,
+      activePeriodId: nextActiveId,
+      transactions: updatedTransactions,
+    }));
+    if (auth.currentUser?.uid === currentUserId && currentUserId) {
+      trackSync(Promise.all([
+        deletePeriodFromDb(currentUserId, periodId),
+        ...updatedPeriods.map((period) => syncPeriod(currentUserId, period)),
+        ...updatedTransactions.map((tx) => syncTransaction(currentUserId, tx)),
+      ]).then(() => undefined), 'eliminación del período y reasignación de transacciones');
+    }
 
     return { ok: true };
   };
@@ -1255,8 +1375,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     updateCurrentUserStore((store) => {
       const updatedAccounts = applyTransactionToAccounts(newTx, store.accounts);
       if (auth.currentUser && auth.currentUser.uid === currentUserId) {
-        syncTransaction(currentUserId, newTx).catch(console.warn);
-        updatedAccounts.forEach((acc) => syncAccount(currentUserId, acc).catch(console.warn));
+        trackSync(Promise.all([
+          syncTransaction(currentUserId, newTx),
+          ...updatedAccounts.map((account) => syncAccount(currentUserId, account)),
+        ]).then(() => undefined), 'la transacción y el saldo de la cuenta');
       }
       return {
         ...store,
@@ -1364,7 +1486,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
 
     if (auth.currentUser?.uid === currentUserId) {
-      syncTransaction(currentUserId, updatedTx).catch(console.warn);
+      trackSync(syncTransaction(currentUserId, updatedTx), 'la actualización de la transacción');
     }
 
     return { valid: true };
@@ -1383,7 +1505,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       };
     });
     if (auth.currentUser?.uid === currentUserId) {
-      deleteTransactionFromDb(currentUserId, txId).catch(console.warn);
+      trackSync(deleteTransactionFromDb(currentUserId, txId), 'la eliminación de la transacción');
     }
   };
 
@@ -1407,67 +1529,69 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     alertThreshold100: boolean;
     distributeBySubperiod: boolean;
   }): { ok: boolean; error?: string } => {
-    if (!currentUserId) return { ok: false, error: 'Usuario no autenticado.' };
+    if (!currentUserId || !currentUserStore) return { ok: false, error: 'Usuario no autenticado.' };
     if (input.targetAmount <= 0 || Number.isNaN(input.targetAmount)) {
       return { ok: false, error: 'El monto objetivo debe ser mayor que cero.' };
     }
     if (!input.categoryId) {
       return { ok: false, error: 'Selecciona una categoría para el presupuesto.' };
     }
+    if (!currentUserStore.periods.some((period) => period.id === input.periodId)) {
+      return { ok: false, error: 'El período seleccionado no pertenece a esta cuenta.' };
+    }
+    const category = currentUserStore.categories.find((item) => item.id === input.categoryId);
+    if (!category || (input.subcategoryId && !category.subcategories.some((item) => item.id === input.subcategoryId))) {
+      return { ok: false, error: 'La categoría o subcategoría seleccionada no es válida.' };
+    }
 
     const now = new Date().toISOString();
-
-    updateCurrentUserStore((store) => {
-      if (input.id) {
-        return {
-          ...store,
-          budgets: store.budgets.map((b) =>
-            b.id === input.id
-              ? {
-                  ...b,
-                  periodId: input.periodId,
-                  categoryId: input.categoryId,
-                  subcategoryId: input.subcategoryId || undefined,
-                  targetAmount: Math.round(input.targetAmount * 100) / 100,
-                  alertThreshold80: input.alertThreshold80,
-                  alertThreshold100: input.alertThreshold100,
-                  distributeBySubperiod: input.distributeBySubperiod,
-                  updatedAt: now,
-                }
-              : b
-          ),
+    const existing = input.id ? currentUserStore.budgets.find((budget) => budget.id === input.id) : undefined;
+    if (input.id && !existing) return { ok: false, error: 'El presupuesto no existe en esta cuenta.' };
+    const budget: Budget = existing
+      ? {
+          ...existing,
+          userId: currentUserId,
+          periodId: input.periodId,
+          categoryId: input.categoryId,
+          subcategoryId: input.subcategoryId || undefined,
+          targetAmount: Math.round(input.targetAmount * 100) / 100,
+          alertThreshold80: input.alertThreshold80,
+          alertThreshold100: input.alertThreshold100,
+          distributeBySubperiod: input.distributeBySubperiod,
+          updatedAt: now,
+        }
+      : {
+          id: `bdg_${Date.now()}`,
+          userId: currentUserId,
+          periodId: input.periodId,
+          categoryId: input.categoryId,
+          subcategoryId: input.subcategoryId || undefined,
+          targetAmount: Math.round(input.targetAmount * 100) / 100,
+          currency: 'GTQ',
+          alertThreshold80: input.alertThreshold80,
+          alertThreshold100: input.alertThreshold100,
+          distributeBySubperiod: input.distributeBySubperiod,
+          createdAt: now,
+          updatedAt: now,
         };
-      }
-
-      const newBudget: Budget = {
-        id: `bdg_${Date.now()}`,
-        userId: currentUserId,
-        periodId: input.periodId,
-        categoryId: input.categoryId,
-        subcategoryId: input.subcategoryId || undefined,
-        targetAmount: Math.round(input.targetAmount * 100) / 100,
-        currency: 'GTQ',
-        alertThreshold80: input.alertThreshold80,
-        alertThreshold100: input.alertThreshold100,
-        distributeBySubperiod: input.distributeBySubperiod,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      return {
-        ...store,
-        budgets: [...store.budgets, newBudget],
-      };
-    });
+    updateCurrentUserStore((store) => ({
+      ...store,
+      budgets: existing
+        ? store.budgets.map((item) => item.id === budget.id ? budget : item)
+        : [...store.budgets, budget],
+    }));
+    if (auth.currentUser?.uid === currentUserId) trackSync(syncBudget(currentUserId, budget), 'el presupuesto');
 
     return { ok: true };
   };
 
   const deleteBudget = (budgetId: string) => {
+    if (!currentUserId || !currentUserStore?.budgets.some((budget) => budget.id === budgetId)) return;
     updateCurrentUserStore((store) => ({
       ...store,
       budgets: store.budgets.filter((b) => b.id !== budgetId),
     }));
+    if (auth.currentUser?.uid === currentUserId) trackSync(deleteBudgetFromDb(currentUserId, budgetId), 'la eliminación del presupuesto');
   };
 
   const selectActivePeriod = (periodId: string) => setActivePeriodId(periodId);
@@ -1515,55 +1639,70 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const resetPassword = (email: string) => recoverPassword(email);
 
   const updateSettings = (partial: Partial<UserSettings>) => {
+    if (!currentUserStore || !currentUserId) return;
+    const nextSettings = {
+      ...currentUserStore.settings,
+      ...partial,
+      hideBalances:
+        partial.hideSensitiveBalances !== undefined
+          ? partial.hideSensitiveBalances
+          : partial.hideBalances !== undefined
+          ? partial.hideBalances
+          : currentUserStore.settings.hideBalances,
+      hideSensitiveBalances:
+        partial.hideSensitiveBalances !== undefined
+          ? partial.hideSensitiveBalances
+          : partial.hideBalances !== undefined
+          ? partial.hideBalances
+          : currentUserStore.settings.hideBalances,
+      userId: currentUserId,
+    };
     updateCurrentUserStore((store) => ({
       ...store,
-      settings: {
-        ...store.settings,
-        ...partial,
-        hideBalances:
-          partial.hideSensitiveBalances !== undefined
-            ? partial.hideSensitiveBalances
-            : partial.hideBalances !== undefined
-            ? partial.hideBalances
-            : store.settings.hideBalances,
-        hideSensitiveBalances:
-          partial.hideSensitiveBalances !== undefined
-            ? partial.hideSensitiveBalances
-            : partial.hideBalances !== undefined
-            ? partial.hideBalances
-            : store.settings.hideBalances,
-      },
+      settings: nextSettings,
     }));
-    if (currentUserId && auth.currentUser?.uid === currentUserId && currentUserStore) {
-      syncSettings(currentUserId, {
-        ...currentUserStore.settings,
-        ...partial,
-        userId: currentUserId,
-      }).catch(console.warn);
-    }
+    if (auth.currentUser?.uid === currentUserId) trackSync(syncSettings(currentUserId, nextSettings), 'la configuración');
   };
 
-  const deleteCategory = (categoryId: string) => {
+  const deleteCategory = (categoryId: string): { ok: boolean; error?: string } => {
+    if (!currentUserId || !currentUserStore) return { ok: false, error: 'Usuario no autenticado.' };
+    if (auth.currentUser?.uid === currentUserId && !remoteTransactionsLoaded) {
+      return { ok: false, error: 'Espera a que termine la sincronización antes de eliminar una categoría.' };
+    }
+    const category = currentUserStore.categories.find((item) => item.id === categoryId);
+    if (!category) return { ok: false, error: 'La categoría ya no existe.' };
+    const subcategoryIds = new Set(category.subcategories.map((item) => item.id));
+    const hasTransactions = currentUserStore.transactions.some((item) =>
+      item.categoryId === categoryId || (!!item.subcategoryId && subcategoryIds.has(item.subcategoryId))
+    );
+    const hasBudgets = currentUserStore.budgets.some((item) =>
+      item.categoryId === categoryId || (!!item.subcategoryId && subcategoryIds.has(item.subcategoryId))
+    );
+    if (hasTransactions || hasBudgets) {
+      return { ok: false, error: 'No se puede eliminar: esta categoría tiene transacciones o presupuestos asociados. Puedes cambiarle el nombre.' };
+    }
     updateCurrentUserStore((store) => ({
       ...store,
       categories: store.categories.filter((c) => c.id !== categoryId),
     }));
-  };
-
-  const updateCategory = (categoryId: string, input: Partial<Category>) => {
-    updateCurrentUserStore((store) => ({
-      ...store,
-      categories: store.categories.map((c) =>
-        c.id === categoryId ? { ...c, ...input } : c
-      ),
-    }));
+    if (auth.currentUser?.uid === currentUserId) trackSync(deleteCategoryFromDb(currentUserId, categoryId), 'la eliminación de la categoría');
+    return { ok: true };
   };
 
   const deleteAccount = (accountId: string) => {
+    if (!currentUserId || !currentUserStore?.accounts.some((account) => account.id === accountId)) return;
+    const hasTransactions = currentUserStore.transactions.some((tx) =>
+      tx.accountId === accountId || tx.originAccountId === accountId || tx.destinationAccountId === accountId
+    );
+    if (hasTransactions) {
+      setSyncError('No se puede eliminar esta cuenta porque tiene transacciones asociadas.');
+      return;
+    }
     updateCurrentUserStore((store) => ({
       ...store,
       accounts: store.accounts.filter((a) => a.id !== accountId),
     }));
+    if (auth.currentUser?.uid === currentUserId) trackSync(deleteAccountFromDb(currentUserId, accountId), 'la eliminación de la cuenta');
   };
 
   return (
@@ -1587,6 +1726,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         toggleOfflineMode,
         syncPendingOperations,
         pendingSyncCount,
+        syncError,
 
         accounts,
         activeAccounts,
@@ -1600,10 +1740,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         categories,
         createCategory,
+        updateCategoryName,
+        updateSubcategoryName,
         toggleCategoryActive,
         addSubcategory,
         removeSubcategory,
-        updateCategory,
         deleteCategory,
 
         periods,

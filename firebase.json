@@ -1,5 +1,6 @@
 {
   "hosting": {
+    "site": "fintrack-gt",
     "public": "dist",
     "ignore": [
       "firebase.json",

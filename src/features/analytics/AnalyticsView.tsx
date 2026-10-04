@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -27,6 +27,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 }) => {
   const {
     activePeriod,
+    periods,
+    setActivePeriodId,
     transactions,
     budgets,
     categories,
@@ -35,12 +37,21 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   } = useWallet();
 
   const isDark = resolvedTheme === 'dark';
+  const [selectedSubperiodId, setSelectedSubperiodId] = useState('');
+
+  useEffect(() => {
+    setSelectedSubperiodId('');
+  }, [activePeriod?.id]);
 
   // Period transactions
   const periodTransactions = useMemo(() => {
     if (!activePeriod) return [];
-    return transactions.filter((t) => t.periodId === activePeriod.id);
-  }, [transactions, activePeriod]);
+    const currentPeriodTransactions = transactions.filter((t) => t.periodId === activePeriod.id);
+    if (!selectedSubperiodId) return currentPeriodTransactions;
+    const subperiod = activePeriod.subperiods.find((item) => item.id === selectedSubperiodId);
+    return currentPeriodTransactions.filter((t) => t.subperiodId === selectedSubperiodId ||
+      (!t.subperiodId && subperiod && t.date >= subperiod.startDate && t.date <= subperiod.endDate));
+  }, [transactions, activePeriod, selectedSubperiodId]);
 
   // MODULE 1: Ingresos vs Gastos vs Balance Neto
   const totalIncome = useMemo(() => {
@@ -164,6 +175,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     if (!activePeriod) return;
     const rows = [
       ['Período', activePeriod.name],
+      ...(selectedSubperiodId ? [['Subperíodo', activePeriod.subperiods.find((item) => item.id === selectedSubperiodId)?.name || '']] : []),
       ['Rango', `${activePeriod.startDate} a ${activePeriod.endDate}`],
       ['Total Ingresos', totalIncome.toFixed(2)],
       ['Total Gastos', totalExpense.toFixed(2)],
@@ -179,7 +191,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `reporte_${activePeriod.name.replace(/\s+/g, '_')}.csv`);
+    const subperiodName = activePeriod.subperiods.find((item) => item.id === selectedSubperiodId)?.name;
+    link.setAttribute('download', `reporte_${activePeriod.name}${subperiodName ? `_${subperiodName}` : ''}`.replace(/\s+/g, '_') + '.csv');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -189,6 +202,30 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     <div className="space-y-4">
       {/* PERIOD SELECTOR BAR */}
       <PeriodSelectorBar onOpenPeriodsModal={onOpenPeriodsModal} />
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-[10px] uppercase tracking-wide text-slate-400">
+          Período
+          <select
+            value={activePeriod?.id || ''}
+            onChange={(e) => setActivePeriodId(e.target.value)}
+            className={`mt-1 w-full p-2 rounded-xl border text-xs normal-case tracking-normal ${isDark ? 'bg-[#131927] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+          >
+            {periods.map((period) => <option key={period.id} value={period.id}>{period.name}</option>)}
+          </select>
+        </label>
+        <label className="text-[10px] uppercase tracking-wide text-slate-400">
+          Subperíodo
+          <select
+            value={selectedSubperiodId}
+            disabled={!activePeriod}
+            onChange={(e) => setSelectedSubperiodId(e.target.value)}
+            className={`mt-1 w-full p-2 rounded-xl border text-xs normal-case tracking-normal disabled:opacity-50 ${isDark ? 'bg-[#131927] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+          >
+            <option value="">Todo el período</option>
+            {activePeriod?.subperiods.map((subperiod) => <option key={subperiod.id} value={subperiod.id}>{subperiod.name}</option>)}
+          </select>
+        </label>
+      </div>
 
       {/* OVERALL HERO CARD */}
       <div

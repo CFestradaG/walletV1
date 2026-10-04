@@ -100,14 +100,19 @@ export function evaluateCalculatorExpression(expr: string): number | null {
       .replace(/×/g, '*')
       .replace(/÷/g, '/')
       .replace(/[^0-9+\-*/.() ]/g, '')
-      .trim();
+      .trim()
+      .replace(/([0-9)])\s*\(/g, '$1*(')
+      .replace(/\)\s*([0-9])/g, ')*$1');
 
     if (!cleaned) return 0;
 
     let openCount = 0;
     for (const ch of cleaned) {
       if (ch === '(') openCount++;
-      if (ch === ')') openCount = Math.max(0, openCount - 1);
+      if (ch === ')') {
+        openCount--;
+        if (openCount < 0) return null;
+      }
     }
     const balanced = cleaned + ')'.repeat(openCount);
 

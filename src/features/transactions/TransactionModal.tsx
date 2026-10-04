@@ -68,7 +68,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [isBrowsingCategories, setIsBrowsingCategories] = useState<boolean>(false);
   const [dateStr, setDateStr] = useState<string>(toISODate(new Date()));
   const [note, setNote] = useState<string>('');
-  const [isCreditCardPayment, setIsCreditCardPayment] = useState<boolean>(false);
   const [showKeypad, setShowKeypad] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -94,6 +93,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const currentAccount = useMemo(() => {
     return accounts.find((a) => a.id === accountId);
   }, [accounts, accountId]);
+  const destinationAccount = useMemo(
+    () => accounts.find((a) => a.id === destinationAccountId),
+    [accounts, destinationAccountId]
+  );
+  const isCreditCardDestination = type === 'transfer' && destinationAccount?.type === 'credit_card';
 
   const activeAccountColor = currentAccount?.color || '#10B981';
   const contrastTextColor = getContrastTextColor(activeAccountColor);
@@ -111,7 +115,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setSubcategoryId(editingTransaction.subcategoryId || '');
       setDateStr(editingTransaction.date);
       setNote(editingTransaction.note || '');
-      setIsCreditCardPayment(Boolean(editingTransaction.isCreditCardPayment));
       setShowKeypad(false);
       setIsBrowsingCategories(false);
       setErrorMsg(null);
@@ -133,11 +136,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
       if (initialType === 'transfer' && preselectedDestinationCardId) {
         setDestinationAccountId(preselectedDestinationCardId);
-        setIsCreditCardPayment(true);
       } else {
         const destAcc = activeAccs.find((a) => a.id !== defaultAcc?.id);
         setDestinationAccountId(destAcc ? destAcc.id : '');
-        setIsCreditCardPayment(false);
       }
 
       // Default category
@@ -198,16 +199,21 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   // Numeric keypad actions
   const handleKeypadPress = (val: string) => {
-    if (amountStr === '0' && val !== '.') {
+    if (amountStr === '0' && val === '(') {
+      setAmountStr('(');
+      return;
+    }
+    if (/^\d$/.test(val) && amountStr === '0') {
       setAmountStr(val);
       return;
     }
-    // Prevent duplicate decimal point
     if (val === '.') {
-      const parts = amountStr.split(/[+\-*/]/);
+      const parts = amountStr.split(/[+\-*/()]/);
       const currentSegment = parts[parts.length - 1];
       if (currentSegment.includes('.')) return;
     }
+    if (/^[+\-*/]$/.test(val) && (!amountStr || /[+\-*/.(]$/.test(amountStr))) return;
+    if (val === ')' && (amountStr.match(/\(/g) || []).length <= (amountStr.match(/\)/g) || []).length) return;
     setAmountStr((prev) => prev + val);
   };
 
@@ -221,6 +227,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
   const handleKeypadClear = () => {
     setAmountStr('0');
+  };
+
+  const handleAmountChange = (value: string) => {
+    const normalized = value.replace(/,/g, '.').replace(/[^0-9+\-*/(). ]/g, '');
+    setAmountStr(normalized || '0');
   };
 
   // Evaluate current display amount safely
@@ -271,7 +282,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           subcategoryId: type !== 'transfer' ? (subcategoryId || undefined) : undefined,
           date: dateStr,
           note: note.trim(),
-          isCreditCardPayment: type === 'transfer' ? isCreditCardPayment : undefined,
+          isCreditCardPayment: isCreditCardDestination,
         });
         if (!res.valid) {
           setErrorMsg(res.error || 'Error al actualizar la transacción.');
@@ -288,7 +299,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           subcategoryId: type !== 'transfer' ? (subcategoryId || undefined) : undefined,
           date: dateStr,
           note: note.trim(),
-          isCreditCardPayment: type === 'transfer' ? isCreditCardPayment : undefined,
+          isCreditCardPayment: isCreditCardDestination,
         });
         if (!res.valid) {
           setErrorMsg(res.error || 'Error al guardar la transacción.');
@@ -427,29 +438,45 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </button>
           </div>
 
-          {/* 2. AMOUNT DISPLAY (Click toggles Keypad) */}
-          <div
-            onClick={() => setShowKeypad((prev) => !prev)}
-            className={`p-3.5 rounded-2xl border text-center cursor-pointer transition-all ${
-              isDark
-                ? 'bg-black/20 border-white/10 hover:border-emerald-500/40'
-                : 'bg-slate-50 border-slate-200 hover:border-emerald-500/40'
-            }`}
-            style={{
-              borderColor: `${activeAccountColor}40`,
-              backgroundColor: `${activeAccountColor}0a`,
-            }}
-          >
-            <span className="text-[10px] uppercase font-mono tracking-wider text-slate-400">
-              Monto ({showKeypad ? 'Teclado activo' : 'Toca para abrir teclado'})
-            </span>
-            <div
-              className="font-mono text-3xl font-extrabold tracking-tight mt-0.5 transition-colors"
-              style={{ color: activeAccountColor }}
-            >
-              {amountStr.match(/[+\-*/]/)
-                ? `${amountStr} = ${formatGTQ(evaluatedAmount)}`
-                : formatGTQ(evaluatedAmount)}
+          {/* 2. DATE & NOTES INLINE */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                Fecha
+              </label>
+              <div className="relative">
+                <Calendar className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
+                <input
+                  type="date"
+                  value={dateStr}
+                  onChange={(e) => setDateStr(e.target.value)}
+                  className={`w-full pl-8 pr-3 py-2 rounded-xl border text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+                    isDark
+                      ? 'bg-black/30 border-white/10 text-white'
+                      : 'bg-slate-50 border-slate-200 text-slate-900'
+                  }`}
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                Nota / Descripción
+              </label>
+              <div className="relative">
+                <FileText className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
+                <input
+                  type="text"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Ej. Almuerzo familiar"
+                  className={`w-full pl-8 pr-3 py-2 rounded-xl border text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+                    isDark
+                      ? 'bg-black/30 border-white/10 text-white placeholder-slate-500'
+                      : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400'
+                  }`}
+                />
+              </div>
             </div>
           </div>
 
@@ -653,19 +680,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 />
               </div>
 
-              {/* Credit card payment checkbox toggle */}
-              <label className="flex items-center gap-2 p-2.5 rounded-xl bg-white/5 border border-white/10 cursor-pointer hover:bg-white/10 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={isCreditCardPayment}
-                  onChange={(e) => setIsCreditCardPayment(e.target.checked)}
-                  className="rounded text-emerald-500 focus:ring-emerald-500 w-4 h-4 cursor-pointer"
-                />
-                <span className="text-xs font-medium text-slate-300 flex items-center gap-1.5">
-                  <CreditCard className="w-3.5 h-3.5 text-sky-400" />
-                  Marcar como Pago de Tarjeta de Crédito
-                </span>
-              </label>
+              {isCreditCardDestination && (
+                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-300">
+                  <CreditCard className="w-3.5 h-3.5" />
+                  <span className="text-xs font-medium">Pago de tarjeta de crédito</span>
+                </div>
+              )}
             </div>
           ) : (
             <div>
@@ -683,46 +703,34 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           )}
 
-          {/* 5. DATE & NOTES INLINE */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                Fecha
-              </label>
-              <div className="relative">
-                <Calendar className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
-                <input
-                  type="date"
-                  value={dateStr}
-                  onChange={(e) => setDateStr(e.target.value)}
-                  className={`w-full pl-8 pr-3 py-2 rounded-xl border text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
-                    isDark
-                      ? 'bg-black/30 border-white/10 text-white'
-                      : 'bg-slate-50 border-slate-200 text-slate-900'
-                  }`}
-                />
-              </div>
+          {/* 5. AMOUNT DISPLAY, ABOVE THE KEYPAD */}
+          <div
+            className={`p-3.5 rounded-2xl border text-center transition-all ${
+              isDark
+                ? 'bg-black/20 border-white/10 hover:border-emerald-500/40'
+                : 'bg-slate-50 border-slate-200 hover:border-emerald-500/40'
+            }`}
+            style={{
+              borderColor: `${activeAccountColor}40`,
+              backgroundColor: `${activeAccountColor}0a`,
+            }}
+          >
+            <div className="flex items-center justify-center gap-2">
+              <span className="text-[10px] uppercase font-mono tracking-wider text-slate-400">Monto</span>
+              <button type="button" onClick={() => setShowKeypad((prev) => !prev)} className="text-[10px] text-emerald-400 hover:text-emerald-300">
+                {showKeypad ? 'Ocultar teclado' : 'Abrir teclado'}
+              </button>
             </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                Nota / Descripción
-              </label>
-              <div className="relative">
-                <FileText className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
-                <input
-                  type="text"
-                  value={note}
-                  onChange={(e) => setNote(e.target.value)}
-                  placeholder="Ej. Almuerzo familiar"
-                  className={`w-full pl-8 pr-3 py-2 rounded-xl border text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
-                    isDark
-                      ? 'bg-black/30 border-white/10 text-white placeholder-slate-500'
-                      : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400'
-                  }`}
-                />
-              </div>
-            </div>
+            <input
+              type="text"
+              inputMode="decimal"
+              aria-label="Monto de la transacción"
+              value={amountStr}
+              onChange={(e) => handleAmountChange(e.target.value)}
+              className="w-full bg-transparent text-center font-mono text-3xl font-extrabold tracking-tight mt-0.5 focus:outline-none"
+              style={{ color: activeAccountColor }}
+            />
+            <div className="text-[11px] text-slate-400 font-mono">Total: {formatGTQ(evaluatedAmount)}</div>
           </div>
 
           {/* 6. NUMERIC KEYPAD WITH ARITHMETIC */}
@@ -732,14 +740,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 isDark ? 'bg-black/30 border-white/10' : 'bg-slate-100 border-slate-200'
               }`}
             >
-              <div className="grid grid-cols-4 gap-1.5 font-mono text-sm">
-                {['7', '8', '9', '/'].map((item) => (
+              <div className="grid grid-cols-5 gap-1.5 font-mono text-sm">
+                {['7', '8', '9', '/', '('].map((item) => (
                   <button
                     key={item}
                     type="button"
                     onClick={() => handleKeypadPress(item)}
                     className={`h-10 rounded-xl font-bold flex items-center justify-center transition-colors cursor-pointer ${
-                      item === '/'
+                      ['/','('].includes(item)
                         ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
                         : isDark
                         ? 'bg-white/5 hover:bg-white/10 text-white'
@@ -750,13 +758,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   </button>
                 ))}
 
-                {['4', '5', '6', '*'].map((item) => (
+                {['4', '5', '6', '*', ')'].map((item) => (
                   <button
                     key={item}
                     type="button"
                     onClick={() => handleKeypadPress(item)}
                     className={`h-10 rounded-xl font-bold flex items-center justify-center transition-colors cursor-pointer ${
-                      item === '*'
+                      ['*', ')'].includes(item)
                         ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
                         : isDark
                         ? 'bg-white/5 hover:bg-white/10 text-white'
@@ -767,13 +775,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   </button>
                 ))}
 
-                {['1', '2', '3', '-'].map((item) => (
+                {['1', '2', '3', '-', '+'].map((item) => (
                   <button
                     key={item}
                     type="button"
                     onClick={() => handleKeypadPress(item)}
                     className={`h-10 rounded-xl font-bold flex items-center justify-center transition-colors cursor-pointer ${
-                      item === '-'
+                      ['-', '+'].includes(item)
                         ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
                         : isDark
                         ? 'bg-white/5 hover:bg-white/10 text-white'
@@ -831,6 +839,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   }`}
                 >
                   <Delete className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAmountStr((prev) => String(evaluateArithmetic(prev)))}
+                  className="h-10 rounded-xl font-bold flex items-center justify-center transition-colors cursor-pointer bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+                >
+                  =
                 </button>
               </div>
             </div>

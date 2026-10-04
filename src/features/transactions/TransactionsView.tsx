@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ArrowDownLeft,
   ArrowRightLeft,
@@ -29,6 +29,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 }) => {
   const {
     activePeriod,
+    periods,
+    setActivePeriodId,
     transactions,
     accounts,
     categories,
@@ -47,15 +49,25 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<'date_desc' | 'date_asc' | 'amount_desc'>('date_desc');
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
+  const [filterSubperiodId, setFilterSubperiodId] = useState('');
+
+  useEffect(() => {
+    setFilterSubperiodId('');
+  }, [activePeriod?.id]);
 
   // Active period vs all transactions
   const periodTransactions = useMemo(() => {
     if (periodFilterMode === 'all' || !activePeriod) {
       return transactions;
     }
-    // Include transactions belonging to active period OR without periodId so new transactions are never hidden
-    return transactions.filter((t) => t.periodId === activePeriod.id || !t.periodId);
-  }, [transactions, activePeriod, periodFilterMode]);
+    let scoped = transactions.filter((t) => t.periodId === activePeriod.id || !t.periodId);
+    if (filterSubperiodId) {
+      const subperiod = activePeriod.subperiods.find((item) => item.id === filterSubperiodId);
+      scoped = scoped.filter((t) => t.subperiodId === filterSubperiodId ||
+        (!t.subperiodId && subperiod && t.date >= subperiod.startDate && t.date <= subperiod.endDate));
+    }
+    return scoped;
+  }, [transactions, activePeriod, periodFilterMode, filterSubperiodId]);
 
   // Filtered & Sorted
   const displayedTransactions = useMemo(() => {
@@ -69,7 +81,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     // Filter by account
     if (filterAccountId !== 'all') {
       list = list.filter(
-        (t) => t.accountId === filterAccountId || t.destinationAccountId === filterAccountId
+        (t) => t.accountId === filterAccountId || t.originAccountId === filterAccountId || t.destinationAccountId === filterAccountId
       );
     }
 
@@ -181,6 +193,38 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           <Plus className="w-3.5 h-3.5" />
           <span>Nueva transacción</span>
         </button>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2">
+        <label className="text-[10px] uppercase tracking-wide text-slate-400">
+          Período
+          <select
+            value={periodFilterMode === 'all' ? 'all' : activePeriod?.id || ''}
+            onChange={(e) => {
+              if (e.target.value === 'all') setPeriodFilterMode('all');
+              else {
+                setActivePeriodId(e.target.value);
+                setPeriodFilterMode('period');
+              }
+            }}
+            className={`mt-1 w-full p-2 rounded-xl border text-xs normal-case tracking-normal ${isDark ? 'bg-[#131927] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+          >
+            <option value="all">Todos los períodos</option>
+            {periods.map((period) => <option key={period.id} value={period.id}>{period.name}</option>)}
+          </select>
+        </label>
+        <label className="text-[10px] uppercase tracking-wide text-slate-400">
+          Subperíodo
+          <select
+            value={filterSubperiodId}
+            disabled={periodFilterMode === 'all' || !activePeriod}
+            onChange={(e) => setFilterSubperiodId(e.target.value)}
+            className={`mt-1 w-full p-2 rounded-xl border text-xs normal-case tracking-normal disabled:opacity-50 ${isDark ? 'bg-[#131927] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+          >
+            <option value="">Todos los subperíodos</option>
+            {activePeriod?.subperiods.map((subperiod) => <option key={subperiod.id} value={subperiod.id}>{subperiod.name}</option>)}
+          </select>
+        </label>
       </div>
 
       {/* SEARCH AND FILTERS BAR */}
@@ -394,6 +438,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                     const cat = categories.find((c) => c.id === tx.categoryId);
                     const sub = cat?.subcategories.find((s) => s.id === tx.subcategoryId);
                     const acc = accounts.find((a) => a.id === tx.accountId);
+                    const originAcc = accounts.find((a) => a.id === (tx.originAccountId || tx.accountId));
                     const destAcc = accounts.find((a) => a.id === tx.destinationAccountId);
 
                     return (
@@ -438,7 +483,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                             <p className="text-[11px] text-slate-400 mt-0.5">
                               {tx.type === 'transfer' ? (
                                 <span>
-                                  {acc?.name} → {destAcc?.name}
+                                  {originAcc?.name} (−{formatGTQ(tx.amount)}) → {destAcc?.name} (+{formatGTQ(tx.amount)})
                                 </span>
                               ) : (
                                 <span>

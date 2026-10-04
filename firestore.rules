@@ -27,32 +27,50 @@ service cloud.firestore {
     // User profile and private subcollections (Per-User Isolation)
     match /users/{userId} {
       allow get: if isOwner(userId) && isValidId(userId);
-      allow create, update: if isOwner(userId) && isValidId(userId);
+      allow create, update: if isOwner(userId)
+        && isValidId(userId)
+        && request.resource.data.id == userId;
       allow delete: if false;
 
       // Settings
       match /settings/{settingsId} {
-        allow read, write: if isOwner(userId) && isValidId(settingsId);
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidId(settingsId)
+          && request.resource.data.userId == userId;
+        allow delete: if isOwner(userId) && isValidId(settingsId);
       }
 
       // Accounts
       match /accounts/{accountId} {
-        allow read, write: if isOwner(userId) && isValidId(accountId);
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidId(accountId)
+          && request.resource.data.userId == userId;
+        allow delete: if isOwner(userId) && isValidId(accountId);
       }
 
       // Categories
       match /categories/{categoryId} {
-        allow read, write: if isOwner(userId) && isValidId(categoryId);
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidId(categoryId)
+          && request.resource.data.userId == userId;
+        allow delete: if isOwner(userId) && isValidId(categoryId);
       }
 
       // Financial Periods
       match /periods/{periodId} {
-        allow read, write: if isOwner(userId) && isValidId(periodId);
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidId(periodId)
+          && request.resource.data.userId == userId;
+        allow delete: if isOwner(userId) && isValidId(periodId);
       }
 
       // Transactions
       match /transactions/{transactionId} {
-        allow read: if isOwner(userId) && isValidId(transactionId);
+        allow read: if isOwner(userId);
         allow create, update: if isOwner(userId)
           && isValidId(transactionId)
           && request.resource.data.userId == userId;
@@ -63,7 +81,11 @@ service cloud.firestore {
 
       // Budgets
       match /budgets/{budgetId} {
-        allow read, write: if isOwner(userId) && isValidId(budgetId);
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidId(budgetId)
+          && request.resource.data.userId == userId;
+        allow delete: if isOwner(userId) && isValidId(budgetId);
       }
     }
   }

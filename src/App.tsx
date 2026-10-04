@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import {
   BarChart3,
   CloudOff,
+  AlertTriangle,
   LayoutDashboard,
   Landmark,
   Monitor,
@@ -35,6 +36,7 @@ const WalletAppShell: React.FC = () => {
     settings,
     pendingSyncCount,
     syncPendingOperations,
+    syncError,
   } = useWallet();
 
   const isDark = resolvedTheme === 'dark';
@@ -210,6 +212,13 @@ const WalletAppShell: React.FC = () => {
               <span>Sincronizar ({pendingSyncCount})</span>
             </button>
           )}
+        </div>
+      )}
+
+      {syncError && (
+        <div role="alert" className="bg-rose-500/15 border-b border-rose-500/30 px-4 py-2 text-xs text-rose-200 flex items-center gap-2">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span>{syncError}</span>
         </div>
       )}
 

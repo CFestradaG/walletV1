@@ -63,7 +63,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     (a) => a.status === 'active' && a.type === 'credit_card'
   );
   const totalCreditDebt = creditAccounts.reduce(
-    (sum, a) => sum + Math.max(0, a.currentBalance ?? a.balance ?? 0),
+    (sum, a) => sum + Math.max(0, -(a.currentBalance ?? a.balance ?? 0)),
     0
   );
 

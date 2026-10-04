@@ -19,10 +19,32 @@ import {
 import { UserDataStore } from '../data/initialData';
 import { db, handleFirestoreError, OperationType } from './firebase';
 
+type InitialRecord = UserSettings | Account | Category | FinancialPeriod | Transaction | Budget;
+
+function sanitizeFirestoreValue<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => sanitizeFirestoreValue(item)) as T;
+  }
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, item]) => item !== undefined)
+        .map(([key, item]) => [key, sanitizeFirestoreValue(item)])
+    ) as T;
+  }
+  return value;
+}
+
+function ownedRecord<T extends object>(record: T, userId: string): T & { userId: string } {
+  return sanitizeFirestoreValue({ ...record, userId }) as T & { userId: string };
+}
+
 export async function syncProfile(userId: string, profile: UserProfile): Promise<void> {
   const path = `users/${userId}`;
   try {
-    await setDoc(doc(db, 'users', userId), profile, { merge: true });
+    await setDoc(doc(db, 'users', userId), sanitizeFirestoreValue({ ...profile, id: userId }), { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -31,7 +53,7 @@ export async function syncProfile(userId: string, profile: UserProfile): Promise
 export async function syncSettings(userId: string, settings: UserSettings): Promise<void> {
   const path = `users/${userId}/settings/default`;
   try {
-    await setDoc(doc(db, 'users', userId, 'settings', 'default'), settings, { merge: true });
+    await setDoc(doc(db, 'users', userId, 'settings', 'default'), ownedRecord(settings, userId), { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -40,7 +62,7 @@ export async function syncSettings(userId: string, settings: UserSettings): Prom
 export async function syncAccount(userId: string, account: Account): Promise<void> {
   const path = `users/${userId}/accounts/${account.id}`;
   try {
-    await setDoc(doc(db, 'users', userId, 'accounts', account.id), account);
+    await setDoc(doc(db, 'users', userId, 'accounts', account.id), ownedRecord(account, userId));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -58,7 +80,7 @@ export async function deleteAccountFromDb(userId: string, accountId: string): Pr
 export async function syncCategory(userId: string, category: Category): Promise<void> {
   const path = `users/${userId}/categories/${category.id}`;
   try {
-    await setDoc(doc(db, 'users', userId, 'categories', category.id), category);
+    await setDoc(doc(db, 'users', userId, 'categories', category.id), ownedRecord(category, userId));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -76,7 +98,7 @@ export async function deleteCategoryFromDb(userId: string, categoryId: string): 
 export async function syncPeriod(userId: string, period: FinancialPeriod): Promise<void> {
   const path = `users/${userId}/periods/${period.id}`;
   try {
-    await setDoc(doc(db, 'users', userId, 'periods', period.id), period);
+    await setDoc(doc(db, 'users', userId, 'periods', period.id), ownedRecord(period, userId));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -94,7 +116,7 @@ export async function deletePeriodFromDb(userId: string, periodId: string): Prom
 export async function syncTransaction(userId: string, tx: Transaction): Promise<void> {
   const path = `users/${userId}/transactions/${tx.id}`;
   try {
-    await setDoc(doc(db, 'users', userId, 'transactions', tx.id), tx);
+    await setDoc(doc(db, 'users', userId, 'transactions', tx.id), ownedRecord(tx, userId));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -112,7 +134,7 @@ export async function deleteTransactionFromDb(userId: string, txId: string): Pro
 export async function syncBudget(userId: string, budget: Budget): Promise<void> {
   const path = `users/${userId}/budgets/${budget.id}`;
   try {
-    await setDoc(doc(db, 'users', userId, 'budgets', budget.id), budget);
+    await setDoc(doc(db, 'users', userId, 'budgets', budget.id), ownedRecord(budget, userId));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
@@ -135,21 +157,38 @@ export async function seedUserInitialData(userId: string, initialStore: UserData
     const collections = ['settings', 'accounts', 'categories', 'periods', 'transactions', 'budgets'] as const;
     const existingDocs = await Promise.all(collections.map((name) => getDocs(collection(db, 'users', userId, name))));
     const existingIds = existingDocs.map((snapshot) => new Set(snapshot.docs.map((item) => item.id)));
-    const batch = writeBatch(db);
-    if (!existing.exists()) batch.set(userDocRef, initialStore.profile);
-    const seedIfMissing = <T extends { id?: string }>(name: typeof collections[number], id: string, data: T) => {
+    let batch = writeBatch(db);
+    let pendingWrites = 0;
+    const commitBatchIfFull = async () => {
+      if (pendingWrites < 450) return;
+      await batch.commit();
+      batch = writeBatch(db);
+      pendingWrites = 0;
+    };
+    if (!existing.exists()) {
+      batch.set(userDocRef, sanitizeFirestoreValue({ ...initialStore.profile, id: userId }));
+      pendingWrites += 1;
+    }
+    const seedIfMissing = (name: typeof collections[number], id: string, data: InitialRecord) => {
       if (!existingIds[collections.indexOf(name)].has(id)) {
-        batch.set(doc(db, 'users', userId, name, id), data);
+        batch.set(doc(db, 'users', userId, name, id), ownedRecord(data, userId));
+        pendingWrites += 1;
       }
     };
-    seedIfMissing('settings', 'default', initialStore.settings);
-    initialStore.accounts.forEach((item) => seedIfMissing('accounts', item.id, item));
-    initialStore.categories.forEach((item) => seedIfMissing('categories', item.id, item));
-    initialStore.periods.forEach((item) => seedIfMissing('periods', item.id, item));
-    initialStore.transactions.forEach((item) => seedIfMissing('transactions', item.id, item));
-    initialStore.budgets.forEach((item) => seedIfMissing('budgets', item.id, item));
+    const records: [typeof collections[number], string, InitialRecord][] = [
+      ['settings', 'default', initialStore.settings],
+      ...initialStore.accounts.map((item): [typeof collections[number], string, InitialRecord] => ['accounts', item.id, item]),
+      ...initialStore.categories.map((item): [typeof collections[number], string, InitialRecord] => ['categories', item.id, item]),
+      ...initialStore.periods.map((item): [typeof collections[number], string, InitialRecord] => ['periods', item.id, item]),
+      ...initialStore.transactions.map((item): [typeof collections[number], string, InitialRecord] => ['transactions', item.id, item]),
+      ...initialStore.budgets.map((item): [typeof collections[number], string, InitialRecord] => ['budgets', item.id, item]),
+    ];
+    for (const [name, id, data] of records) {
+      seedIfMissing(name, id, data);
+      await commitBatchIfFull();
+    }
 
-    await batch.commit();
+    if (pendingWrites > 0) await batch.commit();
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
