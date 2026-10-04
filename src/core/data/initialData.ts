@@ -238,6 +238,7 @@ export function createCleanUserStore(profile: UserProfile): UserDataStore {
     id: defaultPeriodId,
     userId,
     name: periodName,
+    referenceMonth: today.getMonth() + 1,
     startDate,
     endDate,
     subdivisionMode: 'monthly',

@@ -45,6 +45,7 @@ export const PeriodsModal: React.FC<PeriodsModalProps> = ({
 
   // Form State
   const [name, setName] = useState('');
+  const [referenceMonth, setReferenceMonth] = useState(new Date().getMonth() + 1);
   const [startDate, setStartDate] = useState(toISODate(new Date()));
   const [endDate, setEndDate] = useState(toISODate(new Date()));
   const [subdivisionMode, setSubdivisionMode] = useState<SubdivisionMode>('none');
@@ -55,6 +56,7 @@ export const PeriodsModal: React.FC<PeriodsModalProps> = ({
     setSelectedPeriodId(null);
     setName('');
     const now = new Date();
+    setReferenceMonth(now.getMonth() + 1);
     setStartDate(toISODate(new Date(now.getFullYear(), now.getMonth(), 1)));
     setEndDate(toISODate(new Date(now.getFullYear(), now.getMonth() + 1, 0)));
     setSubdivisionMode('none');
@@ -65,6 +67,7 @@ export const PeriodsModal: React.FC<PeriodsModalProps> = ({
     setIsEditing(true);
     setSelectedPeriodId(p.id);
     setName(p.name);
+    setReferenceMonth(p.referenceMonth ?? Number(p.startDate.slice(5, 7)));
     setStartDate(p.startDate);
     setEndDate(p.endDate);
     setSubdivisionMode(p.subdivisionMode);
@@ -89,6 +92,7 @@ export const PeriodsModal: React.FC<PeriodsModalProps> = ({
     const validation = validateFinancialPeriod(
       {
         name: name.trim(),
+        referenceMonth,
         startDate,
         endDate,
         subdivisionMode,
@@ -106,6 +110,7 @@ export const PeriodsModal: React.FC<PeriodsModalProps> = ({
       if (selectedPeriodId) {
         updatePeriod(selectedPeriodId, {
           name: name.trim(),
+          referenceMonth,
           startDate,
           endDate,
           subdivisionMode,
@@ -113,6 +118,7 @@ export const PeriodsModal: React.FC<PeriodsModalProps> = ({
       } else {
         createPeriod({
           name: name.trim(),
+          referenceMonth,
           startDate,
           endDate,
           subdivisionMode,
@@ -316,6 +322,25 @@ export const PeriodsModal: React.FC<PeriodsModalProps> = ({
                       : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400'
                   }`}
                 />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                  Mes que representa en el Panorama Anual
+                </label>
+                <select
+                  value={referenceMonth}
+                  onChange={(e) => setReferenceMonth(Number(e.target.value))}
+                  className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+                    isDark
+                      ? 'bg-black/30 border-white/10 text-white'
+                      : 'bg-slate-50 border-slate-200 text-slate-900'
+                  }`}
+                >
+                  {['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'].map((month, index) => (
+                    <option key={month} value={index + 1}>{month}</option>
+                  ))}
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

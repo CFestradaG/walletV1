@@ -50,7 +50,7 @@ Los documentos de datos se guardan bajo `users/{uid}`. Sus subcolecciones son `s
 | `UserSettings` | Moneda, decimales, tema, ocultar saldos, `activePeriodId` compartido y opciones de protección/simulación. |
 | `Account` | Tipo `cash`, `bank`, `savings` o `credit_card`; saldo inicial/actual, moneda, estado y datos de tarjeta. |
 | `Category` | Tipo `expense` o `income`; contiene subcategorías embebidas. |
-| `FinancialPeriod` | Rango inclusivo de fechas, modo de división y subperíodos embebidos. |
+| `FinancialPeriod` | Nombre libre, mes de referencia explícito para el Panorama Anual, rango inclusivo de fechas, modo de división y subperíodos embebidos. Los documentos anteriores sin `referenceMonth` siguen siendo compatibles. |
 | `Transaction` | Tipo `expense`, `income` o `transfer`; monto, moneda, fecha, cuenta/categoría o cuentas de origen/destino, y referencias opcionales de período. |
 | `Budget` | Meta para un período y categoría, opcionalmente subcategoría, con banderas de umbral y distribución. |
 | `AnnualProjectionsPlan` | Proyecciones anuales por categoría con monto base mensual y overrides por mes específico, sincronizada bidireccionalmente con los presupuestos de cada período. |
@@ -60,7 +60,8 @@ Reglas confirmadas en el código:
 - **Sistema Unificado de Presupuesto:** Se eliminó la duplicidad de plantillas de presupuesto. Solo existe el Presupuesto Proyectado Anual por categoría, el cual alimenta tanto las alertas visuales en el Dashboard como la matriz comparativa de proyecciones y ejecución real.
 - **Resumen Acumulado en el Panel:** El Dashboard muestra el progreso acumulativo anual (YTD) de Ingresos Proyectados vs Reales, Egresos Proyectados vs Reales y Ahorro Neto, junto con alertas en tiempo real de categorías que exceden el 80% o el 100% de su presupuesto mensual.
 - **Conexión entre Períodos y Proyecciones:**
-  - El sistema busca el período financiero que corresponde a cada mes (o cuyas fechas `startDate <= date <= endDate` lo abarcan).
+  - Cada período tiene un dropdown de mes de referencia independiente del nombre y las fechas; el Panorama Anual usa primero ese mes explícito, manteniendo heurísticas de fecha/nombre para períodos antiguos sin `referenceMonth`.
+  - Las fechas siguen determinando el rango real de transacciones y se pueden configurar de forma independiente al mes representado.
   - Si existe un `Budget` configurado para ese período y categoría, la celda de proyección toma automáticamente esa meta real.
   - Para el valor real, se agrupan las transacciones que caen en las fechas del período financiero correspondiente.
   - Al editar y guardar en la pestaña de presupuestos del Panorama, los cambios se sincronizan automáticamente hacia la colección de presupuestos (`budgets`) de los períodos activos.
@@ -71,6 +72,7 @@ Reglas confirmadas en el código:
 - **Reconciliación de snapshots:** Al recibir un snapshot remoto en `onSnapshot`, se coteja contra las mutaciones pendientes locales en la cola. Las transacciones y cuentas creadas o editadas localmente que aún no han impactado en Firestore se conservan en pantalla (evitando parpadeos o que desaparezcan); las transacciones marcadas para eliminación local no reaparecen.
 - **Consistencia multi-dispositivo:** `activePeriodId` se persiste y sincroniza en `UserSettings` en Firestore. Además, las vistas de transacciones y resumen asocian transacciones al período tanto por `periodId` como por rango de fechas inclusivo (`startDate <= date <= endDate`), garantizando que las transacciones registradas desde un dispositivo se visualicen de inmediato en otros dispositivos sin perderse por discrepancias de períodos iniciales.
 - **Prevención de duplicados en seed:** Al iniciar sesión en un dispositivo nuevo, `seedUserInitialData` verifica si el usuario ya posee períodos o categorías en Firestore antes de generar registros por defecto, evitando la inyección de períodos ficticios redundantes.
+- **Restablecimiento de cuenta:** Configuraciones permite borrar transacciones, cuentas, presupuestos y períodos, restaurar las categorías iniciales y limpiar planes locales de proyección. Conserva identidad de acceso, perfil y preferencias; requiere confirmación y conexión/sincronización completa para cuentas Firebase.
 - Las cuentas archivadas no se aceptan en nuevas transacciones. Las tarjetas de crédito representan deuda con saldo actual menor o igual a cero; el gasto puede validarse contra el límite disponible.
 - Una transferencia necesita dos cuentas activas distintas y no requiere categoría. Se marca como pago de tarjeta si el destino es tarjeta o si se indica explícitamente.
 - Los períodos no pueden solaparse. Los subperíodos se generan en modo semanal, quincenal, mensual o sin subdivisión. Las fechas de inicio y fin son inclusivas.
@@ -97,12 +99,12 @@ El estado describe presencia en el código, no validación de calidad ni desplie
 
 | Estado | Elementos |
 |---|---|
-| Implementado en el código | Vistas principales; Auth por correo/contraseña y Google; CRUD de cuentas/categorías/períodos/transacciones; cálculo de saldos y períodos; **único sistema unificado de Presupuesto y Panorama Anual** (Proyectado vs Real en horizontes Anual, Semestral, Trimestral y Mensual, con categorías reales del sistema, bloques de Ingresos arriba, Egresos abajo, Diferencia neta, cabeceras limpias, sincronización con períodos y exportación CSV); **tarjeta en el Dashboard de Resumen Acumulado del Año (YTD) y Alertas de Presupuesto por Categoría**; botones de agregar transacción de solo icono táctil y estilizado; listeners Firestore con reconciliación; almacenamiento local; cola offline persistente con reintentos automáticos; atomicidad en transacciones y saldos con `writeBatch`; sincronización multi-dispositivo del período activo; selectores personalizados de alto contraste; exportación CSV. Se retiró la plantilla duplicada de presupuestos individuales. |
-| En progreso / por verificar | Validar despliegue/configuración de hosting Firebase si el usuario lo requiere en producción. |
+| Implementado en el código | Vistas principales; Auth por correo/contraseña y Google; CRUD de cuentas/categorías/períodos/transacciones; períodos con nombre libre y dropdown de mes de referencia para vincularlos explícitamente al Panorama; restablecimiento de datos financieros desde Configuraciones con confirmación y conservación de identidad/preferencias; cálculo de saldos y períodos; **único sistema unificado de Presupuesto y Panorama Anual** (Proyectado vs Real en horizontes Anual, Semestral, Trimestral y Mensual, con categorías reales del sistema, bloques de Ingresos arriba, Egresos abajo, Diferencia neta, cabeceras limpias, sincronización con períodos y exportación CSV); **tarjeta en el Dashboard de Resumen Acumulado del Año (YTD) y Alertas de Presupuesto por Categoría**; botones de agregar transacción de solo icono táctil y estilizado; listeners Firestore con reconciliación; almacenamiento local; cola offline persistente con reintentos automáticos; atomicidad en transacciones y saldos con `writeBatch`; sincronización multi-dispositivo del período activo; selectores personalizados de alto contraste; exportación CSV. Se retiró la plantilla duplicada de presupuestos individuales. |
+| En progreso / por verificar | Probar en producción el alta/edición de períodos y la asociación del mes en el Panorama Anual. |
 | Pendiente conocido | No se encontró suite de pruebas automatizadas unitarias con script `test`. |
 | Riesgos/observaciones de código | `firebase-applet-config.json` contiene configuración cliente pública. Se mitigó el riesgo de desincronización transaccional mediante lotes atómicos y cola offline con persistencia. |
 
-**Comprobación (2026-10-04):** Se ejecutaron `npm run lint` (`tsc --noEmit`) y `npm run build` (`vite build`) en el entorno, terminando ambos exitosamente con código de salida 0.
+**Comprobación (2026-10-04):** Para el dropdown de mes, el restablecimiento de cuenta y el ajuste móvil del encabezado del Panorama se ejecutaron `npm run lint` (`tsc --noEmit`) y `npm run build` (`vite build`), ambos con código de salida 0. Vite avisó que el bundle JS supera 500 kB y sobre `__dirname` en la configuración; el build terminó correctamente. Los cambios están desplegados en Firebase Hosting (`fintrack-gt`) en `https://fintrack-gt.web.app`; queda pendiente la prueba funcional del usuario en móvil y del restablecimiento.
 
 ## 6. Decisiones y convenciones observadas
 
@@ -116,7 +118,7 @@ El estado describe presencia en el código, no validación de calidad ni desplie
 - Cola offline persistente en `localStorage` (`wallet_offline_queue_${userId}`) que maneja eventos `online`, foco de ventana y reintentos periódicos.
 - Reconciliación en tiempo real que protege la UI optimista contra sobreescrituras ciegas de snapshots remotos desactualizados.
 
-Al cerrar cada funcionalidad, actualizar `CONTEXTO.md` y mantener `AGENTS.md` con el mismo contenido para reflejar el comportamiento real, comandos ejecutados y asuntos que sigan por verificar.
+Al cerrar cada funcionalidad, actualizar `AGENTS.md` para reflejar el comportamiento real, comandos ejecutados y asuntos que sigan por verificar. No crear `CONTEXTO.md` salvo que el usuario lo solicite.
 
 ## 7. Cómo ejecutar y comprobar
 

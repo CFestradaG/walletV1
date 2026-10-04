@@ -284,17 +284,17 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
       >
         {/* HEADER BAR */}
         <div
-          className={`px-4 sm:px-6 py-3.5 border-b flex items-center justify-between shrink-0 ${
+          className={`px-4 sm:px-6 py-3.5 border-b flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shrink-0 ${
             isDark ? 'border-white/10 bg-[#121824]' : 'border-slate-200 bg-slate-50'
           }`}
         >
-          <div className="flex items-center gap-3">
+          <div className="order-1 flex w-[calc(100%-3rem)] sm:w-auto min-w-0 flex-1 items-start sm:items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
               <FileSpreadsheet className="w-5 h-5" />
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-base sm:text-lg font-bold font-display tracking-tight">
+                  <h2 className="text-xs sm:text-lg font-bold font-display tracking-tight leading-tight">
                   Panorama de Presupuesto (Proyectado vs. Real)
                 </h2>
                 <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
@@ -311,7 +311,7 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="order-3 flex w-full sm:order-none sm:w-auto items-center justify-end gap-2">
             {/* Year selector */}
             <div
               className={`flex items-center gap-1 px-2 py-1 rounded-xl border text-xs font-semibold ${
@@ -352,19 +352,22 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
               <span className="hidden sm:inline">Exportar</span>
             </button>
 
-            {/* Close */}
-            <button
-              type="button"
-              onClick={onClose}
-              className={`p-2 rounded-xl border transition-colors cursor-pointer ${
-                isDark
-                  ? 'border-white/10 hover:bg-white/10 text-slate-400 hover:text-white'
-                  : 'border-slate-200 hover:bg-slate-100 text-slate-500'
-              }`}
-            >
-              <X className="w-4 h-4" />
-            </button>
           </div>
+
+          {/* Close stays beside the title on narrow screens. */}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Cerrar panorama de presupuesto"
+            title="Cerrar panorama"
+            className={`order-2 shrink-0 p-2.5 rounded-xl border transition-colors cursor-pointer ${
+              isDark
+                ? 'border-white/10 hover:bg-white/10 text-slate-400 hover:text-white'
+                : 'border-slate-200 hover:bg-slate-100 text-slate-500'
+            }`}
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
         {/* TOP SUMMARY KPIS */}

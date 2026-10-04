@@ -73,6 +73,7 @@ import {
   syncSettings,
   syncTransaction,
   syncTransactionWithAccounts,
+  resetUserFinancialData,
 } from '../firebase/firestoreSync';
 import {
   offlineQueue,
@@ -143,6 +144,7 @@ interface WalletContextValue {
   recoverPassword: (email: string) => Promise<{ ok: boolean; message: string }>;
   logout: () => Promise<void> | void;
   switchUserMode: (mode: 'demo_francisco' | 'clean_new_user') => void;
+  resetAccountData: () => Promise<{ ok: boolean; error?: string }>;
   updateUserProfile: (name: string, email: string) => void;
 
   settings: UserSettings;
@@ -204,6 +206,7 @@ interface WalletContextValue {
   setActivePeriodId: (periodId: string) => void;
   createFinancialPeriod: (input: {
     name: string;
+    referenceMonth: number;
     startDate: string;
     endDate: string;
     subdivisionMode: SubdivisionMode;
@@ -213,6 +216,7 @@ interface WalletContextValue {
     periodId: string,
     input: {
       name: string;
+      referenceMonth: number;
       startDate: string;
       endDate: string;
       subdivisionMode: SubdivisionMode;
@@ -272,6 +276,7 @@ interface WalletContextValue {
   selectActivePeriod: (periodId: string) => void;
   createPeriod: (input: {
     name: string;
+    referenceMonth: number;
     startDate: string;
     endDate: string;
     subdivisionMode: SubdivisionMode;
@@ -281,6 +286,7 @@ interface WalletContextValue {
     periodId: string,
     input: {
       name: string;
+      referenceMonth: number;
       startDate: string;
       endDate: string;
       subdivisionMode: SubdivisionMode;
@@ -834,6 +840,37 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     });
   };
 
+  const resetAccountData = async (): Promise<{ ok: boolean; error?: string }> => {
+    if (!currentUserId || !currentUserStore) {
+      return { ok: false, error: 'Inicia sesión para restablecer la cuenta.' };
+    }
+    const isFirebaseUser = auth.currentUser?.uid === currentUserId;
+    if (isFirebaseUser && typeof navigator !== 'undefined' && !navigator.onLine) {
+      return { ok: false, error: 'Conéctate a internet para restablecer los datos en todos tus dispositivos.' };
+    }
+    if (offlineQueue.getPendingCount(currentUserId) > 0) {
+      return { ok: false, error: 'Espera a que se sincronicen los cambios pendientes antes de restablecer la cuenta.' };
+    }
+
+    const cleanStore = createCleanUserStore(currentUserStore.profile);
+    cleanStore.settings = { ...cleanStore.settings, ...currentUserStore.settings, userId: currentUserId };
+    cleanStore.profile = currentUserStore.profile;
+
+    try {
+      if (isFirebaseUser) await resetUserFinancialData(currentUserId, cleanStore);
+      const projectionPrefix = `wallet_category_projections_${currentUserId}_`;
+      for (const key of Object.keys(localStorage)) {
+        if (key.startsWith(projectionPrefix)) localStorage.removeItem(key);
+      }
+      updateCurrentUserStore(() => cleanStore);
+      setSyncError(null);
+      return { ok: true };
+    } catch (error) {
+      console.error('No se pudieron restablecer los datos de la cuenta:', error);
+      return { ok: false, error: 'No se pudo restablecer la cuenta. No se actualizaron los datos en este dispositivo.' };
+    }
+  };
+
   const trackSync = (operation: Promise<void>, label: string) => {
     void operation.then(() => setSyncError(null)).catch((error) => {
       console.error(`Falló la sincronización de ${label}:`, error);
@@ -1318,6 +1355,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const createFinancialPeriod = (input: {
     name: string;
+    referenceMonth: number;
     startDate: string;
     endDate: string;
     subdivisionMode: SubdivisionMode;
@@ -1347,6 +1385,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       id: newPeriodId,
       userId: currentUserId,
       name: input.name.trim(),
+      referenceMonth: input.referenceMonth,
       startDate: input.startDate,
       endDate: input.endDate,
       subdivisionMode: input.subdivisionMode,
@@ -1385,6 +1424,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     periodId: string,
     input: {
       name: string;
+      referenceMonth: number;
       startDate: string;
       endDate: string;
       subdivisionMode: SubdivisionMode;
@@ -1410,6 +1450,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ? {
           ...period,
           name: input.name.trim(),
+          referenceMonth: input.referenceMonth,
           startDate: input.startDate,
           endDate: input.endDate,
           subdivisionMode: input.subdivisionMode,
@@ -1912,6 +1953,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         recoverPassword,
         logout,
         switchUserMode,
+        resetAccountData,
         updateUserProfile,
 
         settings,

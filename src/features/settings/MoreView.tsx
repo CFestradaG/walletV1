@@ -11,6 +11,7 @@ import {
   Monitor,
   Moon,
   Plus,
+  RotateCcw,
   ShieldCheck,
   Sun,
   Target,
@@ -34,6 +35,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
   const {
     currentUser,
     logout,
+    resetAccountData,
     themeMode,
     setThemeMode,
     resolvedTheme,
@@ -67,6 +69,8 @@ export const MoreView: React.FC<MoreViewProps> = ({
   const [editingSubcategory, setEditingSubcategory] = useState<{ categoryId: string; subcategoryId: string } | null>(null);
   const [subcategoryNameDraft, setSubcategoryNameDraft] = useState('');
   const [categoryManagerNotice, setCategoryManagerNotice] = useState<string | null>(null);
+  const [isResettingAccount, setIsResettingAccount] = useState(false);
+  const [accountResetNotice, setAccountResetNotice] = useState<string | null>(null);
 
   const filteredCategories = useMemo(() => {
     return categories.filter((c) => c.type === catManagerType);
@@ -137,6 +141,18 @@ export const MoreView: React.FC<MoreViewProps> = ({
   const subcategoryHasRecords = (subcategoryId: string) =>
     transactions.some((item) => item.subcategoryId === subcategoryId) ||
     budgets.some((item) => item.subcategoryId === subcategoryId);
+
+  const handleResetAccount = async () => {
+    const confirmed = window.confirm(
+      'Esto eliminará permanentemente tus cuentas financieras, transacciones, presupuestos y períodos, y restaurará las categorías iniciales. Se conservarán tu acceso, perfil y preferencias. ¿Deseas continuar?'
+    );
+    if (!confirmed) return;
+    setIsResettingAccount(true);
+    setAccountResetNotice(null);
+    const result = await resetAccountData();
+    setAccountResetNotice(result.ok ? 'La cuenta quedó restablecida.' : result.error || 'No se pudo restablecer la cuenta.');
+    setIsResettingAccount(false);
+  };
 
   return (
     <div className="space-y-4">
@@ -342,6 +358,30 @@ export const MoreView: React.FC<MoreViewProps> = ({
             />
           </label>
         </div>
+      </div>
+
+      {/* 5. ACCOUNT RESET */}
+      <div
+        className={`p-4 rounded-3xl border transition-all ${
+          isDark ? 'bg-[#131927] border-rose-500/20' : 'bg-white border-rose-200 shadow-xs'
+        }`}
+      >
+        <span className="text-xs font-bold block mb-2">Restablecer cuenta</span>
+        <p className="text-[11px] text-slate-400 mb-3">
+          Borra los datos financieros y restaura las categorías iniciales. Conserva tu acceso y preferencias.
+        </p>
+        <button
+          type="button"
+          onClick={handleResetAccount}
+          disabled={isResettingAccount}
+          className="w-full p-3 rounded-2xl border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 disabled:opacity-50 flex items-center justify-center gap-2 text-xs font-bold transition-colors cursor-pointer"
+        >
+          <RotateCcw className={`w-4 h-4 ${isResettingAccount ? 'animate-spin' : ''}`} />
+          {isResettingAccount ? 'Restableciendo…' : 'Restablecer cuenta'}
+        </button>
+        {accountResetNotice && (
+          <p role="status" className="text-[11px] text-slate-300 mt-2">{accountResetNotice}</p>
+        )}
       </div>
 
       {/* 6. ABOUT WALLET */}

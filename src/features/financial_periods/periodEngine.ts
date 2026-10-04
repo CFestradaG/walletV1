@@ -21,6 +21,7 @@ export function isValidISODateString(dateStr: string): boolean {
 export function validateFinancialPeriod(
   candidate: {
     name: string;
+    referenceMonth?: number;
     startDate: string;
     endDate: string;
     subdivisionMode: SubdivisionMode;

@@ -87,6 +87,8 @@ export interface FinancialPeriod {
   id: string;
   userId: string;
   name: string;
+  /** Mes que representa en el Panorama Anual (1 = enero, 12 = diciembre). */
+  referenceMonth?: number;
   startDate: string;
   endDate: string;
   subdivisionMode: SubdivisionMode;

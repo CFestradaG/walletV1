@@ -245,3 +245,28 @@ export async function seedUserInitialData(userId: string, initialStore: UserData
     handleFirestoreError(error, OperationType.WRITE, path);
   }
 }
+
+/** Borra los datos financieros del usuario y vuelve a crear el conjunto inicial. */
+export async function resetUserFinancialData(userId: string, initialStore: UserDataStore): Promise<void> {
+  const collectionNames = ['settings', 'accounts', 'categories', 'periods', 'transactions', 'budgets'] as const;
+  const snapshots = await Promise.all(
+    collectionNames.map((name) => getDocs(collection(db, 'users', userId, name)))
+  );
+
+  let batch = writeBatch(db);
+  let pendingDeletes = 0;
+  for (const snapshot of snapshots) {
+    for (const item of snapshot.docs) {
+      batch.delete(item.ref);
+      pendingDeletes += 1;
+      if (pendingDeletes >= 450) {
+        await batch.commit();
+        batch = writeBatch(db);
+        pendingDeletes = 0;
+      }
+    }
+  }
+  if (pendingDeletes > 0) await batch.commit();
+
+  await seedUserInitialData(userId, initialStore);
+}
