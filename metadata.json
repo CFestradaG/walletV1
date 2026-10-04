@@ -1,0 +1,6 @@
+{
+  "name": "Wallet",
+  "description": "Aplicación de finanzas personales con períodos financieros configurables, cuentas, presupuestos y análisis.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
