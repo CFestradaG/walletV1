@@ -1,0 +1,179 @@
+{
+  "entities": {
+    "UserProfile": {
+      "title": "UserProfile",
+      "description": "User profile information",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 120 },
+        "email": { "type": "string", "maxLength": 160 },
+        "photoUrl": { "type": "string", "maxLength": 500 },
+        "provider": { "type": "string", "enum": ["email", "google"] },
+        "createdAt": { "type": "string", "maxLength": 60 }
+      },
+      "required": ["id", "name", "email", "provider", "createdAt"]
+    },
+    "UserSettings": {
+      "title": "UserSettings",
+      "description": "User preferences and system configuration",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string", "maxLength": 128 },
+        "currency": { "type": "string", "maxLength": 10 },
+        "currencySymbolPosition": { "type": "string", "enum": ["prefix", "suffix"] },
+        "decimalPlaces": { "type": "number" },
+        "themeMode": { "type": "string", "enum": ["light", "dark", "system"] },
+        "hideBalances": { "type": "boolean" },
+        "offlineSimulation": { "type": "boolean" },
+        "appProtection": { "type": "boolean" },
+        "biometrics": { "type": "boolean" },
+        "hasPin": { "type": "boolean" }
+      },
+      "required": ["userId", "currency", "themeMode"]
+    },
+    "Account": {
+      "title": "Account",
+      "description": "Financial account (bank, cash, savings, or credit card)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 100 },
+        "subtitle": { "type": "string", "maxLength": 150 },
+        "type": { "type": "string", "enum": ["cash", "bank", "savings", "credit_card"] },
+        "currency": { "type": "string", "maxLength": 10 },
+        "initialBalance": { "type": "number" },
+        "currentBalance": { "type": "number" },
+        "creditLimit": { "type": "number" },
+        "status": { "type": "string", "enum": ["active", "archived"] },
+        "icon": { "type": "string", "maxLength": 50 },
+        "color": { "type": "string", "maxLength": 30 },
+        "cutoffDay": { "type": "number" },
+        "paymentDueDay": { "type": "number" },
+        "createdAt": { "type": "string", "maxLength": 60 },
+        "updatedAt": { "type": "string", "maxLength": 60 }
+      },
+      "required": ["id", "userId", "name", "type", "currency", "initialBalance", "currentBalance", "status"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Transaction category with embedded subcategories",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 80 },
+        "type": { "type": "string", "enum": ["expense", "income"] },
+        "icon": { "type": "string", "maxLength": 50 },
+        "color": { "type": "string", "maxLength": 30 },
+        "isActive": { "type": "boolean" },
+        "subcategories": {
+          "type": "array",
+          "description": "Embedded list of subcategories"
+        }
+      },
+      "required": ["id", "userId", "name", "type", "isActive"]
+    },
+    "FinancialPeriod": {
+      "title": "FinancialPeriod",
+      "description": "Financial period (e.g. month, biweekly cycle)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 80 },
+        "startDate": { "type": "string", "maxLength": 20 },
+        "endDate": { "type": "string", "maxLength": 20 },
+        "subdivisionMode": { "type": "string", "enum": ["weekly", "biweekly", "monthly", "none"] },
+        "status": { "type": "string", "enum": ["active", "scheduled", "closed", "inactive", "in_progress"] },
+        "isActive": { "type": "boolean" },
+        "subperiods": {
+          "type": "array",
+          "description": "Embedded list of calculated subperiods"
+        },
+        "createdAt": { "type": "string", "maxLength": 60 },
+        "updatedAt": { "type": "string", "maxLength": 60 }
+      },
+      "required": ["id", "userId", "name", "startDate", "endDate", "subdivisionMode", "status", "isActive"]
+    },
+    "Transaction": {
+      "title": "Transaction",
+      "description": "Financial transaction record (expense, income, transfer)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "type": { "type": "string", "enum": ["expense", "income", "transfer"] },
+        "amount": { "type": "number" },
+        "currency": { "type": "string", "maxLength": 10 },
+        "accountId": { "type": "string", "maxLength": 128 },
+        "categoryId": { "type": "string", "maxLength": 128 },
+        "subcategoryId": { "type": "string", "maxLength": 128 },
+        "originAccountId": { "type": "string", "maxLength": 128 },
+        "destinationAccountId": { "type": "string", "maxLength": 128 },
+        "isCreditCardPayment": { "type": "boolean" },
+        "date": { "type": "string", "maxLength": 20 },
+        "time": { "type": "string", "maxLength": 20 },
+        "note": { "type": "string", "maxLength": 300 },
+        "periodId": { "type": "string", "maxLength": 128 },
+        "subperiodId": { "type": "string", "maxLength": 128 },
+        "pendingSync": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 60 },
+        "updatedAt": { "type": "string", "maxLength": 60 }
+      },
+      "required": ["id", "userId", "type", "amount", "currency", "date"]
+    },
+    "Budget": {
+      "title": "Budget",
+      "description": "Budget goal for a category within a period",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "periodId": { "type": "string", "maxLength": 128 },
+        "categoryId": { "type": "string", "maxLength": 128 },
+        "subcategoryId": { "type": "string", "maxLength": 128 },
+        "targetAmount": { "type": "number" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string", "maxLength": 10 },
+        "alertThreshold80": { "type": "boolean" },
+        "alertThreshold100": { "type": "boolean" },
+        "distributeBySubperiod": { "type": "boolean" },
+        "createdAt": { "type": "string", "maxLength": 60 },
+        "updatedAt": { "type": "string", "maxLength": 60 }
+      },
+      "required": ["id", "userId", "periodId", "categoryId", "targetAmount", "currency"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserProfile" },
+      "description": "Primary user profile document"
+    },
+    "/users/{userId}/settings/{settingsId}": {
+      "schema": { "$ref": "#/entities/UserSettings" },
+      "description": "User preferences and system configuration"
+    },
+    "/users/{userId}/accounts/{accountId}": {
+      "schema": { "$ref": "#/entities/Account" },
+      "description": "User financial accounts"
+    },
+    "/users/{userId}/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "User transaction categories and subcategories"
+    },
+    "/users/{userId}/periods/{periodId}": {
+      "schema": { "$ref": "#/entities/FinancialPeriod" },
+      "description": "User financial cycles and periods"
+    },
+    "/users/{userId}/transactions/{transactionId}": {
+      "schema": { "$ref": "#/entities/Transaction" },
+      "description": "User income, expense, and transfer records"
+    },
+    "/users/{userId}/budgets/{budgetId}": {
+      "schema": { "$ref": "#/entities/Budget" },
+      "description": "User budget targets per period and category"
+    }
+  }
+}

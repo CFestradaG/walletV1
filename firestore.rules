@@ -1,0 +1,64 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 1. Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Connectivity test path
+    match /test/{docId} {
+      allow read: if true;
+    }
+
+    // User profile and private subcollections (Per-User Isolation)
+    match /users/{userId} {
+      allow get: if isOwner(userId) && isValidId(userId);
+      allow create, update: if isOwner(userId) && isValidId(userId);
+      allow delete: if false;
+
+      // Settings
+      match /settings/{settingsId} {
+        allow read, write: if isOwner(userId) && isValidId(settingsId);
+      }
+
+      // Accounts
+      match /accounts/{accountId} {
+        allow read, write: if isOwner(userId) && isValidId(accountId);
+      }
+
+      // Categories
+      match /categories/{categoryId} {
+        allow read, write: if isOwner(userId) && isValidId(categoryId);
+      }
+
+      // Financial Periods
+      match /periods/{periodId} {
+        allow read, write: if isOwner(userId) && isValidId(periodId);
+      }
+
+      // Transactions
+      match /transactions/{transactionId} {
+        allow read, write: if isOwner(userId) && isValidId(transactionId);
+      }
+
+      // Budgets
+      match /budgets/{budgetId} {
+        allow read, write: if isOwner(userId) && isValidId(budgetId);
+      }
+    }
+  }
+}

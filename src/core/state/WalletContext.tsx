@@ -37,6 +37,37 @@ import {
   TransactionValidationResult,
   validateTransactionInput,
 } from '../../features/transactions/financialEngine';
+import {
+  auth,
+  db as firestoreDb,
+  googleProvider,
+  handleFirestoreError,
+  OperationType,
+} from '../firebase/firebase';
+import {
+  onAuthStateChanged,
+  signInWithPopup,
+  signOut,
+} from 'firebase/auth';
+import {
+  collection,
+  onSnapshot,
+} from 'firebase/firestore';
+import {
+  deleteAccountFromDb,
+  deleteBudgetFromDb,
+  deleteCategoryFromDb,
+  deletePeriodFromDb,
+  deleteTransactionFromDb,
+  seedUserInitialData,
+  syncAccount,
+  syncBudget,
+  syncCategory,
+  syncPeriod,
+  syncProfile,
+  syncSettings,
+  syncTransaction,
+} from '../firebase/firestoreSync';
 
 const STORAGE_KEY = 'wallet_app_v4_store';
 const SESSION_USER_KEY = 'wallet_app_v4_user_id';
@@ -54,9 +85,9 @@ interface WalletContextValue {
     email: string,
     password: string
   ) => { ok: boolean; error?: string };
-  loginWithGoogle: () => void;
+  loginWithGoogle: () => Promise<void> | void;
   recoverPassword: (email: string) => { ok: boolean; message: string };
-  logout: () => void;
+  logout: () => Promise<void> | void;
   switchUserMode: (mode: 'demo_francisco' | 'clean_new_user') => void;
   updateUserProfile: (name: string, email: string) => void;
 
@@ -343,6 +374,175 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   }, [resolvedTheme]);
 
+  // Synchronize with Firebase Auth and Firestore real-time listeners
+  useEffect(() => {
+    let unsubs: (() => void)[] = [];
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+      // Unsubscribe existing Firestore listeners
+      unsubs.forEach((unsub) => unsub());
+      unsubs = [];
+
+      if (firebaseUser) {
+        const uid = firebaseUser.uid;
+        setCurrentUserId(uid);
+
+        const profile: UserProfile = {
+          id: uid,
+          name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'Usuario',
+          email: firebaseUser.email || '',
+          photoUrl: firebaseUser.photoURL || undefined,
+          provider: 'google',
+          createdAt: new Date().toISOString(),
+        };
+
+        const initialStore = createCleanUserStore(profile);
+
+        setDb((prev) => {
+          if (!prev.users[uid]) {
+            return {
+              ...prev,
+              users: {
+                ...prev.users,
+                [uid]: initialStore,
+              },
+            };
+          }
+          return prev;
+        });
+
+        // Seed initial data in Firestore if empty
+        seedUserInitialData(uid, initialStore).catch(console.warn);
+
+        // Real-time listener for accounts
+        const unsubAccounts = onSnapshot(
+          collection(firestoreDb, 'users', uid, 'accounts'),
+          (snap) => {
+            const remoteAccs = snap.docs.map((d) => d.data() as Account);
+            if (remoteAccs.length > 0) {
+              setDb((prev) => {
+                const current = prev.users[uid] || initialStore;
+                return {
+                  ...prev,
+                  users: {
+                    ...prev.users,
+                    [uid]: {
+                      ...current,
+                      accounts: remoteAccs,
+                    },
+                  },
+                };
+              });
+            }
+          },
+          (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}/accounts`)
+        );
+        unsubs.push(unsubAccounts);
+
+        // Real-time listener for categories
+        const unsubCategories = onSnapshot(
+          collection(firestoreDb, 'users', uid, 'categories'),
+          (snap) => {
+            const remoteCats = snap.docs.map((d) => d.data() as Category);
+            if (remoteCats.length > 0) {
+              setDb((prev) => {
+                const current = prev.users[uid] || initialStore;
+                return {
+                  ...prev,
+                  users: {
+                    ...prev.users,
+                    [uid]: {
+                      ...current,
+                      categories: remoteCats,
+                    },
+                  },
+                };
+              });
+            }
+          },
+          (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}/categories`)
+        );
+        unsubs.push(unsubCategories);
+
+        // Real-time listener for periods
+        const unsubPeriods = onSnapshot(
+          collection(firestoreDb, 'users', uid, 'periods'),
+          (snap) => {
+            const remotePers = snap.docs.map((d) => d.data() as FinancialPeriod);
+            if (remotePers.length > 0) {
+              setDb((prev) => {
+                const current = prev.users[uid] || initialStore;
+                return {
+                  ...prev,
+                  users: {
+                    ...prev.users,
+                    [uid]: {
+                      ...current,
+                      periods: remotePers,
+                    },
+                  },
+                };
+              });
+            }
+          },
+          (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}/periods`)
+        );
+        unsubs.push(unsubPeriods);
+
+        // Real-time listener for transactions
+        const unsubTransactions = onSnapshot(
+          collection(firestoreDb, 'users', uid, 'transactions'),
+          (snap) => {
+            const remoteTxs = snap.docs.map((d) => d.data() as Transaction);
+            setDb((prev) => {
+              const current = prev.users[uid] || initialStore;
+              return {
+                ...prev,
+                users: {
+                  ...prev.users,
+                  [uid]: {
+                    ...current,
+                    transactions: remoteTxs,
+                  },
+                },
+              };
+            });
+          },
+          (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}/transactions`)
+        );
+        unsubs.push(unsubTransactions);
+
+        // Real-time listener for budgets
+        const unsubBudgets = onSnapshot(
+          collection(firestoreDb, 'users', uid, 'budgets'),
+          (snap) => {
+            const remoteBudgets = snap.docs.map((d) => d.data() as Budget);
+            setDb((prev) => {
+              const current = prev.users[uid] || initialStore;
+              return {
+                ...prev,
+                users: {
+                  ...prev.users,
+                  [uid]: {
+                    ...current,
+                    budgets: remoteBudgets,
+                  },
+                },
+              };
+            });
+          },
+          (err) => handleFirestoreError(err, OperationType.GET, `users/${uid}/budgets`)
+        );
+        unsubs.push(unsubBudgets);
+      }
+    });
+
+    return () => {
+      unsubs.forEach((unsub) => unsub());
+      unsubscribeAuth();
+    };
+  }, []);
+
   const updateCurrentUserStore = (updater: (store: UserDataStore) => UserDataStore) => {
     if (!currentUserId) return;
     setDb((prev) => {
@@ -446,8 +646,16 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return { ok: true };
   };
 
-  const loginWithGoogle = () => {
-    setCurrentUserId('usr_francisco');
+  const loginWithGoogle = async () => {
+    try {
+      const res = await signInWithPopup(auth, googleProvider);
+      if (res.user) {
+        setCurrentUserId(res.user.uid);
+      }
+    } catch (err: any) {
+      console.error('Google sign in error:', err);
+      throw err;
+    }
   };
 
   const recoverPassword = (email: string): { ok: boolean; message: string } => {
@@ -461,7 +669,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await signOut(auth);
+    } catch (err) {
+      console.warn('Sign out error:', err);
+    }
     setCurrentUserId(null);
   };
 
@@ -612,6 +825,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       accounts: [...store.accounts, newAccount],
     }));
 
+    if (auth.currentUser && auth.currentUser.uid === currentUserId) {
+      syncAccount(currentUserId, newAccount).catch(console.warn);
+    }
+
     return { ok: true };
   };
 
@@ -648,6 +865,24 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           : acc
       ),
     }));
+
+    if (auth.currentUser && auth.currentUser.uid === currentUserId) {
+      const existing = currentUserStore?.accounts.find((a) => a.id === accountId);
+      if (existing) {
+        syncAccount(currentUserId, {
+          ...existing,
+          name: cleanName,
+          subtitle: input.subtitle?.trim() || undefined,
+          creditLimit: existing.type === 'credit_card' ? input.creditLimit : undefined,
+          cutoffDay: existing.type === 'credit_card' ? (input.cutoffDay ?? existing.cutoffDay ?? 15) : undefined,
+          paymentDueDay: existing.type === 'credit_card' ? (input.paymentDueDay ?? existing.paymentDueDay ?? 5) : undefined,
+          icon: input.icon,
+          color: input.color,
+          updatedAt: new Date().toISOString(),
+        }).catch(console.warn);
+      }
+    }
+
     return { ok: true };
   };
 
@@ -701,6 +936,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ...store,
       categories: [...store.categories, newCat],
     }));
+
+    if (auth.currentUser && auth.currentUser.uid === currentUserId) {
+      syncCategory(currentUserId, newCat).catch(console.warn);
+    }
+
     return { ok: true };
   };
 
@@ -839,6 +1079,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         transactions: syncTransactionsWithPeriods(store.transactions, updatedPeriods),
       };
     });
+
+    if (auth.currentUser && auth.currentUser.uid === currentUserId) {
+      syncPeriod(currentUserId, newPeriod).catch(console.warn);
+    }
 
     return { valid: true };
   };
@@ -1021,11 +1265,18 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       updatedAt: now,
     };
 
-    updateCurrentUserStore((store) => ({
-      ...store,
-      accounts: applyTransactionToAccounts(newTx, store.accounts),
-      transactions: [newTx, ...store.transactions],
-    }));
+    updateCurrentUserStore((store) => {
+      const updatedAccounts = applyTransactionToAccounts(newTx, store.accounts);
+      if (auth.currentUser && auth.currentUser.uid === currentUserId) {
+        syncTransaction(currentUserId, newTx).catch(console.warn);
+        updatedAccounts.forEach((acc) => syncAccount(currentUserId, acc).catch(console.warn));
+      }
+      return {
+        ...store,
+        accounts: updatedAccounts,
+        transactions: [newTx, ...store.transactions],
+      };
+    });
 
     return { valid: true };
   };
