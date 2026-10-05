@@ -50,7 +50,7 @@ Future<void> _create(BuildContext context, WidgetRef ref, String uid) async {
         const SizedBox(height: 12),
         SegmentedButton<CategoryType>(segments: const [ButtonSegment(value: CategoryType.expense, label: Text('Egreso')), ButtonSegment(value: CategoryType.income, label: Text('Ingreso'))], selected: {type}, onSelectionChanged: (v) => setState(() => type = v.first)),
         const SizedBox(height: 8),
-        DropdownButtonFormField<String>(value: icon, decoration: const InputDecoration(labelText: 'Icono'), items: const [for (final e in ['🏷️','🍔','🚗','🏠','💊','💵','💰','🎁','📚','💳']) DropdownMenuItem(value: e, child: Text(e))], onChanged: (v) => setState(() => icon = v ?? icon)),
+        DropdownButtonFormField<String>(value: icon, decoration: const InputDecoration(labelText: 'Icono'), items: [for (final e in ['🏷️','🍔','🚗','🏠','💊','💵','💰','🎁','📚','💳']) DropdownMenuItem(value: e, child: Text(e))], onChanged: (v) => setState(() => icon = v ?? icon)),
         const SizedBox(height: 14),
         FilledButton(onPressed: () async {
           if (name.text.trim().isEmpty) return;

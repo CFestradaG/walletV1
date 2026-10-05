@@ -81,7 +81,6 @@ class WalletRepository {
   }
 
   List<Category> _defaultCategories(String uid) {
-    final now = DateTime.now();
     const definitions = <(String, String, CategoryType, String, String, List<(String, String)>)>[
       ('food', 'Alimentación', CategoryType.expense, '🍔', '#10B981', [('sub_rest', 'Restaurantes'), ('sub_super', 'Supermercado')]),
       ('trans', 'Transporte', CategoryType.expense, '🚗', '#0284C7', [('sub_fuel', 'Gasolina'), ('sub_taxi', 'Uber / Taxi')]),

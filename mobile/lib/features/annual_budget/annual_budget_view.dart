@@ -121,11 +121,11 @@ class _AnnualBudgetViewState extends ConsumerState<AnnualBudgetView> {
     final saved = await showDialog<bool>(context: context, builder: (ctx) => AlertDialog(
       title: Text('${category.name} · ${_month(monthIndex + 1)}'),
       content: SingleChildScrollView(child: Column(mainAxisSize: MainAxisSize.min, children: [
-        if (period == null) const Text('No hay un período asociado a este mes. Puedes guardar la proyección anual y crear el período después.'),
+        if (period == null) const Text('No hay un período asociado a este mes. Puedes guardar la proyección anual y crear el período después.')
         else Text('Período: ${period.name}', style: Theme.of(ctx).textTheme.bodySmall),
         if (period != null) TextField(controller: budgetController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Meta de este período', prefixText: 'Q ')),
         TextField(controller: baseController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Proyección base mensual', prefixText: 'Q ')),
-        TextField(controller: overrideController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Proyección específica de ${_month(monthIndex + 1)} (opcional)', prefixText: 'Q ')),
+        TextField(controller: overrideController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: InputDecoration(labelText: 'Proyección específica de ${_month(monthIndex + 1)} (opcional)', prefixText: 'Q ')),
       ])),
       actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancelar')), FilledButton(onPressed: () {
         double? parse(TextEditingController c) => c.text.trim().isEmpty ? null : double.tryParse(c.text.replaceAll(',', ''));
