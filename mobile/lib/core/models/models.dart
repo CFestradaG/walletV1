@@ -49,15 +49,23 @@ class Account {
   bool get isArchived => status == 'archived';
   bool get isCreditCard => type == AccountType.credit_card;
 
-  factory Account.fromMap(Map<String, dynamic> m, String id) => Account(
+  factory Account.fromMap(Map<String, dynamic> m, String id) {
+    final type = _enum(AccountType.values, m['type'], AccountType.cash);
+    var initialBalance = _n(m['initialBalance']);
+    var currentBalance = _n(m['currentBalance'] ?? m['balance']);
+    if (type == AccountType.credit_card && initialBalance > 0 && currentBalance > 0) {
+      initialBalance = -initialBalance.abs();
+      currentBalance = -currentBalance.abs();
+    }
+    return Account(
         id: id,
         userId: _s(m['userId']),
         name: _s(m['name']),
         subtitle: m['subtitle'] as String?,
-        type: _enum(AccountType.values, m['type'], AccountType.cash),
+        type: type,
         currency: _s(m['currency'], 'GTQ'),
-        initialBalance: _n(m['initialBalance']),
-        currentBalance: _n(m['currentBalance'] ?? m['balance']),
+        initialBalance: initialBalance,
+        currentBalance: currentBalance,
         creditLimit: m['creditLimit'] == null ? null : _n(m['creditLimit']),
         status: _s(m['status'], 'active'),
         icon: _s(m['icon']),
@@ -67,6 +75,7 @@ class Account {
         createdAt: _s(m['createdAt']),
         updatedAt: _s(m['updatedAt']),
       );
+  }
 
   Map<String, dynamic> toMap() => _clean({
         'id': id,

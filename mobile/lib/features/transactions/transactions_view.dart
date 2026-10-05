@@ -359,9 +359,7 @@ Future<void> _openTransactionForm(
                     );
                     try {
                       await ref.read(walletRepositoryProvider).saveTransaction(
-                          transaction: tx,
-                          previous: transaction,
-                          accounts: accounts);
+                          transaction: tx);
                       if (context.mounted) Navigator.pop(context);
                     } catch (e) {
                       if (context.mounted)
@@ -399,7 +397,7 @@ Future<void> _deleteTransaction(BuildContext context, WidgetRef ref,
   try {
     await ref
         .read(walletRepositoryProvider)
-        .deleteTransaction(transaction: tx, accounts: accounts);
+        .deleteTransaction(transaction: tx);
   } catch (e) {
     if (context.mounted)
       ScaffoldMessenger.of(context)

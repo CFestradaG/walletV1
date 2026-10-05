@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../engines/financial_engine.dart';
 import '../engines/period_engine.dart';
 import '../firebase/firebase_providers.dart';
 import '../models/models.dart';
@@ -9,9 +9,11 @@ import '../models/models.dart';
 class WalletRepository {
   WalletRepository(this._db);
   final FirebaseFirestore _db;
+  final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(region: 'us-central1');
 
   DocumentReference<Map<String, dynamic>> userDoc(String uid) => _db.collection('users').doc(uid);
   CollectionReference<Map<String, dynamic>> _col(String uid, String name) => userDoc(uid).collection(name);
+  String newAccountId(String uid) => _col(uid, 'accounts').doc().id;
 
   Stream<List<T>> _watch<T>(String uid, String col, T Function(Map<String, dynamic>, String) f) =>
       _col(uid, col).snapshots().map((s) => s.docs.map((d) => f(d.data(), d.id)).toList());
@@ -103,7 +105,9 @@ class WalletRepository {
   }
 
   Future<void> saveSettings(UserSettings settings) => _col(settings.userId, 'settings').doc('default').set(settings.toMap(), SetOptions(merge: true));
-  Future<void> saveAccount(Account account) => _col(account.userId, 'accounts').doc(account.id).set(account.toMap());
+  Future<void> saveAccount(Account account) async {
+    await _functions.httpsCallable('saveAccount').call({'account': account.toMap()});
+  }
   Future<void> saveCategory(Category category) => _col(category.userId, 'categories').doc(category.id).set(category.toMap());
   Future<void> saveBudget(Budget budget) => _col(budget.userId, 'budgets').doc(budget.id).set(budget.toMap());
   Future<void> deleteBudget(String userId, String id) => _col(userId, 'budgets').doc(id).delete();
@@ -181,7 +185,8 @@ class WalletRepository {
   }
 
   Future<void> resetFinancialData(UserProfile profile, UserSettings preferences) async {
-    const names = ['settings', 'accounts', 'categories', 'periods', 'transactions', 'budgets'];
+    await _functions.httpsCallable('clearFinancialAccountsAndTransactions').call();
+    const names = ['settings', 'categories', 'periods', 'budgets'];
     final uid = profile.id;
     final snapshots = <QuerySnapshot<Map<String, dynamic>>>[];
     for (final name in names) {
@@ -213,7 +218,9 @@ class WalletRepository {
     await saveSettings(restoredSettings);
   }
 
-  Future<void> deleteAccount(String userId, String id) => _col(userId, 'accounts').doc(id).delete();
+  Future<void> deleteAccount(String userId, String id) async {
+    await _functions.httpsCallable('deleteAccount').call({'accountId': id});
+  }
 
   Future<void> archiveAccount(Account account) => saveAccount(Account(
     id: account.id, userId: account.userId, name: account.name, subtitle: account.subtitle,
@@ -227,31 +234,12 @@ class WalletRepository {
   /// La transacción y los saldos quedan en el mismo lote (máximo 500 escrituras).
   Future<void> saveTransaction({
     required WalletTransaction transaction,
-    required WalletTransaction? previous,
-    required List<Account> accounts,
   }) async {
-    var nextAccounts = previous == null ? accounts : applyTransactionToAccounts(previous, accounts, reverse: true);
-    nextAccounts = applyTransactionToAccounts(transaction, nextAccounts);
-    final batch = _db.batch();
-    batch.set(_col(transaction.userId, 'transactions').doc(transaction.id), transaction.toMap());
-    for (final account in nextAccounts) {
-      if (account.currentBalance != accounts.firstWhere((item) => item.id == account.id).currentBalance) {
-        batch.set(_col(transaction.userId, 'accounts').doc(account.id), account.toMap());
-      }
-    }
-    await batch.commit();
+    await _functions.httpsCallable('saveTransaction').call({'transaction': transaction.toMap()});
   }
 
-  Future<void> deleteTransaction({required WalletTransaction transaction, required List<Account> accounts}) async {
-    final updated = applyTransactionToAccounts(transaction, accounts, reverse: true);
-    final batch = _db.batch();
-    batch.delete(_col(transaction.userId, 'transactions').doc(transaction.id));
-    for (final account in updated) {
-      if (account.currentBalance != accounts.firstWhere((item) => item.id == account.id).currentBalance) {
-        batch.set(_col(transaction.userId, 'accounts').doc(account.id), account.toMap());
-      }
-    }
-    await batch.commit();
+  Future<void> deleteTransaction({required WalletTransaction transaction}) async {
+    await _functions.httpsCallable('deleteTransaction').call({'transactionId': transaction.id});
   }
 }
 

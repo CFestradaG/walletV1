@@ -208,8 +208,7 @@ Future<void> _openAccountForm(BuildContext context, WidgetRef ref, String uid,
                           final creditLimit =
                               double.tryParse(limit.text.replaceAll(',', ''));
                           final next = Account(
-                            id: account?.id ??
-                                'acc_${DateTime.now().microsecondsSinceEpoch}',
+                            id: account?.id ?? ref.read(walletRepositoryProvider).newAccountId(uid),
                             userId: uid,
                             name: name.text.trim(),
                             subtitle: subtitle.text.trim().isEmpty

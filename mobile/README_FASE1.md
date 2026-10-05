@@ -8,7 +8,7 @@ Aplicación móvil que comparte Auth y Firestore con Wallet Web. La estructura d
 - Bloqueo local por PIN de seis dígitos, biometría disponible, bloqueo por intentos y privacidad al pasar a segundo plano.
 - Navegación móvil para Inicio, Cuentas, Transacciones, Análisis y Más.
 - Cuentas de efectivo, banco, ahorro y tarjeta de crédito; saldos disponibles, deuda, edición y archivo.
-- Ingresos, egresos y transferencias; validación de cuentas/categorías/límite de crédito; edición y eliminación con actualización atómica del movimiento y saldos en Firestore.
+- Ingresos, egresos y transferencias mediante Cloud Functions compartidas con web; el servidor valida cuentas, categorías y límites, y actualiza movimiento y saldos atómicamente.
 - Períodos sin traslape, mes de referencia para el Panorama, subdivisión semanal/quincenal/mensual, selección del período activo y asociación de transacciones por fecha.
 - Panorama comparativo mensual, trimestral, semestral y anual. Las metas de período y proyecciones base/ajustes mensuales se guardan en Firestore; las metas directas de período tienen prioridad.
 - Dashboard del período activo con saldos, resumen y alertas de categorías por presupuesto.
@@ -18,25 +18,28 @@ Aplicación móvil que comparte Auth y Firestore con Wallet Web. La estructura d
 
 ## Configuración necesaria para ejecutar
 
-El entorno donde se generó el código no tiene Flutter ni Dart instalados. Esta carpeta contiene el código Dart, pero aún requiere los proyectos nativos y las opciones reales de Firebase antes de poder ejecutarse:
+Flutter está instalado y las carpetas `android/` e `ios/` ya existen. `lib/firebase_options.dart` todavía es un placeholder y debe generarse para las apps Android/iOS registradas en Firebase.
 
-```bash
+Desde la raíz del repositorio, si necesitas recrear las plataformas:
+
+```powershell
 flutter create --org gt.hame --project-name wallet_mobile --platforms=android,ios mobile
 ```
 
-Conserva los archivos existentes de `mobile/lib/` al generar las carpetas nativas. Luego configura FlutterFire:
+Para configurar FlutterFire (si el comando no está en PATH, usa la ruta completa mostrada):
 
-```bash
+```powershell
 dart pub global activate flutterfire_cli
-flutterfire configure --project=fintrack-gt
 cd mobile
+& "$env:LOCALAPPDATA\Pub\Cache\bin\flutterfire.bat" configure --project=fintrack-gt
 flutter pub get
 flutter analyze
-flutter test
 flutter run
 ```
 
-`lib/firebase_options.dart` es todavía un placeholder. FlutterFire debe reemplazarlo con las opciones de las aplicaciones Android/iOS registradas en Firebase. Para Google Sign-In también hacen falta las huellas SHA de Android y el URL scheme de iOS.
+Registra las aplicaciones Android/iOS en Firebase si aún no existen. Para Google Sign-In hacen falta las huellas SHA de Android y el URL scheme de iOS. Android necesita `minSdk = 23`, permiso `USE_BIOMETRIC` y `MainActivity` basada en `FlutterFragmentActivity`; iOS necesita `NSFaceIDUsageDescription`, iOS 13 o superior y `REVERSED_CLIENT_ID` como URL scheme.
+
+Las cuentas y transacciones usan Cloud Functions compartidas con la web y requieren conexión. Instala y compila las funciones con `npm install --prefix functions` y `npm --prefix functions run build`; despliega funciones antes de publicar las reglas que deniegan escrituras directas y el Hosting actualizado. Para desplegar Cloud Functions se requiere el plan Blaze.
 
 ### Ajustes nativos de biometría
 
@@ -44,7 +47,7 @@ flutter run
 
 **iOS:** agrega `NSFaceIDUsageDescription`, usa iOS 13 o superior y configura el `REVERSED_CLIENT_ID` de Google Sign-In como URL scheme.
 
-La aplicación usa la base Firestore con ID `ai-studio-walletv1-cde1c2b5-f2a2-489f-8062-58e6963a288b`, igual que la web. Firestore mantiene persistencia offline nativa.
+La aplicación usa la base Firestore `ai-studio-walletv1-cde1c2b5-f2a2-489f-8062-58e6963a288b`, igual que la web. La persistencia offline de Firestore se aplica a colecciones escritas directamente; cuentas y movimientos requieren conexión para llamar Cloud Functions.
 
 ## Seguridad PIN
 
@@ -54,10 +57,10 @@ El PIN no se sincroniza. Se almacena con sal y hash iterado en Keystore/Keychain
 
 - `lib/core/engines/financial_engine.dart`: validación de movimientos, balances y totales.
 - `lib/core/engines/period_engine.dart`: validación y generación de subperíodos, asociación de fecha.
-- `lib/core/repositories/wallet_repository.dart`: seed compatible con web, lecturas en tiempo real y operaciones Firestore.
+- `lib/core/repositories/wallet_repository.dart`: seed compatible con web, lecturas en tiempo real y Cloud Functions para cuentas y movimientos; Firestore para el resto.
 - `lib/core/firebase/wallet_providers.dart`: streams autenticados de datos.
 - `lib/features/`: pantallas por función.
 
 ## Estado de comprobación
 
-No fue posible ejecutar `flutter analyze` ni `flutter run` en el entorno de trabajo: no hay comandos `flutter` o `dart`, no se han generado las carpetas `android/` e `ios/` y las opciones Firebase son placeholder. Antes de usar la app se debe completar la configuración anterior y corregir cualquier error que reporte el SDK. No se agregó ni ejecutó una suite de pruebas.
+Las carpetas Android/iOS están generadas y `cloud_functions` quedó agregado a dependencias. `firebase_options.dart` sigue siendo placeholder, así que todavía no se puede ejecutar la app con Firebase. `flutter analyze --no-pub` quedó sin salida por más de un minuto y se interrumpió. No se ejecutaron pruebas. Las escrituras móvil de cuentas y movimientos requieren conexión; la cola offline móvil para estas operaciones queda pendiente.

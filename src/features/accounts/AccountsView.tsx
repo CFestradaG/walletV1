@@ -98,7 +98,8 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
     setEditingAccount(acc);
     setName(acc.name);
     setType(acc.type);
-    setBalanceStr(String(acc.currentBalance ?? acc.balance ?? 0));
+    const currentBalance = acc.currentBalance ?? acc.balance ?? 0;
+    setBalanceStr(String(acc.type === 'credit_card' ? Math.max(0, -currentBalance) : currentBalance));
     setCreditLimitStr(String(acc.creditLimit || 0));
     setCutoffDayStr(String(acc.cutoffDay || 15));
     setPaymentDueDayStr(String(acc.paymentDueDay || 5));
@@ -122,11 +123,16 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
 
     try {
       if (editingAccount) {
+        const editedBalance = type === 'credit_card' ? -Math.abs(numBal) : numBal;
+        const originalInputBalance = editingAccount.type === 'credit_card'
+          ? Math.max(0, -(editingAccount.currentBalance ?? editingAccount.balance ?? 0))
+          : (editingAccount.currentBalance ?? editingAccount.balance ?? 0);
         updateAccount(editingAccount.id, {
           name: name.trim(),
           creditLimit: numLimit,
           cutoffDay: numCutoff,
           paymentDueDay: numPaymentDue,
+          ...(numBal !== originalInputBalance ? { currentBalance: editedBalance } : {}),
           icon: editingAccount.icon || 'Landmark',
           color,
         });

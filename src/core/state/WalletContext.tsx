@@ -110,23 +110,25 @@ function mergeLocalStoreForUpload(defaultStore: UserDataStore, localStore: UserD
     ...localStore,
     profile: { ...localStore.profile, ...defaultStore.profile, id: uid },
     settings: { ...defaultStore.settings, ...localStore.settings, userId: uid },
-    accounts: mergeById(defaultStore.accounts, localStore.accounts || []),
+    // Local account copies may be stale after another device deletes or edits a record.
+    // Server snapshots are authoritative; queued offline writes are reconciled separately.
+    accounts: defaultStore.accounts,
     categories: mergeById(defaultStore.categories, localStore.categories || []),
     periods: mergeById(defaultStore.periods, localStore.periods || []),
-    transactions: (localStore.transactions || []).map((tx) => ({ ...tx, userId: uid })),
+    transactions: defaultStore.transactions,
     budgets: mergeById(defaultStore.budgets, localStore.budgets || []),
   };
 }
 
-function normalizeOwnedDocuments<T extends { userId?: string }>(
-  documents: Array<{ data: () => unknown }>,
+function normalizeOwnedDocuments<T extends { id?: string; userId?: string }>(
+  documents: Array<{ id: string; data: () => unknown }>,
   uid: string,
   repairMissingOwner: (record: T) => void
 ): T[] {
   return documents.flatMap((document) => {
     const record = document.data() as T;
-    const ownedRecord = { ...record, userId: uid } as T;
-    if (record.userId !== uid) repairMissingOwner(ownedRecord);
+    const ownedRecord = { ...record, id: document.id, userId: uid } as T;
+    if (record.userId !== uid || record.id !== document.id) repairMissingOwner(ownedRecord);
     return [ownedRecord];
   });
 }
@@ -178,6 +180,7 @@ interface WalletContextValue {
       creditLimit?: number;
       cutoffDay?: number;
       paymentDueDay?: number;
+      currentBalance?: number;
       icon: string;
       color: string;
     }
@@ -501,18 +504,17 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         const initialStore = createCleanUserStore(profile);
 
-        setDb((prev) => {
-          if (!prev.users[uid]) {
-            return {
-              ...prev,
-              users: {
-                ...prev.users,
-                [uid]: initialStore,
-              },
-            };
-          }
-          return prev;
-        });
+        setDb((prev) => ({
+          ...prev,
+          users: {
+            ...prev.users,
+            [uid]: {
+              ...(prev.users[uid] || initialStore),
+              accounts: [],
+              transactions: [],
+            },
+          },
+        }));
 
         // Upload data saved locally for this Firebase user before remote snapshots
         // replace the local state. This recovers records created before cloud sync.
@@ -534,6 +536,15 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           (snap) => {
             const remoteAccs = normalizeOwnedDocuments<Account>(snap.docs, uid, (account) => {
               offlineQueue.enqueue(uid, 'SAVE_ACCOUNT', { account });
+            }).map((account) => {
+              const balance = account.currentBalance ?? account.balance ?? 0;
+              if (account.type !== 'credit_card' || account.initialBalance <= 0 || balance <= 0) return account;
+              const normalized = {
+                ...account,
+                initialBalance: -Math.abs(account.initialBalance),
+                currentBalance: -Math.abs(balance),
+              };
+              return normalized;
             });
 
             // Reconcile with pending offline mutations
@@ -680,8 +691,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           (snap) => {
             const remoteTxs = snap.docs.flatMap((d) => {
               const data = d.data() as Transaction;
-              const owned = { ...data, userId: uid };
-              if (data.userId !== uid) offlineQueue.enqueue(uid, 'SAVE_TX_AND_ACCOUNTS', { transaction: owned, accounts: [] });
+              const owned = { ...data, id: d.id, userId: uid };
+              if (data.userId !== uid || data.id !== d.id) offlineQueue.enqueue(uid, 'SAVE_TX_AND_ACCOUNTS', { transaction: owned, accounts: [] });
               return [owned];
             });
 
@@ -1048,6 +1059,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (!currentUserId) return { ok: false, error: 'Usuario no autenticado.' };
     const cleanName = input.name.trim();
     if (!cleanName) return { ok: false, error: 'El nombre de la cuenta es obligatorio.' };
+    if (input.type === 'credit_card' && (!Number.isFinite(input.creditLimit) || (input.creditLimit || 0) <= 0)) {
+      return { ok: false, error: 'El límite de crédito debe ser mayor que cero.' };
+    }
 
     const normalizedBalance =
       input.type === 'credit_card'
@@ -1056,7 +1070,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
     const now = new Date().toISOString();
     const newAccount: Account = {
-      id: `acc_${Date.now()}`,
+      id: `acc_${crypto.randomUUID()}`,
       userId: currentUserId,
       name: cleanName,
       subtitle: input.subtitle?.trim() || undefined,
@@ -1094,6 +1108,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       creditLimit?: number;
       cutoffDay?: number;
       paymentDueDay?: number;
+      currentBalance?: number;
       icon: string;
       color: string;
     }
@@ -1104,11 +1119,18 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const existing = currentUserStore?.accounts.find((a) => a.id === accountId);
     if (!existing) return { ok: false, error: 'La cuenta no existe.' };
 
-    const updatedAccount: Account = {
+    const updatedBalance = input.currentBalance == null
+      ? existing.currentBalance
+      : existing.type === 'credit_card'
+        ? -Math.abs(input.currentBalance)
+        : Math.max(0, input.currentBalance);
+    const updatedAccount: Account & { balanceAdjustment?: number } = {
       ...existing,
       name: cleanName,
       subtitle: input.subtitle?.trim() || undefined,
       creditLimit: existing.type === 'credit_card' ? input.creditLimit : undefined,
+      currentBalance: updatedBalance,
+      balanceAdjustment: updatedBalance - existing.currentBalance,
       cutoffDay: existing.type === 'credit_card' ? (input.cutoffDay ?? existing.cutoffDay ?? 15) : undefined,
       paymentDueDay: existing.type === 'credit_card' ? (input.paymentDueDay ?? existing.paymentDueDay ?? 5) : undefined,
       icon: input.icon,

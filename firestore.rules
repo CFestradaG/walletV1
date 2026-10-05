@@ -39,10 +39,8 @@ service cloud.firestore {
       // Accounts
       match /accounts/{accountId} {
         allow read: if isOwner(userId);
-        allow create, update: if isOwner(userId)
-          && isValidId(accountId)
-          && request.resource.data.userId == userId;
-        allow delete: if isOwner(userId) && isValidId(accountId);
+        // All account writes go through authenticated Cloud Functions.
+        allow create, update, delete: if false;
       }
 
       // Categories
@@ -66,12 +64,8 @@ service cloud.firestore {
       // Transactions
       match /transactions/{transactionId} {
         allow read: if isOwner(userId);
-        allow create, update: if isOwner(userId)
-          && isValidId(transactionId)
-          && request.resource.data.userId == userId;
-        allow delete: if isOwner(userId)
-          && isValidId(transactionId)
-          && resource.data.userId == userId;
+        // Movements and affected balances are validated and committed atomically by Cloud Functions.
+        allow create, update, delete: if false;
       }
 
       // Budgets
