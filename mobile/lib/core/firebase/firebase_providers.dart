@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 /// La web usa una base de Firestore con ID propio (no la "(default)").
@@ -13,11 +14,18 @@ final firestoreProvider = Provider<FirebaseFirestore>((ref) {
     app: Firebase.app(),
     databaseId: kFirestoreDatabaseId,
   );
-  // Persistencia offline nativa: reemplaza a offlineQueue.ts de la web.
-  db.settings = const Settings(
-    persistenceEnabled: true,
-    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
-  );
+  if (!kIsWeb) {
+    db.settings = const Settings(
+      persistenceEnabled: true,
+      cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+    );
+  } else {
+    try {
+      db.settings = const Settings(
+        persistenceEnabled: true,
+      );
+    } catch (_) {}
+  }
   return db;
 });
 

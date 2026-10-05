@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -24,6 +25,13 @@ class AuthRepository {
   }
 
   Future<void> signInGoogle() async {
+    if (kIsWeb) {
+      final googleProvider = GoogleAuthProvider();
+      googleProvider.setCustomParameters({'prompt': 'select_account'});
+      final cred = await _auth.signInWithPopup(googleProvider);
+      await _ensureProfile(cred.user, 'google');
+      return;
+    }
     final account = await GoogleSignIn().signIn();
     if (account == null) return; // cancelado por el usuario
     final auth = await account.authentication;

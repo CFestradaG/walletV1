@@ -15,13 +15,34 @@ class FlutterSecureKv implements SecureKv {
               iOptions: IOSOptions(accessibility: KeychainAccessibility.passcode),
             );
   final FlutterSecureStorage _s;
+  final MemorySecureKv _memory = MemorySecureKv();
 
   @override
-  Future<String?> read(String key) => _s.read(key: key);
+  Future<String?> read(String key) async {
+    try {
+      return await _s.read(key: key);
+    } catch (_) {
+      return _memory.read(key);
+    }
+  }
+
   @override
-  Future<void> write(String key, String value) => _s.write(key: key, value: value);
+  Future<void> write(String key, String value) async {
+    try {
+      await _s.write(key: key, value: value);
+    } catch (_) {
+      await _memory.write(key, value);
+    }
+  }
+
   @override
-  Future<void> delete(String key) => _s.delete(key: key);
+  Future<void> delete(String key) async {
+    try {
+      await _s.delete(key: key);
+    } catch (_) {
+      await _memory.delete(key);
+    }
+  }
 }
 
 class MemorySecureKv implements SecureKv {

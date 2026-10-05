@@ -33,7 +33,7 @@ class BiometricService {
                   ? 'huella digital'
                   : 'biometría del dispositivo';
       return BiometricAvailability(available: true, label: label);
-    } on PlatformException {
+    } catch (_) {
       return BiometricAvailability.none;
     }
   }
@@ -44,7 +44,7 @@ class BiometricService {
         localizedReason: reason,
         options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
       );
-    } on PlatformException {
+    } catch (_) {
       return false;
     }
   }

@@ -17,10 +17,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'DefaultFirebaseOptions have not been configured for web - '
-        'you can reconfigure this by running the FlutterFire CLI again.',
-      );
+      return web;
     }
     switch (defaultTargetPlatform) {
       case TargetPlatform.android:
@@ -61,5 +58,14 @@ class DefaultFirebaseOptions {
     projectId: 'fintrack-gt',
     storageBucket: 'fintrack-gt.firebasestorage.app',
     iosBundleId: 'com.example.mobile',
+  );
+
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyAiFV7SkWlVeVZ2xGwPMpc8oq6MfRYbNMM',
+    appId: '1:862971153777:web:59674df0ba92a1e9abbad0',
+    messagingSenderId: '862971153777',
+    projectId: 'fintrack-gt',
+    authDomain: 'fintrack-gt.firebaseapp.com',
+    storageBucket: 'fintrack-gt.firebasestorage.app',
   );
 }

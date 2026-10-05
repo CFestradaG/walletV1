@@ -109,14 +109,16 @@ El estado describe presencia en el código, no validación de calidad ni desplie
 
 **Despliegue 2026-10-05:** Firestore Rules y Hosting se desplegaron al proyecto `fintrack-gt`; Hosting publica en `https://wallet-gt.web.app`. No se desplegaron Cloud Functions y `firebase.json` ya no las configura.
 
-**Aplicacion Flutter (`mobile/`):** Comparte Firebase Auth y Firestore nombrado (`kFirestoreDatabaseId`). Cuentas y movimientos usan transacciones Firestore cliente y el mismo esquema que web. `firebase_options.dart` configurado con credenciales Android e iOS de `fintrack-gt`.
+**Aplicacion Flutter (`mobile/`):** Comparte Firebase Auth y Firestore nombrado (`kFirestoreDatabaseId`). Cuentas y movimientos usan transacciones Firestore cliente y el mismo esquema que web. `firebase_options.dart` configurado con credenciales Android, iOS y Web de `fintrack-gt`.
 
-**Revisión y mejoras móvil (2026-10-05):**
-- Sincronización de tarjetas de crédito en móvil: se agregaron campos y badges de `cutoffDay` (día de corte) y `paymentDueDay` (día límite de pago) en el formulario de cuentas y tarjetas, resolviendo la omisión de estos datos en `Account(...)`.
-- Transacciones y períodos en móvil: asignación con fallback al período activo cuando la fecha no cae en un rango exacto existente (evitando transacciones huérfanas) y filtrado dual por `periodId` o rango de fechas.
-- Legibilidad en selectores: dropdowns de cuenta en registro de transacciones con icono, nombre y saldo formateado en GTQ.
-- Dashboard móvil: incorporadas alertas de umbral de presupuesto al 80% y 100%, y tarjeta de últimos movimientos registrados.
-- Desacople de functions: excluido `functions/` en `tsconfig.json` para validación `tsc` limpia.
+**Revisión y mejoras móvil y web Flutter (2026-10-05):**
+- **Habilitación de Flutter Web:** En `mobile/lib/firebase_options.dart` se configuraron las opciones de Firebase para Web (`kIsWeb`), resolviendo la excepción `UnsupportedError` al compilar o ejecutar en Chrome/Web.
+- **Google Sign-In en Web:** En `auth_repository.dart` se habilitó `signInWithPopup(GoogleAuthProvider())` en web, y se agregó `<meta name="google-signin-client_id">` en `mobile/web/index.html`.
+- **Diseño responsivo:** `MainShell` se adaptó para mostrar `NavigationRail` en pantallas medianas/grandes (>= 720px) con ancho centrado máximo de 860px, y `NavigationBar` en móviles.
+- **Resiliencia de almacenamiento y biometría en Web:** `FlutterSecureKv` incluye fallback a memoria para entornos web con restricciones de almacenamiento seguro, y `BiometricService` captura excepciones no soportadas sin romper la app.
+- **Sincronización de tarjetas de crédito:** Campos y badges de `cutoffDay` y `paymentDueDay` en cuentas.
+- **Transacciones y períodos:** Asignación con fallback al período activo y filtrado dual por `periodId` o rango de fechas.
+- **Desacople de functions:** Excluido `functions/` en `tsconfig.json` para validación `tsc` limpia.
 
 ### Actualizacion 2026-10-05 - persistencia directa en Spark
 
