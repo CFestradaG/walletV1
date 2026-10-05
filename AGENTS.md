@@ -39,6 +39,7 @@ Se retiraron `@google/genai`, Express, `dotenv` y `@types/express`: no tenían i
 | `src/features/annual_budget/` | **Único sistema unificado de Presupuesto y Panorama Anual**: matriz comparativa (Proyectado vs Real) en 4 horizontes temporales (Mensual 12M, Trimestral T1-T4, Semestral S1-S2, Anual Consolidado), basada 100% en las categorías configuradas del sistema, sincronizada con las fechas y metas de los períodos financieros, y exportación CSV. Se eliminó la duplicidad de presupuestos individuales aislados. |
 | `src/features/analytics/` | Resúmenes/visualizaciones, métricas y exportación CSV. |
 | `src/features/settings/` | Ajustes, categorías, opciones y acciones de sincronización. |
+| `mobile/` | Aplicación Flutter que comparte Firebase Auth y el esquema de Firestore con la web; pantallas móviles, seguridad local por PIN/biometría y acceso a datos financieros. |
 
 ## 3. Modelo de datos y reglas de negocio
 
@@ -105,6 +106,10 @@ El estado describe presencia en el código, no validación de calidad ni desplie
 | Riesgos/observaciones de código | `firebase-applet-config.json` contiene configuración cliente pública. Se mitigó el riesgo de desincronización transaccional mediante lotes atómicos y cola offline con persistencia. |
 
 **Comprobación (2026-10-04):** Para el dropdown de mes, el restablecimiento de cuenta y el ajuste móvil del encabezado del Panorama se ejecutaron `npm run lint` (`tsc --noEmit`) y `npm run build` (`vite build`), ambos con código de salida 0. Vite avisó que el bundle JS supera 500 kB y sobre `__dirname` en la configuración; el build terminó correctamente. Los cambios están desplegados en Firebase Hosting (`fintrack-gt`) en `https://fintrack-gt.web.app`; queda pendiente la prueba funcional del usuario en móvil y del restablecimiento.
+
+**Aplicación Flutter (`mobile/`):** Se implementaron navegación y pantallas móviles para autenticación, inicio, cuentas, transacciones, análisis, períodos, categorías, Panorama & Presupuesto, seguridad local y ajustes. Las operaciones usan los documentos compartidos de Firebase; transacciones y saldos se escriben en un mismo lote. El Panorama soporta vistas mensuales, trimestrales, semestrales y anuales, metas de período y proyecciones mensuales. El restablecimiento está disponible en Más con confirmación. La exportación no forma parte de la app móvil.
+
+**Pendiente móvil:** El entorno no tiene Flutter/Dart; no existen proyectos nativos `android/` e `ios/` y `mobile/lib/firebase_options.dart` es placeholder. Por eso no se ejecutaron `flutter analyze` ni `flutter run` y no puede probarse en dispositivo todavía. Hay que generar plataformas nativas, configurar FlutterFire para `fintrack-gt` (incluida la base Firestore con ID configurado en la app) y resolver los avisos/errores del SDK al compilar. Guía en `mobile/README_FASE1.md`.
 
 ## 6. Decisiones y convenciones observadas
 
