@@ -79,6 +79,84 @@ class DashboardView extends ConsumerWidget {
           ]),
           const SizedBox(height: 12),
         ])),
+        const SizedBox(height: 8),
+        txAsync.when(
+          loading: () => const SizedBox.shrink(),
+          error: (_, __) => const SizedBox.shrink(),
+          data: (allTxs) {
+            final recent = [...allTxs]..sort((a, b) => b.date.compareTo(a.date));
+            final top5 = recent.take(5).toList();
+            if (top5.isEmpty) return const SizedBox.shrink();
+            final categories = categoriesAsync.valueOrNull ?? const <Category>[];
+            return Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Movimientos recientes',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.bold)),
+                        TextButton(
+                            onPressed: () => context.go('/transactions'),
+                            child: const Text('Ver todas')),
+                      ],
+                    ),
+                    const Divider(height: 10),
+                    for (final tx in top5)
+                      ListTile(
+                        dense: true,
+                        contentPadding: EdgeInsets.zero,
+                        leading: CircleAvatar(
+                          radius: 16,
+                          child: Text(
+                            categories
+                                    .where((c) => c.id == tx.categoryId)
+                                    .firstOrNull
+                                    ?.icon ??
+                                (tx.type == TransactionType.transfer
+                                    ? '🔄'
+                                    : tx.type == TransactionType.income
+                                        ? '💵'
+                                        : '💸'),
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        ),
+                        title: Text(
+                            tx.note.isEmpty
+                                ? (tx.type == TransactionType.expense
+                                    ? 'Gasto'
+                                    : tx.type == TransactionType.income
+                                        ? 'Ingreso'
+                                        : 'Transferencia')
+                                : tx.note,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                        subtitle:
+                            Text(tx.date, style: const TextStyle(fontSize: 11)),
+                        trailing: Text(
+                          '${tx.type == TransactionType.income ? '+' : tx.type == TransactionType.expense ? '−' : ''}${formatGTQ(tx.amount, hide: settingsAsync.valueOrNull?.hideBalances ?? false)}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: tx.type == TransactionType.income
+                                ? Colors.green
+                                : (tx.type == TransactionType.expense
+                                    ? Theme.of(context).colorScheme.error
+                                    : null),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
+            );
+          },
+        ),
       ]),
     );
   }
@@ -97,10 +175,15 @@ class _PeriodSummaryCard extends StatelessWidget {
     final limit = budgets.where((b) => b.categoryId.isNotEmpty).fold<double>(0, (s, b) => s + b.targetAmount);
     final categories = categoriesAsync.valueOrNull ?? const <Category>[];
     final over = <String>{};
+    final warn80 = <String>{};
     for (final b in budgets) {
       final cat = categories.where((c) => c.id == b.categoryId).firstOrNull;
       final categorySpent = txs.where((t) => t.type == TransactionType.expense && t.categoryId == b.categoryId && t.date.compareTo(p.startDate) >= 0 && t.date.compareTo(p.endDate) <= 0).fold<double>(0, (s, t) => s + t.amount);
-      if (b.alertThreshold100 && categorySpent > b.targetAmount) over.add(cat?.name ?? 'Una categoría');
+      if (b.alertThreshold100 && categorySpent > b.targetAmount) {
+        over.add(cat?.name ?? 'Una categoría');
+      } else if (b.alertThreshold80 && categorySpent >= b.targetAmount * 0.8) {
+        warn80.add(cat?.name ?? 'Una categoría');
+      }
     }
     return Card(child: Padding(padding: const EdgeInsets.all(16), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
       Text('Resumen del período', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
@@ -115,7 +198,8 @@ class _PeriodSummaryCard extends StatelessWidget {
         LinearProgressIndicator(value: (spent / limit).clamp(0, 1).toDouble(), color: spent > limit ? Theme.of(context).colorScheme.error : null),
         Text('${formatGTQ(spent, hide: hidden)} de ${formatGTQ(limit, hide: hidden)}', style: Theme.of(context).textTheme.bodySmall),
       ],
-      for (final name in over) ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: const Icon(Icons.warning_amber, color: Colors.orange), title: Text('$name superó su presupuesto')),
+      for (final name in over) ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: const Icon(Icons.error_outline, color: Colors.red), title: Text('$name superó su presupuesto (100%)')),
+      for (final name in warn80) ListTile(dense: true, contentPadding: EdgeInsets.zero, leading: const Icon(Icons.warning_amber, color: Colors.orange), title: Text('$name superó el 80% de su presupuesto')),
     ])));
   }
 }

@@ -26,15 +26,9 @@ class DefaultFirebaseOptions {
       case TargetPlatform.android:
         return android;
       case TargetPlatform.iOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for ios - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return ios;
       case TargetPlatform.macOS:
-        throw UnsupportedError(
-          'DefaultFirebaseOptions have not been configured for macos - '
-          'you can reconfigure this by running the FlutterFire CLI again.',
-        );
+        return ios;
       case TargetPlatform.windows:
         throw UnsupportedError(
           'DefaultFirebaseOptions have not been configured for windows - '
@@ -58,5 +52,14 @@ class DefaultFirebaseOptions {
     messagingSenderId: '862971153777',
     projectId: 'fintrack-gt',
     storageBucket: 'fintrack-gt.firebasestorage.app',
+  );
+
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyCIJY8XLlb5Bhsc1hd4pnB14qq6luQ-W9I',
+    appId: '1:862971153777:ios:227b91fdd8a5f36fabbad0',
+    messagingSenderId: '862971153777',
+    projectId: 'fintrack-gt',
+    storageBucket: 'fintrack-gt.firebasestorage.app',
+    iosBundleId: 'com.example.mobile',
   );
 }

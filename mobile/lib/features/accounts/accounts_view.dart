@@ -78,8 +78,69 @@ class AccountsView extends ConsumerWidget {
                             ? _accountEmoji(account.type)
                             : account.icon)),
                     title: Text(account.name),
-                    subtitle: Text(
-                        '${_accountTypeName(account.type)}${account.isArchived ? ' · Archivada' : ''}${account.subtitle == null || account.subtitle!.isEmpty ? '' : ' · ${account.subtitle}'}'),
+                    subtitle: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                            '${_accountTypeName(account.type)}${account.isArchived ? ' · Archivada' : ''}${account.subtitle == null || account.subtitle!.isEmpty ? '' : ' · ${account.subtitle}'}'),
+                        if (account.isCreditCard)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.amber.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.calendar_today,
+                                          size: 11, color: Colors.amber),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        'Corte: día ${account.cutoffDay ?? 15}',
+                                        style: const TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.amber),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.lightBlue.withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.alarm,
+                                          size: 11, color: Colors.lightBlue),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        'Pago: día ${account.paymentDueDay ?? 5}',
+                                        style: const TextStyle(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w600,
+                                            color: Colors.lightBlue),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
                     trailing: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         crossAxisAlignment: CrossAxisAlignment.end,
@@ -142,6 +203,10 @@ Future<void> _openAccountForm(BuildContext context, WidgetRef ref, String uid,
           : account.initialBalance.abs().toStringAsFixed(2));
   final limit = TextEditingController(
       text: account?.creditLimit?.toStringAsFixed(2) ?? '');
+  final cutoff = TextEditingController(
+      text: account?.cutoffDay?.toString() ?? '15');
+  final paymentDue = TextEditingController(
+      text: account?.paymentDueDay?.toString() ?? '5');
   var type = account?.type ?? AccountType.cash;
   final formKey = GlobalKey<FormState>();
   await showModalBottomSheet<void>(
@@ -189,7 +254,7 @@ Future<void> _openAccountForm(BuildContext context, WidgetRef ref, String uid,
                           decoration: const InputDecoration(
                               labelText: 'Saldo inicial', prefixText: 'Q '),
                           validator: _amountValidator),
-                    if (type == AccountType.credit_card)
+                    if (type == AccountType.credit_card) ...[
                       TextFormField(
                           controller: limit,
                           keyboardType: const TextInputType.numberWithOptions(
@@ -197,6 +262,43 @@ Future<void> _openAccountForm(BuildContext context, WidgetRef ref, String uid,
                           decoration: const InputDecoration(
                               labelText: 'Límite de crédito', prefixText: 'Q '),
                           validator: _amountValidator),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextFormField(
+                              controller: cutoff,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                  labelText: 'Día de corte',
+                                  hintText: '15'),
+                              validator: (v) {
+                                final n = int.tryParse(v ?? '');
+                                return n == null || n < 1 || n > 31
+                                    ? 'Día entre 1 y 31'
+                                    : null;
+                              },
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextFormField(
+                              controller: paymentDue,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                  labelText: 'Día límite de pago',
+                                  hintText: '5'),
+                              validator: (v) {
+                                final n = int.tryParse(v ?? '');
+                                return n == null || n < 1 || n > 31
+                                    ? 'Día entre 1 y 31'
+                                    : null;
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 18),
                     FilledButton(
                         onPressed: () async {
@@ -230,6 +332,12 @@ Future<void> _openAccountForm(BuildContext context, WidgetRef ref, String uid,
                             status: account?.status ?? 'active',
                             icon: account?.icon ?? _accountEmoji(type),
                             color: account?.color ?? '#10B981',
+                            cutoffDay: type == AccountType.credit_card
+                                ? int.tryParse(cutoff.text)
+                                : null,
+                            paymentDueDay: type == AccountType.credit_card
+                                ? int.tryParse(paymentDue.text)
+                                : null,
                             createdAt: account?.createdAt ?? now,
                             updatedAt: now,
                           );
@@ -253,6 +361,8 @@ Future<void> _openAccountForm(BuildContext context, WidgetRef ref, String uid,
   subtitle.dispose();
   balance.dispose();
   limit.dispose();
+  cutoff.dispose();
+  paymentDue.dispose();
 }
 
 String? _amountValidator(String? value) {

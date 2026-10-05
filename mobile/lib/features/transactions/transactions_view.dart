@@ -36,7 +36,8 @@ class _TransactionsViewState extends ConsumerState<TransactionsView> {
               onPressed: () => _openTransactionForm(context, ref, user.id,
                   accounts: accountsAsync.value!,
                   categories: categoriesAsync.value!,
-                  periods: periodsAsync.value!),
+                  periods: periodsAsync.value!,
+                  settings: settings),
               icon: const Icon(Icons.add),
               label: const Text('Nueva transacción'))
           : null,
@@ -66,9 +67,10 @@ class _TransactionsViewState extends ConsumerState<TransactionsView> {
                   final period = activePeriods
                       .where((p) => p.id == _periodFilter)
                       .firstOrNull;
-                  return period != null &&
-                      tx.date.compareTo(period.startDate) >= 0 &&
-                      tx.date.compareTo(period.endDate) <= 0;
+                  if (period == null) return true;
+                  return tx.periodId == period.id ||
+                      (tx.date.compareTo(period.startDate) >= 0 &&
+                          tx.date.compareTo(period.endDate) <= 0);
                 }).toList()
                   ..sort((a, b) => b.date.compareTo(a.date));
                 return ListView(
@@ -117,6 +119,7 @@ class _TransactionsViewState extends ConsumerState<TransactionsView> {
                               accounts: accounts,
                               categories: categories,
                               periods: periods,
+                              settings: settings,
                               transaction: tx),
                           onLongPress: () =>
                               _deleteTransaction(context, ref, tx, accounts),
@@ -144,6 +147,7 @@ Future<void> _openTransactionForm(
   required List<Account> accounts,
   required List<Category> categories,
   required List<FinancialPeriod> periods,
+  UserSettings? settings,
   WalletTransaction? transaction,
 }) async {
   final note = TextEditingController(text: transaction?.note ?? '');
@@ -227,7 +231,23 @@ Future<void> _openTransactionForm(
                         const InputDecoration(labelText: 'Cuenta de origen'),
                     items: [
                       for (final a in usableAccounts)
-                        DropdownMenuItem(value: a.id, child: Text(a.name))
+                        DropdownMenuItem(
+                          value: a.id,
+                          child: Row(
+                            children: [
+                              Text(a.icon.isEmpty ? (a.isCreditCard ? '💳' : '💵') : a.icon),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(a.name, overflow: TextOverflow.ellipsis)),
+                              Text(
+                                formatGTQ(a.currentBalance, hide: settings?.hideBalances ?? false),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: a.currentBalance >= 0 ? Colors.teal : Colors.red,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                     onChanged: (v) => setState(() => originId = v)),
                 DropdownButtonFormField<String>(
@@ -236,7 +256,23 @@ Future<void> _openTransactionForm(
                         const InputDecoration(labelText: 'Cuenta de destino'),
                     items: [
                       for (final a in usableAccounts)
-                        DropdownMenuItem(value: a.id, child: Text(a.name))
+                        DropdownMenuItem(
+                          value: a.id,
+                          child: Row(
+                            children: [
+                              Text(a.icon.isEmpty ? (a.isCreditCard ? '💳' : '💵') : a.icon),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(a.name, overflow: TextOverflow.ellipsis)),
+                              Text(
+                                formatGTQ(a.currentBalance, hide: settings?.hideBalances ?? false),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: a.currentBalance >= 0 ? Colors.teal : Colors.red,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                     onChanged: (v) => setState(() => destinationId = v)),
               ] else ...[
@@ -245,7 +281,23 @@ Future<void> _openTransactionForm(
                     decoration: const InputDecoration(labelText: 'Cuenta'),
                     items: [
                       for (final a in usableAccounts)
-                        DropdownMenuItem(value: a.id, child: Text(a.name))
+                        DropdownMenuItem(
+                          value: a.id,
+                          child: Row(
+                            children: [
+                              Text(a.icon.isEmpty ? (a.isCreditCard ? '💳' : '💵') : a.icon),
+                              const SizedBox(width: 8),
+                              Expanded(child: Text(a.name, overflow: TextOverflow.ellipsis)),
+                              Text(
+                                formatGTQ(a.currentBalance, hide: settings?.hideBalances ?? false),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: a.currentBalance >= 0 ? Colors.teal : Colors.red,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                     onChanged: (v) => setState(() => accountId = v)),
                 DropdownButtonFormField<String>(
@@ -324,6 +376,11 @@ Future<void> _openTransactionForm(
                       return;
                     }
                     final resolved = resolvePeriod(date, periods);
+                    final fallbackPeriod = periods
+                            .where((p) => p.id == (settings?.activePeriodId ?? ''))
+                            .firstOrNull ??
+                        (periods.isNotEmpty ? periods.first : null);
+                    final assignedPeriod = resolved.period ?? fallbackPeriod;
                     final now = DateTime.now().toIso8601String();
                     final destination = accounts
                         .where((a) => a.id == destinationId)
@@ -352,7 +409,7 @@ Future<void> _openTransactionForm(
                           destination?.isCreditCard == true,
                       date: date,
                       note: note.text.trim(),
-                      periodId: resolved.period?.id,
+                      periodId: assignedPeriod?.id,
                       subperiodId: resolved.subperiod?.id,
                       createdAt: transaction?.createdAt ?? now,
                       updatedAt: now,

@@ -1,4 +1,4 @@
-﻿# Contexto del proyecto Wallet
+# Contexto del proyecto Wallet
 
 Documento de orientación basado en el código y la configuración presentes en el repositorio al momento de su creación. No sustituye una auditoría funcional o de seguridad.
 
@@ -109,9 +109,14 @@ El estado describe presencia en el código, no validación de calidad ni desplie
 
 **Despliegue 2026-10-05:** Firestore Rules y Hosting se desplegaron al proyecto `fintrack-gt`; Hosting publica en `https://wallet-gt.web.app`. No se desplegaron Cloud Functions y `firebase.json` ya no las configura.
 
-**Aplicacion Flutter (`mobile/`):** Comparte Firebase Auth y Firestore nombrado. Cuentas y movimientos usan transacciones Firestore cliente y el mismo esquema que web. `firebase_options.dart` debe generarse antes de ejecutar.
+**Aplicacion Flutter (`mobile/`):** Comparte Firebase Auth y Firestore nombrado (`kFirestoreDatabaseId`). Cuentas y movimientos usan transacciones Firestore cliente y el mismo esquema que web. `firebase_options.dart` configurado con credenciales Android e iOS de `fintrack-gt`.
 
-**Pendiente movil:** Android e iOS ya tienen carpetas nativas. Falta generar `mobile/lib/firebase_options.dart` real con FlutterFire, compilar y probar en dispositivo. El analisis Flutter se quedo sin salida en este entorno.
+**Revisión y mejoras móvil (2026-10-05):**
+- Sincronización de tarjetas de crédito en móvil: se agregaron campos y badges de `cutoffDay` (día de corte) y `paymentDueDay` (día límite de pago) en el formulario de cuentas y tarjetas, resolviendo la omisión de estos datos en `Account(...)`.
+- Transacciones y períodos en móvil: asignación con fallback al período activo cuando la fecha no cae en un rango exacto existente (evitando transacciones huérfanas) y filtrado dual por `periodId` o rango de fechas.
+- Legibilidad en selectores: dropdowns de cuenta en registro de transacciones con icono, nombre y saldo formateado en GTQ.
+- Dashboard móvil: incorporadas alertas de umbral de presupuesto al 80% y 100%, y tarjeta de últimos movimientos registrados.
+- Desacople de functions: excluido `functions/` en `tsconfig.json` para validación `tsc` limpia.
 
 ### Actualizacion 2026-10-05 - persistencia directa en Spark
 
