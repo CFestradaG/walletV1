@@ -13,8 +13,9 @@ class AccountsView extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profile = ref.watch(signedInUserProvider);
-    if (profile == null)
+    if (profile == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     final data = ref.watch(accountsProvider(profile.id));
     final hide =
         ref.watch(settingsProvider(profile.id)).valueOrNull?.hideBalances ??
@@ -117,7 +118,8 @@ class AccountsView extends ConsumerWidget {
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
-                                    color: Colors.lightBlue.withValues(alpha: 0.15),
+                                    color: Colors.lightBlue
+                                        .withValues(alpha: 0.15),
                                     borderRadius: BorderRadius.circular(6),
                                   ),
                                   child: Row(
@@ -203,10 +205,10 @@ Future<void> _openAccountForm(BuildContext context, WidgetRef ref, String uid,
           : account.initialBalance.abs().toStringAsFixed(2));
   final limit = TextEditingController(
       text: account?.creditLimit?.toStringAsFixed(2) ?? '');
-  final cutoff = TextEditingController(
-      text: account?.cutoffDay?.toString() ?? '15');
-  final paymentDue = TextEditingController(
-      text: account?.paymentDueDay?.toString() ?? '5');
+  final cutoff =
+      TextEditingController(text: account?.cutoffDay?.toString() ?? '15');
+  final paymentDue =
+      TextEditingController(text: account?.paymentDueDay?.toString() ?? '5');
   var type = account?.type ?? AccountType.cash;
   final formKey = GlobalKey<FormState>();
   await showModalBottomSheet<void>(
@@ -270,8 +272,7 @@ Future<void> _openAccountForm(BuildContext context, WidgetRef ref, String uid,
                               controller: cutoff,
                               keyboardType: TextInputType.number,
                               decoration: const InputDecoration(
-                                  labelText: 'Día de corte',
-                                  hintText: '15'),
+                                  labelText: 'Día de corte', hintText: '15'),
                               validator: (v) {
                                 final n = int.tryParse(v ?? '');
                                 return n == null || n < 1 || n > 31
@@ -310,7 +311,10 @@ Future<void> _openAccountForm(BuildContext context, WidgetRef ref, String uid,
                           final creditLimit =
                               double.tryParse(limit.text.replaceAll(',', ''));
                           final next = Account(
-                            id: account?.id ?? ref.read(walletRepositoryProvider).newAccountId(uid),
+                            id: account?.id ??
+                                ref
+                                    .read(walletRepositoryProvider)
+                                    .newAccountId(uid),
                             userId: uid,
                             name: name.text.trim(),
                             subtitle: subtitle.text.trim().isEmpty
@@ -347,10 +351,11 @@ Future<void> _openAccountForm(BuildContext context, WidgetRef ref, String uid,
                                 .saveAccount(next);
                             if (context.mounted) Navigator.pop(context);
                           } catch (e) {
-                            if (context.mounted)
+                            if (context.mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                       content: Text('No se pudo guardar: $e')));
+                            }
                           }
                         },
                         child: const Text('Guardar cuenta')),
@@ -391,9 +396,10 @@ Future<void> _archiveAccount(
   try {
     await ref.read(walletRepositoryProvider).archiveAccount(account);
   } catch (e) {
-    if (context.mounted)
+    if (context.mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('No se pudo archivar: $e')));
+    }
   }
 }
 

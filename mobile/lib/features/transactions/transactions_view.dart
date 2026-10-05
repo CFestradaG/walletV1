@@ -20,8 +20,9 @@ class _TransactionsViewState extends ConsumerState<TransactionsView> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(signedInUserProvider);
-    if (user == null)
+    if (user == null) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
+    }
     final accountsAsync = ref.watch(accountsProvider(user.id));
     final categoriesAsync = ref.watch(categoriesProvider(user.id));
     final periodsAsync = ref.watch(periodsProvider(user.id));
@@ -59,11 +60,13 @@ class _TransactionsViewState extends ConsumerState<TransactionsView> {
                   ..sort((a, b) => a.startDate.compareTo(b.startDate));
                 final validFilter = _periodFilter == 'all' ||
                     activePeriods.any((p) => p.id == _periodFilter);
-                if (!validFilter)
+                if (!validFilter) {
                   _periodFilter = settings?.activePeriodId ?? 'all';
+                }
                 final filtered = allTxs.where((tx) {
-                  if (_periodFilter == null || _periodFilter == 'all')
+                  if (_periodFilter == null || _periodFilter == 'all') {
                     return true;
+                  }
                   final period = activePeriods
                       .where((p) => p.id == _periodFilter)
                       .firstOrNull;
@@ -174,7 +177,9 @@ Future<void> _openTransactionForm(
                   (type == TransactionType.income ? 'income' : 'expense'))
           .toList();
       if (categoryId != null &&
-          !filteredCategories.any((c) => c.id == categoryId)) categoryId = null;
+          !filteredCategories.any((c) => c.id == categoryId)) {
+        categoryId = null;
+      }
       final selectedCategory =
           filteredCategories.where((c) => c.id == categoryId).firstOrNull;
       return Padding(
@@ -235,14 +240,21 @@ Future<void> _openTransactionForm(
                           value: a.id,
                           child: Row(
                             children: [
-                              Text(a.icon.isEmpty ? (a.isCreditCard ? '💳' : '💵') : a.icon),
+                              Text(a.icon.isEmpty
+                                  ? (a.isCreditCard ? '💳' : '💵')
+                                  : a.icon),
                               const SizedBox(width: 8),
-                              Expanded(child: Text(a.name, overflow: TextOverflow.ellipsis)),
+                              Expanded(
+                                  child: Text(a.name,
+                                      overflow: TextOverflow.ellipsis)),
                               Text(
-                                formatGTQ(a.currentBalance, hide: settings?.hideBalances ?? false),
+                                formatGTQ(a.currentBalance,
+                                    hide: settings?.hideBalances ?? false),
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: a.currentBalance >= 0 ? Colors.teal : Colors.red,
+                                  color: a.currentBalance >= 0
+                                      ? Colors.teal
+                                      : Colors.red,
                                 ),
                               ),
                             ],
@@ -260,14 +272,21 @@ Future<void> _openTransactionForm(
                           value: a.id,
                           child: Row(
                             children: [
-                              Text(a.icon.isEmpty ? (a.isCreditCard ? '💳' : '💵') : a.icon),
+                              Text(a.icon.isEmpty
+                                  ? (a.isCreditCard ? '💳' : '💵')
+                                  : a.icon),
                               const SizedBox(width: 8),
-                              Expanded(child: Text(a.name, overflow: TextOverflow.ellipsis)),
+                              Expanded(
+                                  child: Text(a.name,
+                                      overflow: TextOverflow.ellipsis)),
                               Text(
-                                formatGTQ(a.currentBalance, hide: settings?.hideBalances ?? false),
+                                formatGTQ(a.currentBalance,
+                                    hide: settings?.hideBalances ?? false),
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: a.currentBalance >= 0 ? Colors.teal : Colors.red,
+                                  color: a.currentBalance >= 0
+                                      ? Colors.teal
+                                      : Colors.red,
                                 ),
                               ),
                             ],
@@ -285,14 +304,21 @@ Future<void> _openTransactionForm(
                           value: a.id,
                           child: Row(
                             children: [
-                              Text(a.icon.isEmpty ? (a.isCreditCard ? '💳' : '💵') : a.icon),
+                              Text(a.icon.isEmpty
+                                  ? (a.isCreditCard ? '💳' : '💵')
+                                  : a.icon),
                               const SizedBox(width: 8),
-                              Expanded(child: Text(a.name, overflow: TextOverflow.ellipsis)),
+                              Expanded(
+                                  child: Text(a.name,
+                                      overflow: TextOverflow.ellipsis)),
                               Text(
-                                formatGTQ(a.currentBalance, hide: settings?.hideBalances ?? false),
+                                formatGTQ(a.currentBalance,
+                                    hide: settings?.hideBalances ?? false),
                                 style: TextStyle(
                                   fontSize: 12,
-                                  color: a.currentBalance >= 0 ? Colors.teal : Colors.red,
+                                  color: a.currentBalance >= 0
+                                      ? Colors.teal
+                                      : Colors.red,
                                 ),
                               ),
                             ],
@@ -345,8 +371,9 @@ Future<void> _openTransactionForm(
                         initialDate: parsed,
                         firstDate: DateTime(2000),
                         lastDate: DateTime(2100));
-                    if (picked != null)
+                    if (picked != null) {
                       setState(() => date = toIsoDate(picked));
+                    }
                   }),
               const SizedBox(height: 12),
               FilledButton(
@@ -377,7 +404,8 @@ Future<void> _openTransactionForm(
                     }
                     final resolved = resolvePeriod(date, periods);
                     final fallbackPeriod = periods
-                            .where((p) => p.id == (settings?.activePeriodId ?? ''))
+                            .where(
+                                (p) => p.id == (settings?.activePeriodId ?? ''))
                             .firstOrNull ??
                         (periods.isNotEmpty ? periods.first : null);
                     final assignedPeriod = resolved.period ?? fallbackPeriod;
@@ -415,13 +443,15 @@ Future<void> _openTransactionForm(
                       updatedAt: now,
                     );
                     try {
-                      await ref.read(walletRepositoryProvider).saveTransaction(
-                          transaction: tx);
+                      await ref
+                          .read(walletRepositoryProvider)
+                          .saveTransaction(transaction: tx);
                       if (context.mounted) Navigator.pop(context);
                     } catch (e) {
-                      if (context.mounted)
+                      if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(content: Text('No se pudo guardar: $e')));
+                      }
                     }
                   },
                   child: const Text('Guardar transacción')),
@@ -452,13 +482,12 @@ Future<void> _deleteTransaction(BuildContext context, WidgetRef ref,
           ));
   if (yes != true) return;
   try {
-    await ref
-        .read(walletRepositoryProvider)
-        .deleteTransaction(transaction: tx);
+    await ref.read(walletRepositoryProvider).deleteTransaction(transaction: tx);
   } catch (e) {
-    if (context.mounted)
+    if (context.mounted) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text('No se pudo eliminar: $e')));
+    }
   }
 }
 

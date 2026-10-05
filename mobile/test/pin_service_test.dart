@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import '../lib/core/security/pin_service.dart';
-import '../lib/core/security/secure_kv.dart';
+import 'package:wallet_mobile/core/security/pin_service.dart';
+import 'package:wallet_mobile/core/security/secure_kv.dart';
 
 void main() {
   late MemorySecureKv kv;

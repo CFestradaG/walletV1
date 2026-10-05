@@ -1,4 +1,3 @@
-import 'package:flutter/services.dart';
 import 'package:local_auth/local_auth.dart';
 
 class BiometricAvailability {
@@ -8,7 +7,8 @@ class BiometricAvailability {
   /// Texto para la UI segun lo que ofrezca el dispositivo.
   final String label;
 
-  static const none = BiometricAvailability(available: false, label: 'biometría');
+  static const none =
+      BiometricAvailability(available: false, label: 'biometría');
 }
 
 class BiometricService {
@@ -42,7 +42,8 @@ class BiometricService {
     try {
       return await _auth.authenticate(
         localizedReason: reason,
-        options: const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
+        options:
+            const AuthenticationOptions(biometricOnly: true, stickyAuth: true),
       );
     } catch (_) {
       return false;
