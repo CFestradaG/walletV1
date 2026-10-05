@@ -36,11 +36,25 @@ service cloud.firestore {
         allow delete: if isOwner(userId) && isValidId(settingsId);
       }
 
-      // Accounts
+      // Accounts: direct client writes on Spark, limited to the authenticated owner.
       match /accounts/{accountId} {
         allow read: if isOwner(userId);
-        // All account writes go through authenticated Cloud Functions.
-        allow create, update, delete: if false;
+        allow create, update: if isOwner(userId)
+          && isValidId(accountId)
+          && request.resource.data.id == accountId
+          && request.resource.data.userId == userId
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 100
+          && request.resource.data.type in ['cash', 'bank', 'savings', 'credit_card']
+          && request.resource.data.currentBalance is number
+          && request.resource.data.initialBalance is number
+          && request.resource.data.currentBalance < 1000000000000
+          && request.resource.data.currentBalance > -1000000000000
+          && request.resource.data.initialBalance < 1000000000000
+          && request.resource.data.initialBalance > -1000000000000
+          && request.resource.data.status in ['active', 'archived'];
+        allow delete: if isOwner(userId) && isValidId(accountId);
       }
 
       // Categories
@@ -61,11 +75,25 @@ service cloud.firestore {
         allow delete: if isOwner(userId) && isValidId(periodId);
       }
 
-      // Transactions
+      // Transactions: transaction and impacted accounts are committed by client transactions.
       match /transactions/{transactionId} {
         allow read: if isOwner(userId);
-        // Movements and affected balances are validated and committed atomically by Cloud Functions.
-        allow create, update, delete: if false;
+        allow create, update: if isOwner(userId)
+          && isValidId(transactionId)
+          && request.resource.data.id == transactionId
+          && request.resource.data.userId == userId
+          && request.resource.data.type in ['expense', 'income', 'transfer']
+          && request.resource.data.amount is number
+          && request.resource.data.amount > 0
+          && request.resource.data.amount < 1000000000000
+          && request.resource.data.currency is string
+          && request.resource.data.currency.size() == 3
+          && request.resource.data.date is string
+          && request.resource.data.date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && transactionAccountsExist(userId, request.resource.data);
+        allow delete: if isOwner(userId)
+          && isValidId(transactionId)
+          && resource.data.userId == userId;
       }
 
       // Budgets
@@ -76,6 +104,17 @@ service cloud.firestore {
           && request.resource.data.userId == userId;
         allow delete: if isOwner(userId) && isValidId(budgetId);
       }
+    }
+
+    function transactionAccountsExist(userId, data) {
+      return data.type == 'transfer'
+        ? data.originAccountId is string
+          && data.destinationAccountId is string
+          && data.originAccountId != data.destinationAccountId
+          && existsAfter(/databases/$(database)/documents/users/$(userId)/accounts/$(data.originAccountId))
+          && existsAfter(/databases/$(database)/documents/users/$(userId)/accounts/$(data.destinationAccountId))
+        : data.accountId is string
+          && existsAfter(/databases/$(database)/documents/users/$(userId)/accounts/$(data.accountId));
     }
   }
 }

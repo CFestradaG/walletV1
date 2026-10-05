@@ -1,15 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:cloud_functions/cloud_functions.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../engines/period_engine.dart';
+import '../engines/financial_engine.dart';
 import '../firebase/firebase_providers.dart';
 import '../models/models.dart';
 
 class WalletRepository {
   WalletRepository(this._db);
   final FirebaseFirestore _db;
-  final FirebaseFunctions _functions = FirebaseFunctions.instanceFor(region: 'us-central1');
 
   DocumentReference<Map<String, dynamic>> userDoc(String uid) => _db.collection('users').doc(uid);
   CollectionReference<Map<String, dynamic>> _col(String uid, String name) => userDoc(uid).collection(name);
@@ -106,7 +105,22 @@ class WalletRepository {
 
   Future<void> saveSettings(UserSettings settings) => _col(settings.userId, 'settings').doc('default').set(settings.toMap(), SetOptions(merge: true));
   Future<void> saveAccount(Account account) async {
-    await _functions.httpsCallable('saveAccount').call({'account': account.toMap()});
+    final ref = _col(account.userId, 'accounts').doc(account.id);
+    await _db.runTransaction((transaction) async {
+      final existing = await transaction.get(ref);
+      final latestBalance = existing.exists
+          ? Account.fromMap(existing.data()!, existing.id).currentBalance
+          : account.currentBalance;
+      transaction.set(ref, Account(
+        id: account.id, userId: account.userId, name: account.name,
+        subtitle: account.subtitle, type: account.type, currency: account.currency,
+        initialBalance: account.initialBalance, currentBalance: latestBalance,
+        creditLimit: account.creditLimit, status: account.status, icon: account.icon,
+        color: account.color, cutoffDay: account.cutoffDay,
+        paymentDueDay: account.paymentDueDay, createdAt: account.createdAt,
+        updatedAt: account.updatedAt,
+      ).toMap());
+    });
   }
   Future<void> saveCategory(Category category) => _col(category.userId, 'categories').doc(category.id).set(category.toMap());
   Future<void> saveBudget(Budget budget) => _col(budget.userId, 'budgets').doc(budget.id).set(budget.toMap());
@@ -185,8 +199,7 @@ class WalletRepository {
   }
 
   Future<void> resetFinancialData(UserProfile profile, UserSettings preferences) async {
-    await _functions.httpsCallable('clearFinancialAccountsAndTransactions').call();
-    const names = ['settings', 'categories', 'periods', 'budgets'];
+    const names = ['settings', 'accounts', 'categories', 'periods', 'transactions', 'budgets'];
     final uid = profile.id;
     final snapshots = <QuerySnapshot<Map<String, dynamic>>>[];
     for (final name in names) {
@@ -219,7 +232,7 @@ class WalletRepository {
   }
 
   Future<void> deleteAccount(String userId, String id) async {
-    await _functions.httpsCallable('deleteAccount').call({'accountId': id});
+    await _col(userId, 'accounts').doc(id).delete();
   }
 
   Future<void> archiveAccount(Account account) => saveAccount(Account(
@@ -235,11 +248,79 @@ class WalletRepository {
   Future<void> saveTransaction({
     required WalletTransaction transaction,
   }) async {
-    await _functions.httpsCallable('saveTransaction').call({'transaction': transaction.toMap()});
+    final uid = transaction.userId;
+    final txRef = _col(uid, 'transactions').doc(transaction.id);
+    final categoriesSnapshot = await _col(uid, 'categories').get();
+    final categories = categoriesSnapshot.docs
+        .map((item) => Category.fromMap(item.data(), item.id))
+        .toList();
+    await _db.runTransaction((firestoreTransaction) async {
+      final previousSnapshot = await firestoreTransaction.get(txRef);
+      final previous = previousSnapshot.exists
+          ? WalletTransaction.fromMap(previousSnapshot.data()!, previousSnapshot.id)
+          : null;
+      final ids = <String>{};
+      void collect(WalletTransaction? tx) {
+        if (tx == null) return;
+        if (tx.accountId != null) ids.add(tx.accountId!);
+        if (tx.originAccountId != null) ids.add(tx.originAccountId!);
+        if (tx.destinationAccountId != null) ids.add(tx.destinationAccountId!);
+      }
+      collect(previous);
+      collect(transaction);
+      final refs = ids.map((id) => _col(uid, 'accounts').doc(id)).toList();
+      final snapshots = <DocumentSnapshot<Map<String, dynamic>>>[];
+      for (final ref in refs) {
+        snapshots.add(await firestoreTransaction.get(ref));
+      }
+      var accounts = <Account>[];
+      for (final snapshot in snapshots) {
+        if (snapshot.exists) accounts.add(Account.fromMap(snapshot.data()!, snapshot.id));
+      }
+      if (previous != null) accounts = applyTransactionToAccounts(previous, accounts, reverse: true);
+      final error = validateTransaction(
+        userId: uid, type: transaction.type, amount: transaction.amount,
+        date: transaction.date, accounts: accounts, categories: categories,
+        accountId: transaction.accountId, categoryId: transaction.categoryId,
+        subcategoryId: transaction.subcategoryId,
+        originAccountId: transaction.originAccountId,
+        destinationAccountId: transaction.destinationAccountId,
+      );
+      if (error != null) throw StateError(error);
+      accounts = applyTransactionToAccounts(transaction, accounts);
+      firestoreTransaction.set(txRef, transaction.toMap());
+      for (final account in accounts) {
+        firestoreTransaction.set(_col(uid, 'accounts').doc(account.id), account.toMap());
+      }
+    });
   }
 
   Future<void> deleteTransaction({required WalletTransaction transaction}) async {
-    await _functions.httpsCallable('deleteTransaction').call({'transactionId': transaction.id});
+    final uid = transaction.userId;
+    final txRef = _col(uid, 'transactions').doc(transaction.id);
+    await _db.runTransaction((firestoreTransaction) async {
+      final snapshot = await firestoreTransaction.get(txRef);
+      if (!snapshot.exists) return;
+      final current = WalletTransaction.fromMap(snapshot.data()!, snapshot.id);
+      final ids = <String>{};
+      if (current.accountId != null) ids.add(current.accountId!);
+      if (current.originAccountId != null) ids.add(current.originAccountId!);
+      if (current.destinationAccountId != null) ids.add(current.destinationAccountId!);
+      final refs = ids.map((id) => _col(uid, 'accounts').doc(id)).toList();
+      final snapshots = <DocumentSnapshot<Map<String, dynamic>>>[];
+      for (final ref in refs) {
+        snapshots.add(await firestoreTransaction.get(ref));
+      }
+      final accounts = <Account>[];
+      for (final item in snapshots) {
+        if (item.exists) accounts.add(Account.fromMap(item.data()!, item.id));
+      }
+      final reverted = applyTransactionToAccounts(current, accounts, reverse: true);
+      firestoreTransaction.delete(txRef);
+      for (final account in reverted) {
+        firestoreTransaction.set(_col(uid, 'accounts').doc(account.id), account.toMap());
+      }
+    });
   }
 }
 

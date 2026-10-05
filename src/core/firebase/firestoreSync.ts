@@ -4,10 +4,10 @@ import {
   doc,
   getDoc,
   getDocs,
+  runTransaction,
   setDoc,
   writeBatch,
 } from 'firebase/firestore';
-import { httpsCallable } from 'firebase/functions';
 import {
   Account,
   Budget,
@@ -18,7 +18,8 @@ import {
   UserSettings,
 } from '../types/models';
 import { UserDataStore } from '../data/initialData';
-import { auth, db, functions, handleFirestoreError, OperationType } from './firebase';
+import { auth, db, handleFirestoreError, OperationType } from './firebase';
+import { applyTransactionToAccounts, reverseTransactionOnAccounts, validateTransactionInput } from '../../features/transactions/financialEngine';
 
 type InitialRecord = UserSettings | Account | Category | FinancialPeriod | Transaction | Budget;
 
@@ -42,6 +43,14 @@ function ownedRecord<T extends object>(record: T, userId: string): T & { userId:
   return sanitizeFirestoreValue({ ...record, userId }) as T & { userId: string };
 }
 
+function accountFromSnapshot(data: Record<string, unknown>, id: string): Account {
+  const account = { ...data, id } as unknown as Account;
+  if (account.type === 'credit_card' && account.initialBalance > 0 && account.currentBalance > 0) {
+    return { ...account, initialBalance: -Math.abs(account.initialBalance), currentBalance: -Math.abs(account.currentBalance) };
+  }
+  return account;
+}
+
 export async function syncProfile(userId: string, profile: UserProfile): Promise<void> {
   const path = `users/${userId}`;
   try {
@@ -62,12 +71,23 @@ export async function syncSettings(userId: string, settings: UserSettings): Prom
 
 export async function syncAccount(userId: string, account: Account): Promise<void> {
   if (account.userId !== userId) throw new Error('La cuenta no pertenece al usuario autenticado.');
-  await httpsCallable(functions, 'saveAccount')({ account });
+  const accountRef = doc(db, 'users', userId, 'accounts', account.id);
+  await runTransaction(db, async (firestoreTransaction) => {
+    const existing = await firestoreTransaction.get(accountRef);
+    const { balanceAdjustment, ...fields } = account as Account & { balanceAdjustment?: number };
+    const latest = existing.exists() ? existing.data() as Account : undefined;
+    const currentBalance = latest
+      ? typeof balanceAdjustment === 'number'
+        ? Math.round((latest.currentBalance + balanceAdjustment) * 100) / 100
+        : latest.currentBalance
+      : account.currentBalance;
+    firestoreTransaction.set(accountRef, ownedRecord({ ...fields, currentBalance }, userId));
+  });
 }
 
 export async function deleteAccountFromDb(userId: string, accountId: string): Promise<void> {
   if (auth.currentUser?.uid !== userId) throw new Error('Usuario no autenticado.');
-  await httpsCallable(functions, 'deleteAccount')({ accountId });
+  await deleteDoc(doc(db, 'users', userId, 'accounts', accountId));
 }
 
 export async function syncCategory(userId: string, category: Category): Promise<void> {
@@ -108,7 +128,7 @@ export async function deletePeriodFromDb(userId: string, periodId: string): Prom
 
 export async function syncTransaction(userId: string, tx: Transaction): Promise<void> {
   if (tx.userId !== userId) throw new Error('El movimiento no pertenece al usuario autenticado.');
-  await httpsCallable(functions, 'saveTransaction')({ transaction: tx });
+  await syncTransactionWithAccounts(userId, tx, []);
 }
 
 /**
@@ -121,12 +141,43 @@ export async function syncTransactionWithAccounts(
   accounts: Account[]
 ): Promise<void> {
   if (tx.userId !== userId) throw new Error('El movimiento no pertenece al usuario autenticado.');
-  await httpsCallable(functions, 'saveTransaction')({ transaction: tx });
+  const txRef = doc(db, 'users', userId, 'transactions', tx.id);
+  await runTransaction(db, async (firestoreTransaction) => {
+    const oldSnapshot = await firestoreTransaction.get(txRef);
+    const previous = oldSnapshot.exists() ? { ...oldSnapshot.data(), id: oldSnapshot.id } as Transaction : undefined;
+    const accountIds = new Set<string>();
+    const collect = (item?: Transaction) => {
+      if (!item) return;
+      [item.accountId, item.originAccountId, item.destinationAccountId].forEach((id) => { if (id) accountIds.add(id); });
+    };
+    collect(previous);
+    collect(tx);
+    const accountRefs = [...accountIds].map((id) => doc(db, 'users', userId, 'accounts', id));
+    const accountSnapshots = await Promise.all(accountRefs.map((ref) => firestoreTransaction.get(ref)));
+    const currentAccounts = accountSnapshots.flatMap((snapshot) => snapshot.exists()
+      ? [accountFromSnapshot(snapshot.data(), snapshot.id)]
+      : []);
+    const categoriesSnapshot = await getDocs(collection(db, 'users', userId, 'categories'));
+    const categories = categoriesSnapshot.docs.map((item) => ({ ...item.data(), id: item.id } as unknown as Category));
+    const validation = validateTransactionInput({
+      userId, type: tx.type, amount: tx.amount, currency: tx.currency,
+      accountId: tx.accountId, categoryId: tx.categoryId, subcategoryId: tx.subcategoryId,
+      originAccountId: tx.originAccountId, destinationAccountId: tx.destinationAccountId, date: tx.date,
+    }, currentAccounts, categories, previous);
+    if (!validation.valid) throw new Error(validation.error || 'El movimiento no es válido.');
+    let accounts = previous ? reverseTransactionOnAccounts(previous, currentAccounts) : currentAccounts;
+    if (previous) accounts = reverseTransactionOnAccounts(previous, accounts);
+    accounts = applyTransactionToAccounts(tx, accounts);
+    firestoreTransaction.set(txRef, ownedRecord(tx, userId));
+    for (const account of accounts) {
+      firestoreTransaction.set(doc(db, 'users', userId, 'accounts', account.id), ownedRecord(account, userId));
+    }
+  });
 }
 
 export async function deleteTransactionFromDb(userId: string, txId: string): Promise<void> {
   if (auth.currentUser?.uid !== userId) throw new Error('Usuario no autenticado.');
-  await httpsCallable(functions, 'deleteTransaction')({ transactionId: txId });
+  await deleteTransactionWithAccounts(userId, txId, []);
 }
 
 /**
@@ -138,7 +189,24 @@ export async function deleteTransactionWithAccounts(
   accounts: Account[]
 ): Promise<void> {
   if (auth.currentUser?.uid !== userId) throw new Error('Usuario no autenticado.');
-  await httpsCallable(functions, 'deleteTransaction')({ transactionId: txId });
+  const txRef = doc(db, 'users', userId, 'transactions', txId);
+  await runTransaction(db, async (firestoreTransaction) => {
+    const txSnapshot = await firestoreTransaction.get(txRef);
+    if (!txSnapshot.exists()) return;
+    const target = { ...txSnapshot.data(), id: txSnapshot.id } as Transaction;
+    if (target.userId !== userId) throw new Error('El movimiento no pertenece al usuario autenticado.');
+    const ids = [target.accountId, target.originAccountId, target.destinationAccountId].filter((id): id is string => Boolean(id));
+    const refs = [...new Set(ids)].map((id) => doc(db, 'users', userId, 'accounts', id));
+    const snapshots = await Promise.all(refs.map((ref) => firestoreTransaction.get(ref)));
+    const accounts = snapshots.flatMap((snapshot) => snapshot.exists()
+      ? [accountFromSnapshot(snapshot.data(), snapshot.id)]
+      : []);
+    const reverted = reverseTransactionOnAccounts(target, accounts);
+    firestoreTransaction.delete(txRef);
+    for (const account of reverted) {
+      firestoreTransaction.set(doc(db, 'users', userId, 'accounts', account.id), ownedRecord(account, userId));
+    }
+  });
 }
 
 export async function syncBudget(userId: string, budget: Budget): Promise<void> {
@@ -208,7 +276,6 @@ export async function seedUserInitialData(userId: string, initialStore: UserData
 /** Borra los datos financieros del usuario y vuelve a crear el conjunto inicial. */
 export async function resetUserFinancialData(userId: string, initialStore: UserDataStore): Promise<void> {
   if (auth.currentUser?.uid !== userId) throw new Error('Usuario no autenticado.');
-  await httpsCallable(functions, 'clearFinancialAccountsAndTransactions')({});
   const collectionNames = ['settings', 'categories', 'periods', 'budgets'] as const;
   const snapshots = await Promise.all(
     collectionNames.map((name) => getDocs(collection(db, 'users', userId, name)))

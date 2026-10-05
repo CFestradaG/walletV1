@@ -8,7 +8,6 @@
       "version": "0.1.0+1",
       "dependencies": [
         "cloud_firestore",
-        "cloud_functions",
         "crypto",
         "firebase_auth",
         "firebase_core",
@@ -99,17 +98,6 @@
         "google_sign_in_ios",
         "google_sign_in_platform_interface",
         "google_sign_in_web"
-      ]
-    },
-    {
-      "name": "cloud_functions",
-      "version": "5.6.2",
-      "dependencies": [
-        "cloud_functions_platform_interface",
-        "cloud_functions_web",
-        "firebase_core",
-        "firebase_core_platform_interface",
-        "flutter"
       ]
     },
     {
@@ -401,28 +389,6 @@
         "collection",
         "flutter",
         "flutter_test",
-        "meta",
-        "plugin_platform_interface"
-      ]
-    },
-    {
-      "name": "cloud_functions_web",
-      "version": "4.11.5",
-      "dependencies": [
-        "cloud_functions_platform_interface",
-        "firebase_core",
-        "firebase_core_web",
-        "flutter",
-        "flutter_web_plugins",
-        "web"
-      ]
-    },
-    {
-      "name": "cloud_functions_platform_interface",
-      "version": "5.8.2",
-      "dependencies": [
-        "firebase_core",
-        "flutter",
         "meta",
         "plugin_platform_interface"
       ]

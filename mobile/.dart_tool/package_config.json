@@ -56,24 +56,6 @@
       "languageVersion": "3.4"
     },
     {
-      "name": "cloud_functions",
-      "rootUri": "file:///C:/Users/servicedesk/AppData/Local/Pub/Cache/hosted/pub.dev/cloud_functions-5.6.2",
-      "packageUri": "lib/",
-      "languageVersion": "3.2"
-    },
-    {
-      "name": "cloud_functions_platform_interface",
-      "rootUri": "file:///C:/Users/servicedesk/AppData/Local/Pub/Cache/hosted/pub.dev/cloud_functions_platform_interface-5.8.2",
-      "packageUri": "lib/",
-      "languageVersion": "3.2"
-    },
-    {
-      "name": "cloud_functions_web",
-      "rootUri": "file:///C:/Users/servicedesk/AppData/Local/Pub/Cache/hosted/pub.dev/cloud_functions_web-4.11.5",
-      "packageUri": "lib/",
-      "languageVersion": "3.4"
-    },
-    {
       "name": "code_assets",
       "rootUri": "file:///C:/Users/servicedesk/AppData/Local/Pub/Cache/hosted/pub.dev/code_assets-2.1.0",
       "packageUri": "lib/",

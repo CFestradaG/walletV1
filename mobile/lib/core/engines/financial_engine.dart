@@ -58,6 +58,7 @@ String? validateTransaction({
   required List<Category> categories,
   required String? accountId,
   required String? categoryId,
+  String? subcategoryId,
   required String? originAccountId,
   required String? destinationAccountId,
 }) {
@@ -76,8 +77,12 @@ String? validateTransaction({
   }
   final account = active(accountId);
   if (account == null) return 'Selecciona una cuenta activa.';
-  if (categoryId == null || !categories.any((c) => c.id == categoryId && c.userId == userId && c.type.name == type.name && c.isActive)) {
+  final category = categories.where((c) => c.id == categoryId && c.userId == userId && c.type.name == type.name && c.isActive).firstOrNull;
+  if (category == null) {
     return 'Selecciona una categoría válida.';
+  }
+  if (subcategoryId != null && !category.subcategories.any((item) => item.id == subcategoryId && item.isActive)) {
+    return 'Selecciona una subcategoría válida para la categoría.';
   }
   if (type == TransactionType.expense && account.isCreditCard && account.creditLimit != null && account.creditLimit! > 0) {
     if (account.currentBalance.abs() + amount > account.creditLimit!) {

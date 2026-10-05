@@ -6,7 +6,6 @@ import {
   setPersistence,
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import { getFunctions } from 'firebase/functions';
 import firebaseConfig from '../../../firebase-applet-config.json';
 
 // Initialize Firebase App
@@ -14,7 +13,6 @@ export const firebaseApp = initializeApp(firebaseConfig);
 
 // CRITICAL: The app will break without this line
 export const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
-export const functions = getFunctions(firebaseApp, 'us-central1');
 
 // Initialize Firebase Auth
 export const auth = getAuth(firebaseApp);
