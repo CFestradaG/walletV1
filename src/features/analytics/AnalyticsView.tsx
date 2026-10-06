@@ -258,7 +258,11 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             <button
               type="button"
               onClick={exportSummaryCSV}
-              className="px-3 py-1.5 rounded-xl border border-white/10 bg-white/5 hover:bg-white/10 text-xs font-medium flex items-center gap-1.5 cursor-pointer text-slate-300"
+              className={`px-3 py-1.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
+                isDark
+                  ? 'border-white/10 bg-white/5 hover:bg-white/10 text-slate-300'
+                  : 'border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-700'
+              }`}
             >
               <Download className="w-3.5 h-3.5" />
               <span>Exportar CSV</span>
@@ -340,13 +344,13 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             <PieChart className="w-4 h-4 text-emerald-400" />
             <h2 className="text-xs font-bold">Distribución por Categorías</h2>
           </div>
-          <span className="text-[11px] font-mono text-slate-400">
+          <span className={`text-[11px] font-mono ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
             Total {formatGTQ(totalExpense)}
           </span>
         </div>
 
         {categoryBreakdown.length === 0 ? (
-          <p className="py-6 text-center text-xs text-slate-400">
+          <p className={`py-6 text-center text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
             No hay gastos registrados en este período.
           </p>
         ) : (
@@ -359,17 +363,17 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                       className="w-2.5 h-2.5 rounded-full"
                       style={{ backgroundColor: item.color }}
                     />
-                    <span className="font-medium text-slate-200">{item.name}</span>
+                    <span className={`font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{item.name}</span>
                   </div>
                   <div className="flex items-center gap-2 font-mono">
-                    <span className="text-slate-400 text-[11px]">{item.pct}%</span>
-                    <span className="font-bold text-slate-200">
+                    <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{item.pct}%</span>
+                    <span className={`font-bold ${isDark ? 'text-slate-200' : 'text-slate-900'}`}>
                       {formatGTQ(item.amount)}
                     </span>
                   </div>
                 </div>
 
-                <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+                <div className={`w-full h-2 rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-slate-100'}`}>
                   <div
                     className="h-full rounded-full transition-all duration-300"
                     style={{
@@ -428,7 +432,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             <button
               type="button"
               onClick={onOpenAnnualBudgetModal || onOpenBudgetsModal}
-              className="text-[11px] text-emerald-400 hover:underline cursor-pointer"
+              className={`text-[11px] hover:underline cursor-pointer font-semibold ${
+                isDark ? 'text-emerald-400' : 'text-emerald-600'
+              }`}
             >
               Panorama Anual
             </button>
@@ -438,12 +444,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             {budgetPerformance.map((b) => (
               <div key={b.id} className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-slate-200">{b.name}</span>
-                  <span className="font-mono text-[11px] text-slate-400">
+                  <span className={`font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{b.name}</span>
+                  <span className={`font-mono text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                     {formatGTQ(b.spent)} de {formatGTQ(b.budget)} ({b.pct}%)
                   </span>
                 </div>
-                <div className="w-full h-2 rounded-full bg-white/10 overflow-hidden">
+                <div className={`w-full h-2 rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-slate-100'}`}>
                   <div
                     className={`h-full rounded-full transition-all duration-300 ${
                       b.isOver
@@ -473,12 +479,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             <h2 className="text-xs font-bold">Actividad por Cuenta</h2>
           </div>
 
-          <div className="divide-y divide-white/5">
+          <div className={`divide-y ${isDark ? 'divide-white/5' : 'divide-slate-100'}`}>
             {accountUsage.map((acc, i) => (
               <div key={i} className="py-2.5 flex items-center justify-between text-xs">
                 <div>
-                  <span className="font-bold text-white block">{acc.name}</span>
-                  <span className="text-[10px] text-slate-400 capitalize">
+                  <span className={`font-bold block ${isDark ? 'text-white' : 'text-slate-900'}`}>{acc.name}</span>
+                  <span className={`text-[10px] capitalize ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                     {acc.type === 'credit_card'
                       ? 'Tarjeta de Crédito'
                       : acc.type === 'bank'
@@ -491,12 +497,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
                 <div className="text-right font-mono text-[11px]">
                   {acc.income > 0 && (
-                    <span className="text-emerald-400 block font-semibold">
+                    <span className={`block font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
                       +{formatGTQ(acc.income)}
                     </span>
                   )}
                   {acc.spent > 0 && (
-                    <span className="text-rose-400 block font-semibold">
+                    <span className={`block font-semibold ${isDark ? 'text-rose-400' : 'text-rose-600'}`}>
                       -{formatGTQ(acc.spent)}
                     </span>
                   )}

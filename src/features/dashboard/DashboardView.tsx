@@ -158,32 +158,32 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         }`}
       >
         <div className="flex items-center justify-between text-slate-400 mb-1">
-          <span className="text-xs font-semibold uppercase tracking-wider">
+          <span className={`text-xs font-semibold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
             Dinero disponible
           </span>
           <button
             type="button"
             onClick={toggleHideBalances}
             title={hideBalances ? 'Mostrar saldos' : 'Ocultar saldos'}
-            className="p-1 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors cursor-pointer"
+            className="p-1 rounded-lg hover:bg-slate-100 dark:hover:bg-white/5 text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors cursor-pointer"
           >
             {hideBalances ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
           </button>
         </div>
 
         <div className="flex items-baseline gap-2 mb-4">
-          <h2 className="text-3xl font-extrabold font-display tracking-tight text-white">
+          <h2 className={`text-3xl font-extrabold font-display tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
             {hideBalances ? '••••••' : formatGTQ(totalLiquid)}
           </h2>
         </div>
 
         {/* Resumen secundario: Deuda en tarjetas */}
-        <div className="pt-3 border-t border-white/5 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-1.5 text-slate-400">
-            <CreditCard className="w-3.5 h-3.5 text-rose-400" />
+        <div className={`pt-3 border-t flex items-center justify-between text-xs ${isDark ? 'border-white/5' : 'border-slate-100'}`}>
+          <div className={`flex items-center gap-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+            <CreditCard className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
             <span>Deuda en tarjetas:</span>
           </div>
-          <span className="font-semibold text-rose-400">
+          <span className="font-semibold text-rose-600 dark:text-rose-400 font-mono">
             {hideBalances ? '••••••' : formatGTQ(totalCreditDebt)}
           </span>
         </div>
@@ -196,31 +196,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         }`}
       >
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+          <span className={`text-xs font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
             {activePeriod?.name || 'Período actual'}
           </span>
-          <span className="text-[11px] font-semibold text-slate-400">
+          <span className={`text-[11px] font-semibold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
             {activePeriod ? `${formatShortDateES(activePeriod.startDate)} - ${formatShortDateES(activePeriod.endDate)}` : ''}
           </span>
         </div>
 
         <div className="grid grid-cols-3 gap-2">
           {/* Ingresos */}
-          <div className="p-2.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/15">
-            <span className="text-[10px] font-semibold text-emerald-400 block mb-0.5">
+          <div className={`p-2.5 rounded-2xl border ${isDark ? 'bg-emerald-500/10 border-emerald-500/15' : 'bg-emerald-50/80 border-emerald-200'}`}>
+            <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 block mb-0.5">
               Ingresos
             </span>
-            <span className="text-sm font-bold text-emerald-400 font-display block">
+            <span className="text-sm font-bold text-emerald-700 dark:text-emerald-400 font-display block">
               {hideBalances ? '••••' : formatGTQ(periodIncome)}
             </span>
           </div>
 
           {/* Gastos */}
-          <div className="p-2.5 rounded-2xl bg-rose-500/10 border border-rose-500/15">
-            <span className="text-[10px] font-semibold text-rose-400 block mb-0.5">
+          <div className={`p-2.5 rounded-2xl border ${isDark ? 'bg-rose-500/10 border-rose-500/15' : 'bg-rose-50/80 border-rose-200'}`}>
+            <span className="text-[10px] font-semibold text-rose-700 dark:text-rose-400 block mb-0.5">
               Gastos
             </span>
-            <span className="text-sm font-bold text-rose-400 font-display block">
+            <span className="text-sm font-bold text-rose-700 dark:text-rose-400 font-display block">
               {hideBalances ? '••••' : formatGTQ(periodExpense)}
             </span>
           </div>
@@ -229,8 +229,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <div
             className={`p-2.5 rounded-2xl border ${
               periodNet >= 0
-                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
-                : 'bg-rose-500/10 border-rose-500/20 text-rose-300'
+                ? isDark
+                  ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
+                  : 'bg-emerald-50/80 border-emerald-200 text-emerald-800'
+                : isDark
+                ? 'bg-rose-500/10 border-rose-500/20 text-rose-300'
+                : 'bg-rose-50/80 border-rose-200 text-rose-800'
             }`}
           >
             <span className="text-[10px] font-semibold block mb-0.5">
@@ -253,11 +257,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             isDark ? 'bg-[#131927] border-white/5 hover:bg-white/10' : 'bg-white border-slate-200 hover:bg-slate-50'
           }`}
         >
-          <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center mx-auto mb-1.5">
+          <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto mb-1.5">
             <Plus className="w-4 h-4" />
           </div>
           <span className="text-[11px] font-bold block">Nueva</span>
-          <span className="text-[10px] text-slate-400 block">Operación</span>
+          <span className={`text-[10px] block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Operación</span>
         </button>
 
         {/* Ver Cuentas */}
@@ -268,11 +272,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             isDark ? 'bg-[#131927] border-white/5 hover:bg-white/10' : 'bg-white border-slate-200 hover:bg-slate-50'
           }`}
         >
-          <div className="w-8 h-8 rounded-xl bg-sky-500/15 text-sky-400 flex items-center justify-center mx-auto mb-1.5">
+          <div className="w-8 h-8 rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400 flex items-center justify-center mx-auto mb-1.5">
             <Landmark className="w-4 h-4" />
           </div>
           <span className="text-[11px] font-bold block">Cuentas</span>
-          <span className="text-[10px] text-slate-400 block">{accounts.length} tarjetas</span>
+          <span className={`text-[10px] block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{accounts.length} tarjetas</span>
         </button>
 
         {/* Administrar Períodos */}
@@ -283,11 +287,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             isDark ? 'bg-[#131927] border-white/5 hover:bg-white/10' : 'bg-white border-slate-200 hover:bg-slate-50'
           }`}
         >
-          <div className="w-8 h-8 rounded-xl bg-purple-500/15 text-purple-400 flex items-center justify-center mx-auto mb-1.5">
+          <div className="w-8 h-8 rounded-xl bg-purple-500/15 text-purple-600 dark:text-purple-400 flex items-center justify-center mx-auto mb-1.5">
             <SlidersHorizontal className="w-4 h-4" />
           </div>
           <span className="text-[11px] font-bold block">Períodos</span>
-          <span className="text-[10px] text-slate-400 block">Cortes</span>
+          <span className={`text-[10px] block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Cortes</span>
         </button>
 
         {/* Presupuesto & Panorama Anual Único */}
@@ -298,11 +302,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             isDark ? 'bg-[#131927] border-white/5 hover:bg-white/10' : 'bg-white border-slate-200 hover:bg-slate-50'
           }`}
         >
-          <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center mx-auto mb-1.5">
+          <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto mb-1.5">
             <FileSpreadsheet className="w-4 h-4" />
           </div>
           <span className="text-[11px] font-bold block">Presupuesto</span>
-          <span className="text-[10px] text-slate-400 block">Panorama Anual</span>
+          <span className={`text-[10px] block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Panorama Anual</span>
         </button>
       </div>
 
@@ -317,14 +321,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         <div className="flex items-center justify-between mb-3.5 flex-wrap gap-2">
           <div>
             <div className="flex items-center gap-2">
-              <span className="text-sm font-bold font-display">
+              <span className={`text-sm font-bold font-display ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 Resumen Acumulado del Año {currentYear}
               </span>
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                isDark
+                  ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+              }`}>
                 Proyectado vs Real
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 mt-0.5">
+            <p className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               Progreso acumulado hasta {cumulativeSummary.currentMonthName} ({currentYear})
             </p>
           </div>
@@ -332,7 +340,11 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <button
             type="button"
             onClick={handleOpenBudget}
-            className="text-xs font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 transition-all cursor-pointer"
+            className={`text-xs font-bold flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+              isDark
+                ? 'text-emerald-400 hover:text-emerald-300 bg-emerald-500/10 border-emerald-500/20 hover:bg-emerald-500/20'
+                : 'text-emerald-700 hover:text-emerald-800 bg-emerald-50 border-emerald-200 hover:bg-emerald-100'
+            }`}
           >
             <FileSpreadsheet className="w-3.5 h-3.5" />
             <span>Ver Panorama Completo</span>
@@ -586,7 +598,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           <button
             type="button"
             onClick={() => onNavigateTab('transacciones')}
-            className="text-[11px] font-semibold text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
+            className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
           >
             <span>Ver historial</span>
             <ArrowRight className="w-3 h-3" />
@@ -594,12 +606,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {recentTransactions.length === 0 ? (
-          <div className="py-6 text-center text-slate-400 text-xs">
-            <ReceiptText className="w-6 h-6 mx-auto mb-1 text-slate-500" />
+          <div className={`py-6 text-center text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+            <ReceiptText className={`w-6 h-6 mx-auto mb-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
             <span>No hay transacciones registradas.</span>
           </div>
         ) : (
-          <div className="divide-y divide-white/5">
+          <div className={`divide-y ${isDark ? 'divide-white/5' : 'divide-slate-100'}`}>
             {recentTransactions.map((tx) => {
               const cat = categories.find((c) => c.id === tx.categoryId);
               const sub = cat?.subcategories.find((s) => s.id === tx.subcategoryId);
@@ -609,16 +621,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                 <div
                   key={tx.id}
                   onClick={() => onEditTransaction(tx)}
-                  className="py-2.5 flex items-center justify-between hover:bg-white/5 rounded-xl px-1.5 transition-colors cursor-pointer"
+                  className={`py-2.5 flex items-center justify-between rounded-xl px-1.5 transition-colors cursor-pointer ${
+                    isDark ? 'hover:bg-white/5' : 'hover:bg-slate-50'
+                  }`}
                 >
                   <div className="flex items-center gap-2.5">
                     <div
                       className={`w-8 h-8 rounded-xl flex items-center justify-center ${
                         tx.type === 'income'
-                          ? 'bg-emerald-500/15 text-emerald-400'
+                          ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
                           : tx.type === 'transfer'
-                          ? 'bg-sky-500/15 text-sky-400'
-                          : 'bg-rose-500/15 text-rose-400'
+                          ? 'bg-sky-500/15 text-sky-600 dark:text-sky-400'
+                          : 'bg-rose-500/15 text-rose-600 dark:text-rose-400'
                       }`}
                     >
                       {tx.type === 'income' ? (
@@ -630,10 +644,10 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       )}
                     </div>
                     <div>
-                      <span className="font-semibold text-xs block text-white">
+                      <span className={`font-semibold text-xs block ${isDark ? 'text-white' : 'text-slate-900'}`}>
                         {tx.note || cat?.name || 'Transacción'}
                       </span>
-                      <span className="text-[10px] text-slate-400">
+                      <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                         {formatShortDateES(tx.date)} {acc ? `• ${acc.name}` : ''}
                       </span>
                     </div>
@@ -642,10 +656,12 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   <span
                     className={`text-xs font-bold font-mono ${
                       tx.type === 'income'
-                        ? 'text-emerald-400'
+                        ? 'text-emerald-600 dark:text-emerald-400'
                         : tx.type === 'transfer'
-                        ? 'text-sky-400'
-                        : 'text-slate-200'
+                        ? 'text-sky-600 dark:text-sky-400'
+                        : isDark
+                        ? 'text-slate-200'
+                        : 'text-slate-800'
                     }`}
                   >
                     {tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}

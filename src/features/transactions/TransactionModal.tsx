@@ -342,7 +342,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         />
 
         {/* MODAL HEADER */}
-        <div className="flex items-center justify-between px-5 pt-3.5 pb-2.5 border-b border-white/5">
+        <div className={`flex items-center justify-between px-5 pt-3.5 pb-2.5 border-b ${isDark ? 'border-white/5' : 'border-slate-100'}`}>
           <div className="flex items-center gap-2.5 min-w-0">
             <h2 className="font-display font-bold text-base truncate">
               {editingTransaction ? 'Editar transacción' : 'Nueva transacción'}
@@ -370,7 +370,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 type="button"
                 onClick={handleDelete}
                 aria-label="Eliminar transacción"
-                className="p-1.5 rounded-lg text-rose-400 hover:bg-rose-500/10 cursor-pointer"
+                className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-500/10 cursor-pointer"
               >
                 <Trash2 className="w-4 h-4" />
               </button>
@@ -379,7 +379,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               type="button"
               onClick={onClose}
               aria-label="Cerrar modal"
-              className="p-1.5 rounded-lg text-slate-400 hover:bg-white/10 cursor-pointer"
+              className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
+                isDark ? 'text-slate-400 hover:bg-white/10' : 'text-slate-500 hover:bg-slate-100'
+              }`}
             >
               <X className="w-5 h-5" />
             </button>
@@ -389,7 +391,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         {/* MODAL BODY (SCROLLABLE) */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 text-xs">
           {errorMsg && (
-            <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-400 font-medium">
+            <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/30 text-rose-500 dark:text-rose-400 font-medium">
               {errorMsg}
             </div>
           )}
@@ -405,8 +407,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               onClick={() => handleTypeChange('expense')}
               className={`py-2 rounded-xl font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                 type === 'expense'
-                  ? 'bg-rose-500/20 text-rose-400 shadow-sm border border-rose-500/30'
-                  : 'text-slate-400 hover:text-white'
+                  ? isDark
+                    ? 'bg-rose-500/20 text-rose-400 shadow-sm border border-rose-500/30'
+                    : 'bg-white text-rose-600 shadow-sm border border-rose-200 font-extrabold'
+                  : isDark
+                  ? 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <TrendingDown className="w-3.5 h-3.5" />
@@ -417,8 +423,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               onClick={() => handleTypeChange('income')}
               className={`py-2 rounded-xl font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                 type === 'income'
-                  ? 'bg-emerald-500/20 text-emerald-400 shadow-sm border border-emerald-500/30'
-                  : 'text-slate-400 hover:text-white'
+                  ? isDark
+                    ? 'bg-emerald-500/20 text-emerald-400 shadow-sm border border-emerald-500/30'
+                    : 'bg-white text-emerald-700 shadow-sm border border-emerald-200 font-extrabold'
+                  : isDark
+                  ? 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <TrendingUp className="w-3.5 h-3.5" />
@@ -429,8 +439,12 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               onClick={() => handleTypeChange('transfer')}
               className={`py-2 rounded-xl font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
                 type === 'transfer'
-                  ? 'bg-sky-500/20 text-sky-400 shadow-sm border border-sky-500/30'
-                  : 'text-slate-400 hover:text-white'
+                  ? isDark
+                    ? 'bg-sky-500/20 text-sky-400 shadow-sm border border-sky-500/30'
+                    : 'bg-white text-sky-700 shadow-sm border border-sky-200 font-extrabold'
+                  : isDark
+                  ? 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <ArrowRightLeft className="w-3.5 h-3.5" />
@@ -441,11 +455,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           {/* 2. DATE & NOTES INLINE */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
             <div>
-              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+              <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                 Fecha
               </label>
               <div className="relative">
-                <Calendar className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
+                <Calendar className={`w-3.5 h-3.5 absolute left-3 top-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
                 <input
                   type="date"
                   value={dateStr}
@@ -460,11 +474,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+              <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                 Nota / Descripción
               </label>
               <div className="relative">
-                <FileText className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
+                <FileText className={`w-3.5 h-3.5 absolute left-3 top-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
                 <input
                   type="text"
                   value={note}
@@ -488,7 +502,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               }`}
             >
               {/* Category Breadcrumb & Change button */}
-              <div className="flex items-center justify-between text-slate-400 px-0.5">
+              <div className={`flex items-center justify-between px-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                 <div className="flex items-center gap-1.5 text-[11px] font-semibold truncate">
                   <span className="uppercase tracking-wider">
                     {isBrowsingCategories ? 'Categoría' : 'Subcategoría'}:
@@ -505,10 +519,10 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                       <span>{selectedCategory.name}</span>
                     </span>
                   ) : (
-                    <span className="text-slate-400 italic">Sin seleccionar</span>
+                    <span className={`italic ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Sin seleccionar</span>
                   )}
                   {!isBrowsingCategories && selectedCategory && (
-                    <span className="text-slate-400 truncate">
+                    <span className={`truncate ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                       › {subcategoryId
                         ? selectedCategory.subcategories.find((s) => s.id === subcategoryId)?.name || 'Personalizada'
                         : `General (${selectedCategory.name})`}
@@ -520,7 +534,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   <button
                     type="button"
                     onClick={() => setIsBrowsingCategories(true)}
-                    className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-0.5 cursor-pointer shrink-0 ml-2"
+                    className={`text-xs font-semibold flex items-center gap-0.5 cursor-pointer shrink-0 ml-2 ${
+                      isDark ? 'text-emerald-400 hover:text-emerald-300' : 'text-emerald-600 hover:text-emerald-700'
+                    }`}
                   >
                     <span>Cambiar</span>
                   </button>
@@ -652,7 +668,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           {type === 'transfer' ? (
             <div className="space-y-3 pt-1">
               <div>
-                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                   Cuenta origen
                 </label>
                 <AccountSelectDropdown
@@ -666,7 +682,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+                <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                   Cuenta destino
                 </label>
                 <AccountSelectDropdown
@@ -681,7 +697,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               </div>
 
               {isCreditCardDestination && (
-                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-sky-500/10 border border-sky-500/20 text-sky-300">
+                <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${
+                  isDark
+                    ? 'bg-sky-500/10 border-sky-500/20 text-sky-300'
+                    : 'bg-sky-50 border-sky-200 text-sky-800'
+                }`}>
                   <CreditCard className="w-3.5 h-3.5" />
                   <span className="text-xs font-medium">Pago de tarjeta de crédito</span>
                 </div>
@@ -689,7 +709,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </div>
           ) : (
             <div>
-              <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1.5">
+              <label className={`block text-[11px] font-semibold uppercase tracking-wider mb-1.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                 Cuenta
               </label>
               <AccountSelectDropdown
@@ -716,8 +736,14 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             }}
           >
             <div className="flex items-center justify-center gap-2">
-              <span className="text-[10px] uppercase font-mono tracking-wider text-slate-400">Monto</span>
-              <button type="button" onClick={() => setShowKeypad((prev) => !prev)} className="text-[10px] text-emerald-400 hover:text-emerald-300">
+              <span className={`text-[10px] uppercase font-mono tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500 font-semibold'}`}>Monto</span>
+              <button
+                type="button"
+                onClick={() => setShowKeypad((prev) => !prev)}
+                className={`text-[10px] font-semibold cursor-pointer ${
+                  isDark ? 'text-emerald-400 hover:text-emerald-300' : 'text-emerald-600 hover:text-emerald-700'
+                }`}
+              >
                 {showKeypad ? 'Ocultar teclado' : 'Abrir teclado'}
               </button>
             </div>
@@ -730,7 +756,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               className="w-full bg-transparent text-center font-mono text-3xl font-extrabold tracking-tight mt-0.5 focus:outline-none"
               style={{ color: activeAccountColor }}
             />
-            <div className="text-[11px] text-slate-400 font-mono">Total: {formatGTQ(evaluatedAmount)}</div>
+            <div className={`text-[11px] font-mono ${isDark ? 'text-slate-400' : 'text-slate-600 font-medium'}`}>Total: {formatGTQ(evaluatedAmount)}</div>
           </div>
 
           {/* 6. NUMERIC KEYPAD WITH ARITHMETIC */}
@@ -748,7 +774,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                     onClick={() => handleKeypadPress(item)}
                     className={`h-10 rounded-xl font-bold flex items-center justify-center transition-colors cursor-pointer ${
                       ['/','('].includes(item)
-                        ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                        ? isDark
+                          ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                          : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 shadow-xs'
                         : isDark
                         ? 'bg-white/5 hover:bg-white/10 text-white'
                         : 'bg-white hover:bg-slate-200 text-slate-800 shadow-xs'
@@ -765,7 +793,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                     onClick={() => handleKeypadPress(item)}
                     className={`h-10 rounded-xl font-bold flex items-center justify-center transition-colors cursor-pointer ${
                       ['*', ')'].includes(item)
-                        ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                        ? isDark
+                          ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                          : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 shadow-xs'
                         : isDark
                         ? 'bg-white/5 hover:bg-white/10 text-white'
                         : 'bg-white hover:bg-slate-200 text-slate-800 shadow-xs'
@@ -782,7 +812,9 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                     onClick={() => handleKeypadPress(item)}
                     className={`h-10 rounded-xl font-bold flex items-center justify-center transition-colors cursor-pointer ${
                       ['-', '+'].includes(item)
-                        ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                        ? isDark
+                          ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                          : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200 shadow-xs'
                         : isDark
                         ? 'bg-white/5 hover:bg-white/10 text-white'
                         : 'bg-white hover:bg-slate-200 text-slate-800 shadow-xs'
@@ -843,7 +875,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 <button
                   type="button"
                   onClick={() => setAmountStr((prev) => String(evaluateArithmetic(prev)))}
-                  className="h-10 rounded-xl font-bold flex items-center justify-center transition-colors cursor-pointer bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+                  className={`h-10 rounded-xl font-bold flex items-center justify-center transition-colors cursor-pointer ${
+                    isDark
+                      ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                      : 'bg-emerald-600 text-white hover:bg-emerald-700 shadow-xs'
+                  }`}
                 >
                   =
                 </button>
@@ -853,7 +889,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         </div>
 
         {/* MODAL FOOTER */}
-        <div className="p-4 border-t border-white/5 flex items-center gap-3">
+        <div className={`p-4 border-t flex items-center gap-3 ${isDark ? 'border-white/5' : 'border-slate-100'}`}>
           <button
             type="button"
             onClick={onClose}

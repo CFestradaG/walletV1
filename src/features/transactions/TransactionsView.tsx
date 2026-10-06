@@ -170,8 +170,10 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             onClick={() => setPeriodFilterMode('period')}
             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               periodFilterMode === 'period'
-                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                : isDark
+                ? 'text-slate-400 hover:text-white'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             {activePeriod?.name || 'Período activo'}
@@ -181,8 +183,10 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             onClick={() => setPeriodFilterMode('all')}
             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               periodFilterMode === 'all'
-                ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                : isDark
+                ? 'text-slate-400 hover:text-white'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             Todas ({transactions.length})
@@ -201,7 +205,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       </div>
 
       <div className="grid grid-cols-2 gap-2">
-        <label className="text-[10px] uppercase tracking-wide text-slate-400">
+        <label className={`text-[10px] uppercase tracking-wide font-semibold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
           Período
           <select
             value={periodFilterMode === 'all' ? 'all' : activePeriod?.id || ''}
@@ -218,7 +222,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             {periods.map((period) => <option key={period.id} value={period.id}>{period.name}</option>)}
           </select>
         </label>
-        <label className="text-[10px] uppercase tracking-wide text-slate-400">
+        <label className={`text-[10px] uppercase tracking-wide font-semibold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
           Subperíodo
           <select
             value={filterSubperiodId}
@@ -240,7 +244,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       >
         <div className="flex items-center gap-2">
           <div className="relative flex-1">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-3 text-slate-400" />
+            <Search className={`w-3.5 h-3.5 absolute left-3 top-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
             <input
               type="text"
               value={searchTerm}
@@ -256,7 +260,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
               <button
                 type="button"
                 onClick={() => setSearchTerm('')}
-                className="absolute right-2.5 top-2 text-slate-400 hover:text-white"
+                className={`absolute right-2.5 top-2 ${isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-900'}`}
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -268,10 +272,12 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             onClick={() => setIsFilterPanelOpen((prev) => !prev)}
             className={`p-2 rounded-xl border text-xs flex items-center gap-1.5 transition-colors cursor-pointer ${
               hasActiveFilters || isFilterPanelOpen
-                ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                ? isDark
+                  ? 'bg-emerald-500/15 border-emerald-500/40 text-emerald-400'
+                  : 'bg-emerald-50 border-emerald-300 text-emerald-800'
                 : isDark
                 ? 'border-white/10 text-slate-400 hover:text-white'
-                : 'border-slate-200 text-slate-600 hover:text-slate-900'
+                : 'border-slate-200 text-slate-600 hover:text-slate-900 bg-slate-50'
             }`}
           >
             <Filter className="w-3.5 h-3.5" />
@@ -295,9 +301,9 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
         {/* EXPANDABLE FILTER ROW */}
         {isFilterPanelOpen && (
-          <div className="pt-2 border-t border-white/5 grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
+          <div className={`pt-2 border-t grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs ${isDark ? 'border-white/5' : 'border-slate-100'}`}>
             <div>
-              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
+              <label className={`block text-[10px] uppercase font-bold mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                 Tipo
               </label>
               <select
@@ -317,7 +323,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
+              <label className={`block text-[10px] uppercase font-bold mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                 Cuenta
               </label>
               <select
@@ -339,7 +345,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             </div>
 
             <div>
-              <label className="block text-[10px] uppercase font-bold text-slate-400 mb-1">
+              <label className={`block text-[10px] uppercase font-bold mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                 Categoría
               </label>
               <select
@@ -365,7 +371,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 <button
                   type="button"
                   onClick={resetFilters}
-                  className="text-xs text-rose-400 hover:underline cursor-pointer"
+                  className="text-xs text-rose-500 hover:underline cursor-pointer font-medium"
                 >
                   Restablecer filtros
                 </button>
@@ -382,9 +388,9 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             isDark ? 'bg-[#131927] border-white/10' : 'bg-white border-slate-200 shadow-xs'
           }`}
         >
-          <ReceiptText className="w-10 h-10 mx-auto mb-2 text-slate-500" />
-          <h3 className="font-bold text-sm">Sin transacciones</h3>
-          <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
+          <ReceiptText className={`w-10 h-10 mx-auto mb-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`} />
+          <h3 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>Sin transacciones</h3>
+          <p className={`text-xs mt-1 max-w-xs mx-auto ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
             {hasActiveFilters
               ? 'No hay transacciones que coincidan con los filtros seleccionados.'
               : 'No hay transacciones registradas en este período financiero.'}
@@ -419,18 +425,22 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 }`}
               >
                 {/* DATE GROUP HEADER */}
-                <div className="px-4 py-2.5 bg-white/5 border-b border-white/5 flex items-center justify-between text-xs">
-                  <span className="font-bold text-slate-300">
+                <div
+                  className={`px-4 py-2.5 border-b flex items-center justify-between text-xs ${
+                    isDark ? 'bg-white/5 border-white/5' : 'bg-slate-50 border-slate-100'
+                  }`}
+                >
+                  <span className={`font-bold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
                     {formatShortDateES(dateKey)}
                   </span>
                   <div className="flex items-center gap-3 text-[11px] font-mono">
                     {dayTotalIncome > 0 && (
-                      <span className="text-emerald-400 font-semibold">
+                      <span className={`font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
                         +{formatGTQ(dayTotalIncome)}
                       </span>
                     )}
                     {dayTotalExpense > 0 && (
-                      <span className="text-rose-400 font-semibold">
+                      <span className={`font-semibold ${isDark ? 'text-rose-400' : 'text-rose-600'}`}>
                         -{formatGTQ(dayTotalExpense)}
                       </span>
                     )}
@@ -438,7 +448,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                 </div>
 
                 {/* TRANSACTIONS UNDER THIS DATE */}
-                <div className="divide-y divide-white/5">
+                <div className={`divide-y ${isDark ? 'divide-white/5' : 'divide-slate-100'}`}>
                   {txList.map((tx) => {
                     const cat = categories.find((c) => c.id === tx.categoryId);
                     const sub = cat?.subcategories.find((s) => s.id === tx.subcategoryId);
@@ -450,16 +460,18 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                       <div
                         key={tx.id}
                         onClick={() => onEditTransaction(tx)}
-                        className="p-3 sm:px-4 flex items-center justify-between hover:bg-white/5 transition-colors cursor-pointer"
+                        className={`p-3 sm:px-4 flex items-center justify-between transition-colors cursor-pointer ${
+                          isDark ? 'hover:bg-white/5' : 'hover:bg-slate-50/80'
+                        }`}
                       >
                         <div className="flex items-center gap-3">
                           <div
                             className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
                               tx.type === 'income'
-                                ? 'bg-emerald-500/15 text-emerald-400'
+                                ? isDark ? 'bg-emerald-500/15 text-emerald-400' : 'bg-emerald-50 text-emerald-600'
                                 : tx.type === 'transfer'
-                                ? 'bg-sky-500/15 text-sky-400'
-                                : 'bg-rose-500/15 text-rose-400'
+                                ? isDark ? 'bg-sky-500/15 text-sky-400' : 'bg-sky-50 text-sky-600'
+                                : isDark ? 'bg-rose-500/15 text-rose-400' : 'bg-rose-50 text-rose-600'
                             }`}
                           >
                             {tx.type === 'income' ? (
@@ -473,19 +485,21 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
                           <div>
                             <div className="flex items-center gap-2">
-                              <span className="font-bold text-xs">
+                              <span className={`font-bold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>
                                 {tx.type === 'transfer'
                                   ? 'Transferencia'
                                   : cat?.name || 'Sin categoría'}
                               </span>
                               {tx.isCreditCardPayment && (
-                                <span className="text-[9px] px-1.5 py-0.2 rounded bg-sky-500/15 text-sky-400 font-semibold">
+                                <span className={`text-[9px] px-1.5 py-0.5 rounded font-semibold ${
+                                  isDark ? 'bg-sky-500/15 text-sky-400' : 'bg-sky-100 text-sky-700'
+                                }`}>
                                   Pago Tarjeta
                                 </span>
                               )}
                             </div>
 
-                            <p className="text-[11px] text-slate-400 mt-0.5">
+                            <p className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                               {tx.type === 'transfer' ? (
                                 <span>
                                   {originAcc?.name} (−{formatGTQ(tx.amount)}) → {destAcc?.name} (+{formatGTQ(tx.amount)})
@@ -505,10 +519,10 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                           <span
                             className={`font-mono text-xs font-bold block ${
                               tx.type === 'income'
-                                ? 'text-emerald-400'
+                                ? isDark ? 'text-emerald-400' : 'text-emerald-600'
                                 : tx.type === 'transfer'
-                                ? 'text-sky-400'
-                                : 'text-rose-400'
+                                ? isDark ? 'text-sky-400' : 'text-sky-600'
+                                : isDark ? 'text-rose-400' : 'text-rose-600'
                             }`}
                           >
                             {tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}

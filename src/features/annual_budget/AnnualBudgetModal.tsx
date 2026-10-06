@@ -300,14 +300,18 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <h2 className="text-xs sm:text-base font-bold text-white tracking-tight truncate">
+                <h2 className={`text-xs sm:text-base font-bold tracking-tight truncate ${
+                  isDark ? 'text-white' : 'text-slate-900'
+                }`}>
                   Panorama de Presupuesto
                 </h2>
-                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 shrink-0">
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 shrink-0">
                   GTQ
                 </span>
               </div>
-              <p className="hidden sm:block text-[11px] text-slate-400 truncate">
+              <p className={`hidden sm:block text-[11px] truncate ${
+                isDark ? 'text-slate-400' : 'text-slate-600'
+              }`}>
                 Proyecciones y ejecución por categoría sincronizada con períodos
               </p>
             </div>
@@ -709,12 +713,14 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                       )}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
+                  <tbody className={`divide-y ${isDark ? 'divide-white/5' : 'divide-slate-200'}`}>
                     {/* BLOQUE SUPERIOR: ENCABEZADO DE INGRESOS */}
-                    <tr className="bg-emerald-500/15">
+                    <tr className={isDark ? 'bg-emerald-500/15' : 'bg-emerald-100/70'}>
                       <td
                         colSpan={matrix.columns.length + (timeHorizon !== 'annual' ? 2 : 1)}
-                        className="py-1.5 px-3 text-[11px] font-extrabold uppercase tracking-wider text-emerald-300 border-b border-emerald-500/20"
+                        className={`py-1.5 px-3 text-[11px] font-extrabold uppercase tracking-wider border-b ${
+                          isDark ? 'text-emerald-300 border-emerald-500/20' : 'text-emerald-800 border-emerald-200'
+                        }`}
                       >
                         ▲ Ingresos
                       </td>
@@ -722,8 +728,10 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
 
                     {/* FILAS DE CATEGORÍAS DE INGRESOS */}
                     {matrix.incomeRows.map((r) => (
-                      <tr key={r.category.id} className="hover:bg-white/[0.03] transition-colors">
-                        <td className="sticky left-0 z-10 py-2 px-3 text-left font-medium border-r border-white/10 bg-[#0F1420] flex items-center gap-2">
+                      <tr key={r.category.id} className={isDark ? 'hover:bg-white/[0.03] transition-colors' : 'hover:bg-slate-50 transition-colors'}>
+                        <td className={`sticky left-0 z-10 py-2 px-3 text-left font-medium border-r flex items-center gap-2 ${
+                          isDark ? 'border-white/10 bg-[#0F1420] text-slate-200' : 'border-slate-200 bg-white text-slate-900'
+                        }`}>
                           <span className="text-sm">{r.category.icon || '💰'}</span>
                           <span className="truncate">{r.category.name}</span>
                         </td>
@@ -732,15 +740,15 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                           if (matrixMode === 'comparison') {
                             return (
                               <td key={col.id} className="py-1.5 px-2 text-right">
-                                <div className="font-semibold text-emerald-300">
+                                <div className={`font-semibold ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
                                   {formatGTQ(cell.projected)}
                                 </div>
                                 {cell.actual > 0 && (
                                   <div
-                                    className={`text-[10px] ${
+                                    className={`text-[10px] font-medium ${
                                       cell.actual >= cell.projected
-                                        ? 'text-emerald-400'
-                                        : 'text-amber-400'
+                                        ? isDark ? 'text-emerald-400' : 'text-emerald-600'
+                                        : isDark ? 'text-amber-400' : 'text-amber-600'
                                     }`}
                                   >
                                     Real: {formatGTQ(cell.actual)}
@@ -751,14 +759,14 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                           }
                           if (matrixMode === 'projected') {
                             return (
-                              <td key={col.id} className="py-2 px-2 text-right text-emerald-300">
+                              <td key={col.id} className={`py-2 px-2 text-right ${isDark ? 'text-emerald-300' : 'text-emerald-700'}`}>
                                 {formatGTQ(cell.projected)}
                               </td>
                             );
                           }
                           if (matrixMode === 'actual') {
                             return (
-                              <td key={col.id} className="py-2 px-2 text-right text-slate-300">
+                              <td key={col.id} className={`py-2 px-2 text-right ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
                                 {formatGTQ(cell.actual)}
                               </td>
                             );
@@ -767,7 +775,9 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                             <td
                               key={col.id}
                               className={`py-2 px-2 text-right font-semibold ${
-                                cell.difference >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                cell.difference >= 0
+                                  ? isDark ? 'text-emerald-400' : 'text-emerald-600'
+                                  : isDark ? 'text-rose-400' : 'text-rose-600'
                               }`}
                             >
                               {cell.difference >= 0
@@ -777,7 +787,9 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                           );
                         })}
                         {timeHorizon !== 'annual' && (
-                          <td className="py-2 px-3 text-right font-bold border-l border-white/10 text-emerald-300">
+                          <td className={`py-2 px-3 text-right font-bold border-l ${
+                            isDark ? 'border-white/10 text-emerald-300' : 'border-slate-200 text-emerald-700'
+                          }`}>
                             {matrixMode === 'actual'
                               ? formatGTQ(r.annualActual)
                               : formatGTQ(r.annualProjected)}
@@ -787,8 +799,14 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                     ))}
 
                     {/* FILA: TOTAL INGRESOS */}
-                    <tr className="bg-emerald-500/20 font-extrabold text-emerald-200 border-t border-emerald-500/30">
-                      <td className="sticky left-0 z-10 py-2.5 px-3 text-left bg-emerald-950/60 border-r border-white/10">
+                    <tr className={`font-extrabold border-t ${
+                      isDark
+                        ? 'bg-emerald-500/20 text-emerald-200 border-emerald-500/30'
+                        : 'bg-emerald-50 text-emerald-900 border-emerald-200'
+                    }`}>
+                      <td className={`sticky left-0 z-10 py-2.5 px-3 text-left border-r ${
+                        isDark ? 'bg-emerald-950/60 border-white/10' : 'bg-emerald-100 border-emerald-200'
+                      }`}>
                         Total Ingresos
                       </td>
                       {matrix.columns.map((col) => {
@@ -811,7 +829,11 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                         );
                       })}
                       {timeHorizon !== 'annual' && (
-                        <td className="py-2.5 px-3 text-right font-extrabold text-emerald-300 border-l border-white/10 bg-emerald-500/30">
+                        <td className={`py-2.5 px-3 text-right font-extrabold border-l ${
+                          isDark
+                            ? 'text-emerald-300 border-white/10 bg-emerald-500/30'
+                            : 'text-emerald-800 border-emerald-200 bg-emerald-100'
+                        }`}>
                           {formatGTQ(
                             matrixMode === 'actual'
                               ? matrix.totalIncome.annualActual
@@ -822,10 +844,12 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                     </tr>
 
                     {/* BLOQUE INFERIOR: ENCABEZADO DE EGRESOS */}
-                    <tr className="bg-rose-500/15">
+                    <tr className={isDark ? 'bg-rose-500/15' : 'bg-rose-100/70'}>
                       <td
                         colSpan={matrix.columns.length + (timeHorizon !== 'annual' ? 2 : 1)}
-                        className="py-1.5 px-3 text-[11px] font-extrabold uppercase tracking-wider text-rose-300 border-b border-rose-500/20"
+                        className={`py-1.5 px-3 text-[11px] font-extrabold uppercase tracking-wider border-b ${
+                          isDark ? 'text-rose-300 border-rose-500/20' : 'text-rose-800 border-rose-200'
+                        }`}
                       >
                         ▼ Egresos
                       </td>
@@ -833,8 +857,10 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
 
                     {/* FILAS DE CATEGORÍAS DE EGRESOS */}
                     {matrix.expenseRows.map((r) => (
-                      <tr key={r.category.id} className="hover:bg-white/[0.03] transition-colors">
-                        <td className="sticky left-0 z-10 py-2 px-3 text-left font-medium border-r border-white/10 bg-[#0F1420] flex items-center gap-2">
+                      <tr key={r.category.id} className={isDark ? 'hover:bg-white/[0.03] transition-colors' : 'hover:bg-slate-50 transition-colors'}>
+                        <td className={`sticky left-0 z-10 py-2 px-3 text-left font-medium border-r flex items-center gap-2 ${
+                          isDark ? 'border-white/10 bg-[#0F1420] text-slate-200' : 'border-slate-200 bg-white text-slate-900'
+                        }`}>
                           <span className="text-sm">{r.category.icon || '📦'}</span>
                           <span className="truncate">{r.category.name}</span>
                         </td>
@@ -854,10 +880,10 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                                 </div>
                                 {cell.actual > 0 && (
                                   <div
-                                    className={`text-[10px] ${
+                                    className={`text-[10px] font-medium ${
                                       cell.actual <= cell.projected
-                                        ? 'text-emerald-400'
-                                        : 'text-rose-400'
+                                        ? isDark ? 'text-emerald-400' : 'text-emerald-600'
+                                        : isDark ? 'text-rose-400' : 'text-rose-600'
                                     }`}
                                   >
                                     Real: {formatGTQ(cell.actual)}
@@ -883,7 +909,7 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                           }
                           if (matrixMode === 'actual') {
                             return (
-                              <td key={col.id} className="py-2 px-2 text-right text-slate-300">
+                              <td key={col.id} className={`py-2 px-2 text-right ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
                                 {formatGTQ(cell.actual)}
                               </td>
                             );
@@ -892,7 +918,9 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                             <td
                               key={col.id}
                               className={`py-2 px-2 text-right font-semibold ${
-                                cell.difference >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                                cell.difference >= 0
+                                  ? isDark ? 'text-emerald-400' : 'text-emerald-600'
+                                  : isDark ? 'text-rose-400' : 'text-rose-600'
                               }`}
                             >
                               {cell.difference >= 0
@@ -902,7 +930,9 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                           );
                         })}
                         {timeHorizon !== 'annual' && (
-                          <td className="py-2 px-3 text-right font-bold border-l border-white/10 text-slate-200">
+                          <td className={`py-2 px-3 text-right font-bold border-l ${
+                            isDark ? 'border-white/10 text-slate-200' : 'border-slate-200 text-slate-700'
+                          }`}>
                             {matrixMode === 'actual'
                               ? formatGTQ(r.annualActual)
                               : formatGTQ(r.annualProjected)}
@@ -912,8 +942,14 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                     ))}
 
                     {/* FILA: TOTAL EGRESOS */}
-                    <tr className="bg-rose-500/20 font-extrabold text-rose-200 border-t border-rose-500/30">
-                      <td className="sticky left-0 z-10 py-2.5 px-3 text-left bg-rose-950/60 border-r border-white/10">
+                    <tr className={`font-extrabold border-t ${
+                      isDark
+                        ? 'bg-rose-500/20 text-rose-200 border-rose-500/30'
+                        : 'bg-rose-50 text-rose-900 border-rose-200'
+                    }`}>
+                      <td className={`sticky left-0 z-10 py-2.5 px-3 text-left border-r ${
+                        isDark ? 'bg-rose-950/60 border-white/10' : 'bg-rose-100 border-rose-200'
+                      }`}>
                         Total Egresos
                       </td>
                       {matrix.columns.map((col) => {
@@ -930,14 +966,20 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                         return (
                           <td
                             key={col.id}
-                            className="py-2.5 px-2 text-right font-bold text-rose-300"
+                            className={`py-2.5 px-2 text-right font-bold ${
+                              isDark ? 'text-rose-300' : 'text-rose-700'
+                            }`}
                           >
                             {formatGTQ(val)}
                           </td>
                         );
                       })}
                       {timeHorizon !== 'annual' && (
-                        <td className="py-2.5 px-3 text-right font-extrabold text-rose-400 border-l border-white/10 bg-rose-500/30">
+                        <td className={`py-2.5 px-3 text-right font-extrabold border-l ${
+                          isDark
+                            ? 'text-rose-400 border-white/10 bg-rose-500/30'
+                            : 'text-rose-800 border-rose-200 bg-rose-100'
+                        }`}>
                           {formatGTQ(
                             matrixMode === 'actual'
                               ? matrix.totalExpense.annualActual
@@ -948,8 +990,12 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                     </tr>
 
                     {/* FILA FINAL: DIFERENCIA NETA (INGRESOS - EGRESOS) */}
-                    <tr className="bg-slate-900 font-extrabold text-white border-t-2 border-emerald-500/40">
-                      <td className="sticky left-0 z-10 py-3 px-3 text-left bg-black border-r border-white/10 text-emerald-400">
+                    <tr className={`font-extrabold border-t-2 border-emerald-500/40 ${
+                      isDark ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-900'
+                    }`}>
+                      <td className={`sticky left-0 z-10 py-3 px-3 text-left border-r ${
+                        isDark ? 'bg-black border-white/10 text-emerald-400' : 'bg-slate-200 border-slate-300 text-emerald-800'
+                      }`}>
                         Diferencia (Ingresos - Egresos)
                       </td>
                       {matrix.columns.map((col) => {
@@ -966,8 +1012,10 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                         return (
                           <td
                             key={col.id}
-                            className={`py-3 px-2 text-right ${
-                              val >= 0 ? 'text-emerald-300 font-bold' : 'text-rose-400 font-bold'
+                            className={`py-3 px-2 text-right font-bold ${
+                              val >= 0
+                                ? isDark ? 'text-emerald-300' : 'text-emerald-700'
+                                : isDark ? 'text-rose-400' : 'text-rose-700'
                             }`}
                           >
                             {formatGTQ(val)}
@@ -975,7 +1023,11 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                         );
                       })}
                       {timeHorizon !== 'annual' && (
-                        <td className="py-3 px-3 text-right font-extrabold text-emerald-300 text-sm border-l border-white/10 bg-emerald-500/25">
+                        <td className={`py-3 px-3 text-right font-extrabold text-sm border-l ${
+                          isDark
+                            ? 'text-emerald-300 border-white/10 bg-emerald-500/25'
+                            : 'text-emerald-800 border-slate-300 bg-emerald-100'
+                        }`}>
                           {formatGTQ(
                             matrixMode === 'actual'
                               ? matrix.netDifference.annualActual
@@ -1059,17 +1111,23 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                         return (
                           <div
                             key={cat.id}
-                            className="p-3 rounded-xl bg-black/20 border border-white/5 space-y-2"
+                            className={`p-3 rounded-xl border space-y-2 ${
+                              isDark ? 'bg-black/20 border-white/5' : 'bg-white border-slate-200 shadow-xs'
+                            }`}
                           >
                             <div className="flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
                               <div className="flex items-center gap-2.5">
                                 <span className="text-lg">{cat.icon || '💰'}</span>
-                                <span className="font-bold text-xs text-white">{cat.name}</span>
+                                <span className={`font-bold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                                  {cat.name}
+                                </span>
                               </div>
 
                               <div className="flex items-center gap-3">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-xs text-slate-400">Base mensual (Q):</span>
+                                  <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600 font-medium'}`}>
+                                    Base mensual (Q):
+                                  </span>
                                   <input
                                     type="number"
                                     min="0"
@@ -1081,10 +1139,10 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                                         parseFloat(e.target.value) || 0
                                       )
                                     }
-                                    className={`w-28 px-2.5 py-1 rounded-lg border text-right font-bold text-xs text-emerald-400 ${
+                                    className={`w-28 px-2.5 py-1 rounded-lg border text-right font-bold text-xs ${
                                       isDark
-                                        ? 'bg-black/30 border-white/10'
-                                        : 'bg-white border-slate-300'
+                                        ? 'bg-black/30 border-white/10 text-emerald-400'
+                                        : 'bg-white border-slate-300 text-emerald-700'
                                     }`}
                                   />
                                 </div>
@@ -1092,7 +1150,11 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                                 <button
                                   type="button"
                                   onClick={() => setExpandedCatId(isExpanded ? null : cat.id)}
-                                  className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[11px] text-slate-300 flex items-center gap-1 cursor-pointer border border-white/10"
+                                  className={`px-2 py-1 rounded-lg text-[11px] flex items-center gap-1 cursor-pointer border transition-colors ${
+                                    isDark
+                                      ? 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/10'
+                                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                                  }`}
                                 >
                                   <span>Meses / Períodos</span>
                                   <ChevronDown
@@ -1106,15 +1168,21 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
 
                             {/* Panel de ajustes específicos por mes / período */}
                             {isExpanded && (
-                              <div className="pt-3 border-t border-white/5 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                              <div className={`pt-3 border-t grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 ${
+                                isDark ? 'border-white/5' : 'border-slate-100'
+                              }`}>
                                 {MONTH_NAMES_ES.map((monthName, mIdx) => {
                                   const p = findPeriodForMonth(periods, selectedYear, mIdx);
                                   return (
                                     <div
                                       key={mIdx}
-                                      className="p-2 rounded-lg bg-black/30 border border-white/5"
+                                      className={`p-2 rounded-lg border ${
+                                        isDark ? 'bg-black/30 border-white/5' : 'bg-slate-50 border-slate-200'
+                                      }`}
                                     >
-                                      <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold mb-1">
+                                      <div className={`flex items-center justify-between text-[10px] font-semibold mb-1 ${
+                                        isDark ? 'text-slate-400' : 'text-slate-600'
+                                      }`}>
                                         <span>{monthName}</span>
                                         {p && (
                                           <span
@@ -1139,7 +1207,7 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                                         className={`w-full px-2 py-1 rounded text-right text-xs font-semibold ${
                                           isDark
                                             ? 'bg-black/40 border border-white/10 text-emerald-300'
-                                            : 'bg-white border-slate-300'
+                                            : 'bg-white border border-slate-300 text-slate-900'
                                         }`}
                                       />
                                     </div>
@@ -1161,7 +1229,9 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                       : 'bg-rose-50/40 border-rose-200'
                   }`}
                 >
-                  <h5 className="font-bold text-xs uppercase tracking-wider text-rose-400">
+                  <h5 className={`font-bold text-xs uppercase tracking-wider ${
+                    isDark ? 'text-rose-400' : 'text-rose-700'
+                  }`}>
                     ▼ Categorías de Egresos
                   </h5>
                   <div className="space-y-2">
@@ -1177,17 +1247,23 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                         return (
                           <div
                             key={cat.id}
-                            className="p-3 rounded-xl bg-black/20 border border-white/5 space-y-2"
+                            className={`p-3 rounded-xl border space-y-2 ${
+                              isDark ? 'bg-black/20 border-white/5' : 'bg-white border-slate-200 shadow-xs'
+                            }`}
                           >
                             <div className="flex items-center justify-between gap-3 flex-wrap sm:flex-nowrap">
                               <div className="flex items-center gap-2.5">
                                 <span className="text-lg">{cat.icon || '📦'}</span>
-                                <span className="font-bold text-xs text-white">{cat.name}</span>
+                                <span className={`font-bold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                                  {cat.name}
+                                </span>
                               </div>
 
                               <div className="flex items-center gap-3">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-xs text-slate-400">Base mensual (Q):</span>
+                                  <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600 font-medium'}`}>
+                                    Base mensual (Q):
+                                  </span>
                                   <input
                                     type="number"
                                     min="0"
@@ -1199,10 +1275,10 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                                         parseFloat(e.target.value) || 0
                                       )
                                     }
-                                    className={`w-28 px-2.5 py-1 rounded-lg border text-right font-bold text-xs text-rose-400 ${
+                                    className={`w-28 px-2.5 py-1 rounded-lg border text-right font-bold text-xs ${
                                       isDark
-                                        ? 'bg-black/30 border-white/10'
-                                        : 'bg-white border-slate-300'
+                                        ? 'bg-black/30 border-white/10 text-rose-400'
+                                        : 'bg-white border-slate-300 text-rose-700'
                                     }`}
                                   />
                                 </div>
@@ -1210,7 +1286,11 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                                 <button
                                   type="button"
                                   onClick={() => setExpandedCatId(isExpanded ? null : cat.id)}
-                                  className="px-2 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-[11px] text-slate-300 flex items-center gap-1 cursor-pointer border border-white/10"
+                                  className={`px-2 py-1 rounded-lg text-[11px] flex items-center gap-1 cursor-pointer border transition-colors ${
+                                    isDark
+                                      ? 'bg-white/5 hover:bg-white/10 text-slate-300 border-white/10'
+                                      : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+                                  }`}
                                 >
                                   <span>Meses / Períodos</span>
                                   <ChevronDown
@@ -1224,15 +1304,21 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
 
                             {/* Panel de ajustes específicos por mes / período */}
                             {isExpanded && (
-                              <div className="pt-3 border-t border-white/5 grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2">
+                              <div className={`pt-3 border-t grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 gap-2 ${
+                                isDark ? 'border-white/5' : 'border-slate-100'
+                              }`}>
                                 {MONTH_NAMES_ES.map((monthName, mIdx) => {
                                   const p = findPeriodForMonth(periods, selectedYear, mIdx);
                                   return (
                                     <div
                                       key={mIdx}
-                                      className="p-2 rounded-lg bg-black/30 border border-white/5"
+                                      className={`p-2 rounded-lg border ${
+                                        isDark ? 'bg-black/30 border-white/5' : 'bg-slate-50 border-slate-200'
+                                      }`}
                                     >
-                                      <div className="flex items-center justify-between text-[10px] text-slate-400 font-semibold mb-1">
+                                      <div className={`flex items-center justify-between text-[10px] font-semibold mb-1 ${
+                                        isDark ? 'text-slate-400' : 'text-slate-600'
+                                      }`}>
                                         <span>{monthName}</span>
                                         {p && (
                                           <span
@@ -1257,7 +1343,7 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                                         className={`w-full px-2 py-1 rounded text-right text-xs font-semibold ${
                                           isDark
                                             ? 'bg-black/40 border border-white/10 text-rose-300'
-                                            : 'bg-white border-slate-300'
+                                            : 'bg-white border border-slate-300 text-slate-900'
                                         }`}
                                       />
                                     </div>

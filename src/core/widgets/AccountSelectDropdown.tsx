@@ -128,7 +128,7 @@ export const AccountSelectDropdown: React.FC<AccountSelectDropdownProps> = ({
             </div>
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
-                <span className="font-bold text-xs truncate text-white dark:text-white light:text-slate-900">
+                <span className={`font-bold text-xs truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   {selectedAccount.name}
                 </span>
                 <span
@@ -136,7 +136,7 @@ export const AccountSelectDropdown: React.FC<AccountSelectDropdownProps> = ({
                   style={{ backgroundColor: activeColor }}
                 />
               </div>
-              <span className="text-[10px] text-slate-400 block truncate">
+              <span className={`text-[10px] block truncate ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 {selectedAccount.subtitle ||
                   (selectedAccount.type === 'cash'
                     ? 'Efectivo'
@@ -151,8 +151,8 @@ export const AccountSelectDropdown: React.FC<AccountSelectDropdownProps> = ({
               <span
                 className={`font-mono text-xs font-bold block ${
                   selectedAccount.type === 'credit_card'
-                    ? 'text-rose-400'
-                    : 'text-emerald-400'
+                    ? isDark ? 'text-rose-400' : 'text-rose-600'
+                    : isDark ? 'text-emerald-400' : 'text-emerald-600'
                 }`}
               >
                 {formatGTQ(selectedAccount.currentBalance ?? selectedAccount.balance ?? 0)}
@@ -160,12 +160,12 @@ export const AccountSelectDropdown: React.FC<AccountSelectDropdownProps> = ({
             </div>
           </div>
         ) : (
-          <span className="text-slate-400">{placeholder}</span>
+          <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>{placeholder}</span>
         )}
 
         <ChevronDown
           className={`w-4 h-4 shrink-0 transition-transform duration-200 ${
-            isOpen ? 'rotate-180 text-emerald-400' : 'text-slate-400'
+            isOpen ? 'rotate-180 text-emerald-500' : isDark ? 'text-slate-400' : 'text-slate-500'
           }`}
         />
       </button>

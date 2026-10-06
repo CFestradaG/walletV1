@@ -179,10 +179,10 @@ export const MoreView: React.FC<MoreViewProps> = ({
               {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'U'}
             </div>
             <div>
-              <h2 className="font-bold text-sm text-white">
+              <h2 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 {currentUser?.name || 'Usuario'}
               </h2>
-              <p className="text-xs text-slate-400">
+              <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 {currentUser?.email || 'usuario@wallet.app'}
               </p>
             </div>
@@ -192,7 +192,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
             type="button"
             onClick={logout}
             title="Cerrar sesión"
-            className="p-2.5 rounded-xl border border-rose-500/20 text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
+            className="p-2.5 rounded-xl border border-rose-500/20 text-rose-500 dark:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer flex items-center gap-1.5 text-xs font-semibold"
           >
             <LogOut className="w-4 h-4" />
             <span className="hidden sm:inline">Salir</span>
@@ -217,8 +217,10 @@ export const MoreView: React.FC<MoreViewProps> = ({
             onClick={() => setThemeMode('light')}
             className={`py-2 px-3 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               themeMode === 'light'
-                ? 'bg-white text-slate-900 shadow-sm font-bold'
-                : 'text-slate-400 hover:text-white'
+                ? 'bg-white text-slate-900 shadow-sm font-bold border border-slate-200/80'
+                : isDark
+                ? 'text-slate-400 hover:text-white'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Sun className="w-3.5 h-3.5 text-amber-500" />
@@ -230,7 +232,9 @@ export const MoreView: React.FC<MoreViewProps> = ({
             className={`py-2 px-3 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               themeMode === 'dark'
                 ? 'bg-white/10 text-emerald-400 shadow-sm font-bold border border-white/10'
-                : 'text-slate-400 hover:text-white'
+                : isDark
+                ? 'text-slate-400 hover:text-white'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Moon className="w-3.5 h-3.5" />
@@ -242,7 +246,9 @@ export const MoreView: React.FC<MoreViewProps> = ({
             className={`py-2 px-3 rounded-xl text-xs font-medium flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
               themeMode === 'system'
                 ? 'bg-white/10 text-sky-400 shadow-sm font-bold border border-white/10'
-                : 'text-slate-400 hover:text-white'
+                : isDark
+                ? 'text-slate-400 hover:text-white'
+                : 'text-slate-600 hover:text-slate-900'
             }`}
           >
             <Monitor className="w-3.5 h-3.5" />
@@ -263,66 +269,78 @@ export const MoreView: React.FC<MoreViewProps> = ({
           <button
             type="button"
             onClick={() => setIsCatManagerOpen(true)}
-            className="w-full p-3 rounded-2xl border border-white/5 hover:bg-white/5 flex items-center justify-between text-left transition-colors cursor-pointer"
+            className={`w-full p-3 rounded-2xl border flex items-center justify-between text-left transition-colors cursor-pointer ${
+              isDark
+                ? 'border-white/5 hover:bg-white/5'
+                : 'border-slate-200 hover:bg-slate-50'
+            }`}
           >
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
                 <FolderTree className="w-4 h-4" />
               </div>
               <div>
-                <span className="font-bold text-xs text-white block">
+                <span className={`font-bold text-xs block ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   Categorías y Subcategorías
                 </span>
-                <span className="text-[11px] text-slate-400">
+                <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                   {categories.length} categorías configuradas
                 </span>
               </div>
             </div>
-            <ChevronRight className="w-4 h-4 text-slate-400" />
+            <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
           </button>
 
           {/* Períodos Financieros */}
           <button
             type="button"
             onClick={onOpenPeriodsModal}
-            className="w-full p-3 rounded-2xl border border-white/5 hover:bg-white/5 flex items-center justify-between text-left transition-colors cursor-pointer"
+            className={`w-full p-3 rounded-2xl border flex items-center justify-between text-left transition-colors cursor-pointer ${
+              isDark
+                ? 'border-white/5 hover:bg-white/5'
+                : 'border-slate-200 hover:bg-slate-50'
+            }`}
           >
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-sky-500/15 text-sky-400 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400 flex items-center justify-center">
                 <Calendar className="w-4 h-4" />
               </div>
               <div>
-                <span className="font-bold text-xs text-white block">
+                <span className={`font-bold text-xs block ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   Períodos Financieros
                 </span>
-                <span className="text-[11px] text-slate-400">
+                <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                   Configurar fechas de corte, quincenas o meses
                 </span>
               </div>
             </div>
-            <ChevronRight className="w-4 h-4 text-slate-400" />
+            <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
           </button>
 
           {/* Presupuesto y Panorama Anual */}
           <button
             type="button"
             onClick={onOpenBudgetsModal}
-            className="w-full p-3 rounded-2xl border border-white/5 hover:bg-white/5 flex items-center justify-between text-left transition-colors cursor-pointer"
+            className={`w-full p-3 rounded-2xl border flex items-center justify-between text-left transition-colors cursor-pointer ${
+              isDark
+                ? 'border-white/5 hover:bg-white/5'
+                : 'border-slate-200 hover:bg-slate-50'
+            }`}
           >
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center">
+              <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center">
                 <Target className="w-4 h-4" />
               </div>
               <div>
-                <span className="font-bold text-xs text-white block">
+                <span className={`font-bold text-xs block ${isDark ? 'text-white' : 'text-slate-900'}`}>
                   Presupuesto & Panorama Anual
                 </span>
-                <span className="text-[11px] text-slate-400">
+                <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                   Proyecciones y metas de gasto por categoría
                 </span>
               </div>
             </div>
-            <ChevronRight className="w-4 h-4 text-slate-400" />
+            <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
           </button>
         </div>
       </div>
@@ -338,7 +356,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
           >
             <div className="flex items-center justify-between mb-3">
               <span className="text-xs font-bold block">PWA & Seguridad Local</span>
-              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
                 100% Offline
               </span>
             </div>
@@ -348,21 +366,25 @@ export const MoreView: React.FC<MoreViewProps> = ({
               <button
                 type="button"
                 onClick={onOpenSecurityModal}
-                className="w-full p-3 rounded-2xl border border-white/5 hover:bg-white/5 flex items-center justify-between text-left transition-colors cursor-pointer"
+                className={`w-full p-3 rounded-2xl border flex items-center justify-between text-left transition-colors cursor-pointer ${
+                  isDark
+                    ? 'border-white/5 hover:bg-white/5'
+                    : 'border-slate-200 hover:bg-slate-50'
+                }`}
               >
                 <div className="flex items-center gap-3">
                   <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
                     secConfig.enabled
-                      ? 'bg-emerald-500/15 text-emerald-400'
-                      : 'bg-indigo-500/15 text-indigo-400'
+                      ? 'bg-emerald-500/15 text-emerald-600 dark:text-emerald-400'
+                      : 'bg-indigo-500/15 text-indigo-600 dark:text-indigo-400'
                   }`}>
                     {secConfig.enabled ? <Shield className="w-4 h-4" /> : <Fingerprint className="w-4 h-4" />}
                   </div>
                   <div>
-                    <span className="font-bold text-xs text-white block">
+                    <span className={`font-bold text-xs block ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       Seguridad & Bloqueo
                     </span>
-                    <span className="text-[11px] text-slate-400">
+                    <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                       {secConfig.enabled
                         ? 'Protección activa con PIN y Biometría'
                         : 'Configurar PIN de 4 dígitos o Huella / Face ID'}
@@ -372,12 +394,14 @@ export const MoreView: React.FC<MoreViewProps> = ({
                 <div className="flex items-center gap-2">
                   <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
                     secConfig.enabled
-                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                      : 'bg-slate-700/60 text-slate-300'
+                      ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
+                      : isDark
+                      ? 'bg-slate-700/60 text-slate-300'
+                      : 'bg-slate-100 text-slate-600 border border-slate-200'
                   }`}>
                     {secConfig.enabled ? 'Activo' : 'Configurar'}
                   </span>
-                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                  <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
                 </div>
               </button>
 
@@ -385,37 +409,43 @@ export const MoreView: React.FC<MoreViewProps> = ({
               <button
                 type="button"
                 onClick={onOpenInstallModal}
-                className="w-full p-3 rounded-2xl border border-white/5 hover:bg-white/5 flex items-center justify-between text-left transition-colors cursor-pointer"
+                className={`w-full p-3 rounded-2xl border flex items-center justify-between text-left transition-colors cursor-pointer ${
+                  isDark
+                    ? 'border-white/5 hover:bg-white/5'
+                    : 'border-slate-200 hover:bg-slate-50'
+                }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-teal-500/15 text-teal-400 flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-xl bg-teal-500/15 text-teal-600 dark:text-teal-400 flex items-center justify-center">
                     <Smartphone className="w-4 h-4" />
                   </div>
                   <div>
-                    <span className="font-bold text-xs text-white block">
+                    <span className={`font-bold text-xs block ${isDark ? 'text-white' : 'text-slate-900'}`}>
                       Instalar en Teléfono / PC (PWA)
                     </span>
-                    <span className="text-[11px] text-slate-400">
+                    <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                       Acceso rápido de pantalla de inicio sin barra de navegación
                     </span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-teal-500/30">
                     Instalar
                   </span>
-                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                  <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
                 </div>
               </button>
 
               {/* Estado Offline Firestore */}
-              <div className="p-3 rounded-2xl bg-black/25 border border-white/5 flex items-center gap-2.5">
-                <Wifi className="w-4 h-4 text-emerald-400 shrink-0" />
+              <div className={`p-3 rounded-2xl border flex items-center gap-2.5 ${
+                isDark ? 'bg-black/25 border-white/5' : 'bg-slate-50 border-slate-200'
+              }`}>
+                <Wifi className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <div className="text-[11px]">
-                  <span className="text-slate-200 font-medium block">
+                  <span className={`font-semibold block ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
                     Persistencia sin conexión habilitada
                   </span>
-                  <span className="text-slate-400">
+                  <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>
                     Tus registros se guardan localmente y se sincronizan al recuperar internet.
                   </span>
                 </div>
@@ -433,26 +463,30 @@ export const MoreView: React.FC<MoreViewProps> = ({
       >
         <span className="text-xs font-bold block mb-3">Preferencias</span>
         <div className="space-y-3 text-xs">
-          <div className="flex items-center justify-between p-2.5 rounded-2xl bg-black/20 border border-white/5">
+          <div className={`flex items-center justify-between p-2.5 rounded-2xl border ${
+            isDark ? 'bg-black/20 border-white/5' : 'bg-slate-50 border-slate-200'
+          }`}>
             <div>
-              <span className="font-bold text-white block">Moneda principal</span>
-              <span className="text-[11px] text-slate-400">Quetzal Guatemalteco (GTQ · Q)</span>
+              <span className={`font-bold block ${isDark ? 'text-white' : 'text-slate-900'}`}>Moneda principal</span>
+              <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Quetzal Guatemalteco (GTQ · Q)</span>
             </div>
-            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 font-mono font-bold text-xs">
+            <span className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 font-mono font-bold text-xs">
               GTQ
             </span>
           </div>
 
-          <label className="flex items-center justify-between p-2.5 rounded-2xl bg-black/20 border border-white/5 cursor-pointer">
+          <label className={`flex items-center justify-between p-2.5 rounded-2xl border cursor-pointer ${
+            isDark ? 'bg-black/20 border-white/5' : 'bg-slate-50 border-slate-200'
+          }`}>
             <div className="flex items-center gap-2.5">
               {settings.hideBalances ? (
-                <EyeOff className="w-4 h-4 text-slate-400" />
+                <EyeOff className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
               ) : (
-                <Eye className="w-4 h-4 text-emerald-400" />
+                <Eye className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
               )}
               <div>
-                <span className="font-bold text-white block">Modo de privacidad</span>
-                <span className="text-[11px] text-slate-400">
+                <span className={`font-bold block ${isDark ? 'text-white' : 'text-slate-900'}`}>Modo de privacidad</span>
+                <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                   Ocultar saldos numéricos con asteriscos
                 </span>
               </div>
@@ -463,7 +497,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
               onChange={(e) =>
                 updateSettings({ hideBalances: e.target.checked })
               }
-              className="rounded text-emerald-500 focus:ring-emerald-500"
+              className="rounded text-emerald-500 focus:ring-emerald-500 cursor-pointer"
             />
           </label>
         </div>
@@ -476,30 +510,30 @@ export const MoreView: React.FC<MoreViewProps> = ({
         }`}
       >
         <span className="text-xs font-bold block mb-2">Restablecer cuenta</span>
-        <p className="text-[11px] text-slate-400 mb-3">
+        <p className={`text-[11px] mb-3 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
           Borra los datos financieros y restaura las categorías iniciales. Conserva tu acceso y preferencias.
         </p>
         <button
           type="button"
           onClick={handleResetAccount}
           disabled={isResettingAccount}
-          className="w-full p-3 rounded-2xl border border-rose-500/30 text-rose-400 hover:bg-rose-500/10 disabled:opacity-50 flex items-center justify-center gap-2 text-xs font-bold transition-colors cursor-pointer"
+          className="w-full p-3 rounded-2xl border border-rose-500/30 text-rose-500 dark:text-rose-400 hover:bg-rose-500/10 disabled:opacity-50 flex items-center justify-center gap-2 text-xs font-bold transition-colors cursor-pointer"
         >
           <RotateCcw className={`w-4 h-4 ${isResettingAccount ? 'animate-spin' : ''}`} />
           {isResettingAccount ? 'Restableciendo…' : 'Restablecer cuenta'}
         </button>
         {accountResetNotice && (
-          <p role="status" className="text-[11px] text-slate-300 mt-2">{accountResetNotice}</p>
+          <p role="status" className={`text-[11px] mt-2 ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>{accountResetNotice}</p>
         )}
       </div>
 
       {/* 6. ABOUT WALLET */}
       <div className="text-center py-4 space-y-1">
-        <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-slate-400">
+        <div className={`flex items-center justify-center gap-1.5 text-xs font-bold ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
           <Wallet className="w-3.5 h-3.5 text-emerald-500" />
           <span>Wallet v1.0</span>
         </div>
-        <p className="text-[11px] text-slate-500">
+        <p className={`text-[11px] ${isDark ? 'text-slate-500' : 'text-slate-500'}`}>
           Administración financiera personal inteligente
         </p>
       </div>
@@ -514,15 +548,17 @@ export const MoreView: React.FC<MoreViewProps> = ({
                 : 'bg-white border-slate-200 text-slate-900'
             }`}
           >
-            <div className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+            <div className={`flex items-center justify-between px-5 py-4 border-b ${isDark ? 'border-white/5' : 'border-slate-200'}`}>
               <div className="flex items-center gap-2">
-                <FolderTree className="w-5 h-5 text-emerald-400" />
+                <FolderTree className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
                 <h3 className="font-bold text-sm">Administrador de Categorías</h3>
               </div>
               <button
                 type="button"
                 onClick={() => setIsCatManagerOpen(false)}
-                className="p-1 rounded-lg text-slate-400 hover:text-white cursor-pointer"
+                className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
+                  isDark ? 'text-slate-400 hover:text-white hover:bg-white/10' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
+                }`}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -571,12 +607,12 @@ export const MoreView: React.FC<MoreViewProps> = ({
             {/* Category list */}
             <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3">
               {categoryManagerNotice && (
-                <div role="status" className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 text-xs">
+                <div role="status" className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-500 text-xs">
                   {categoryManagerNotice}
                 </div>
               )}
               <div className="flex justify-between items-center">
-                <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                <span className={`text-xs font-semibold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                   Categorías registradas
                 </span>
                 <button
@@ -585,7 +621,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
                     setCategoryManagerNotice(null);
                     setIsNewCatModalOpen(true);
                   }}
-                  className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-xs font-bold flex items-center gap-1 cursor-pointer hover:bg-emerald-500/25 transition-colors"
+                  className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 text-xs font-bold flex items-center gap-1 cursor-pointer hover:bg-emerald-500/25 transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Nueva categoría</span>
@@ -620,8 +656,8 @@ export const MoreView: React.FC<MoreViewProps> = ({
                               isDark ? 'bg-black/30 border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
                             }`}
                           />
-                          <button type="button" onClick={() => saveCategoryName(cat.id)} aria-label="Guardar nombre de categoría" className="text-emerald-500 hover:text-emerald-400"><Check className="w-3.5 h-3.5" /></button>
-                          <button type="button" onClick={() => setEditingCategoryId(null)} aria-label="Cancelar edición de categoría" className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
+                          <button type="button" onClick={() => saveCategoryName(cat.id)} aria-label="Guardar nombre de categoría" className="text-emerald-500 hover:text-emerald-400 cursor-pointer"><Check className="w-3.5 h-3.5" /></button>
+                          <button type="button" onClick={() => setEditingCategoryId(null)} aria-label="Cancelar edición de categoría" className="text-slate-400 hover:text-slate-600 cursor-pointer"><X className="w-3.5 h-3.5" /></button>
                         </>
                       ) : (
                         <>
@@ -683,7 +719,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
                           <div
                             key={sub.id}
                             className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] border transition-colors ${
-                              isDark ? 'bg-white/5 border-white/10 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'
+                              isDark ? 'bg-white/5 border-white/10 text-slate-300' : 'bg-slate-100 border-slate-200 text-slate-800'
                             }`}
                           >
                             {isEditing ? (
@@ -701,8 +737,8 @@ export const MoreView: React.FC<MoreViewProps> = ({
                                     isDark ? 'bg-black/30 border-white/10 text-white' : 'bg-white border-slate-300 text-slate-900'
                                   }`}
                                 />
-                                <button type="button" onClick={() => saveSubcategoryName(cat.id, sub.id)} aria-label="Guardar nombre de subcategoría" className="text-emerald-500"><Check className="w-3 h-3" /></button>
-                                <button type="button" onClick={() => setEditingSubcategory(null)} aria-label="Cancelar edición de subcategoría" className="text-slate-400"><X className="w-3 h-3" /></button>
+                                <button type="button" onClick={() => saveSubcategoryName(cat.id, sub.id)} aria-label="Guardar nombre de subcategoría" className="text-emerald-500 cursor-pointer"><Check className="w-3 h-3" /></button>
+                                <button type="button" onClick={() => setEditingSubcategory(null)} aria-label="Cancelar edición de subcategoría" className="text-slate-400 cursor-pointer"><X className="w-3 h-3" /></button>
                               </>
                             ) : (
                               <>
@@ -734,25 +770,15 @@ export const MoreView: React.FC<MoreViewProps> = ({
                   )}
                 </div>
               ))}
-                                  aria-label={`Eliminar subcategoría ${sub.name}`}
-                                  className="text-slate-500 hover:text-rose-400 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
-                                ><X className="w-3 h-3" /></button>
-                              </>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              ))}
             </div>
 
-            <div className="p-4 border-t border-white/5 flex justify-end">
+            <div className={`p-4 border-t ${isDark ? 'border-white/5' : 'border-slate-200'} flex justify-end`}>
               <button
                 type="button"
                 onClick={() => setIsCatManagerOpen(false)}
-                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-xs font-semibold cursor-pointer"
+                className={`px-4 py-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors ${
+                  isDark ? 'bg-white/10 hover:bg-white/15 text-white' : 'bg-slate-100 hover:bg-slate-200 text-slate-800'
+                }`}
               >
                 Cerrar
               </button>
@@ -767,7 +793,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
           <form
             onSubmit={handleCreateCategory}
             className={`w-full max-w-sm rounded-3xl border p-5 space-y-3 ${
-              isDark ? 'bg-[#131927] border-white/10 text-white' : 'bg-white text-slate-900'
+              isDark ? 'bg-[#131927] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900 shadow-xl'
             }`}
           >
             <h4 className="font-bold text-xs">
@@ -779,11 +805,13 @@ export const MoreView: React.FC<MoreViewProps> = ({
               value={newCatName}
               onChange={(e) => setNewCatName(e.target.value)}
               placeholder="Nombre de la categoría"
-              className="w-full p-2.5 rounded-xl border border-white/10 bg-black/30 text-xs text-white"
+              className={`w-full p-2.5 rounded-xl border text-xs ${
+                isDark ? 'border-white/10 bg-black/30 text-white placeholder-slate-500' : 'border-slate-300 bg-slate-50 text-slate-900 placeholder-slate-400'
+              }`}
             />
-            {categoryManagerNotice && <p role="alert" className="text-xs text-rose-400">{categoryManagerNotice}</p>}
+            {categoryManagerNotice && <p role="alert" className="text-xs text-rose-500">{categoryManagerNotice}</p>}
             <div className="flex items-center gap-2">
-              <span className="text-xs text-slate-400">Color:</span>
+              <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Color:</span>
               <input
                 type="color"
                 value={newCatColor}
@@ -795,13 +823,15 @@ export const MoreView: React.FC<MoreViewProps> = ({
               <button
                 type="button"
                 onClick={() => setIsNewCatModalOpen(false)}
-                className="px-3 py-1.5 rounded-xl text-xs text-slate-400 hover:text-white cursor-pointer"
+                className={`px-3 py-1.5 rounded-xl text-xs cursor-pointer transition-colors ${
+                  isDark ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
+                }`}
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="px-3 py-1.5 rounded-xl bg-[#10B981] text-[#002113] font-bold text-xs cursor-pointer"
+                className="px-3 py-1.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-[#002113] font-bold text-xs cursor-pointer"
               >
                 Crear
               </button>
@@ -816,7 +846,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
           <form
             onSubmit={handleAddSubcategory}
             className={`w-full max-w-sm rounded-3xl border p-5 space-y-3 ${
-              isDark ? 'bg-[#131927] border-white/10 text-white' : 'bg-white text-slate-900'
+              isDark ? 'bg-[#131927] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900 shadow-xl'
             }`}
           >
             <h4 className="font-bold text-xs">
@@ -828,20 +858,24 @@ export const MoreView: React.FC<MoreViewProps> = ({
               value={newSubName}
               onChange={(e) => setNewSubName(e.target.value)}
               placeholder="Nombre de la subcategoría"
-              className="w-full p-2.5 rounded-xl border border-white/10 bg-black/30 text-xs text-white"
+              className={`w-full p-2.5 rounded-xl border text-xs ${
+                isDark ? 'border-white/10 bg-black/30 text-white placeholder-slate-500' : 'border-slate-300 bg-slate-50 text-slate-900 placeholder-slate-400'
+              }`}
             />
-            {categoryManagerNotice && <p role="alert" className="text-xs text-rose-400">{categoryManagerNotice}</p>}
+            {categoryManagerNotice && <p role="alert" className="text-xs text-rose-500">{categoryManagerNotice}</p>}
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
                 onClick={() => setTargetCatForSub(null)}
-                className="px-3 py-1.5 rounded-xl text-xs text-slate-400 hover:text-white cursor-pointer"
+                className={`px-3 py-1.5 rounded-xl text-xs cursor-pointer transition-colors ${
+                  isDark ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
+                }`}
               >
                 Cancelar
               </button>
               <button
                 type="submit"
-                className="px-3 py-1.5 rounded-xl bg-[#10B981] text-[#002113] font-bold text-xs cursor-pointer"
+                className="px-3 py-1.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-[#002113] font-bold text-xs cursor-pointer"
               >
                 Agregar
               </button>

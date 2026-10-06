@@ -215,7 +215,7 @@ export const AuthScreen: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setStep('welcome')}
-                className="p-1 rounded-lg hover:bg-white/5 text-slate-400 cursor-pointer"
+                className={`p-1 rounded-lg cursor-pointer ${isDark ? 'hover:bg-white/5 text-slate-400' : 'hover:bg-slate-100 text-slate-600'}`}
               >
                 <ArrowLeft className="w-4 h-4" />
               </button>
@@ -223,11 +223,11 @@ export const AuthScreen: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">
+              <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600 font-semibold'}`}>
                 Correo electrónico
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                <Mail className={`w-4 h-4 absolute left-3 top-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
                 <input
                   type="email"
                   required
@@ -245,7 +245,7 @@ export const AuthScreen: React.FC = () => {
 
             <div>
               <div className="flex justify-between items-center mb-1">
-                <label className="text-xs font-medium text-slate-400">
+                <label className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-600 font-semibold'}`}>
                   Contraseña
                 </label>
                 <button
@@ -257,7 +257,7 @@ export const AuthScreen: React.FC = () => {
                 </button>
               </div>
               <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                <Lock className={`w-4 h-4 absolute left-3 top-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
                 <input
                   type="password"
                   required
@@ -290,7 +290,7 @@ export const AuthScreen: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setStep('welcome')}
-                className="p-1 rounded-lg hover:bg-white/5 text-slate-400 cursor-pointer"
+                className={`p-1 rounded-lg cursor-pointer ${isDark ? 'hover:bg-white/5 text-slate-400' : 'hover:bg-slate-100 text-slate-600'}`}
               >
                 <ArrowLeft className="w-4 h-4" />
               </button>
@@ -298,11 +298,11 @@ export const AuthScreen: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">
+              <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600 font-semibold'}`}>
                 Nombre completo
               </label>
               <div className="relative">
-                <User className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                <User className={`w-4 h-4 absolute left-3 top-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
                 <input
                   type="text"
                   required
@@ -319,11 +319,11 @@ export const AuthScreen: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">
+              <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600 font-semibold'}`}>
                 Correo electrónico
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                <Mail className={`w-4 h-4 absolute left-3 top-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
                 <input
                   type="email"
                   required
@@ -340,11 +340,11 @@ export const AuthScreen: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">
+              <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600 font-semibold'}`}>
                 Contraseña
               </label>
               <div className="relative">
-                <Lock className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                <Lock className={`w-4 h-4 absolute left-3 top-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
                 <input
                   type="password"
                   required
@@ -378,7 +378,7 @@ export const AuthScreen: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setStep('login')}
-                className="p-1 rounded-lg hover:bg-white/5 text-slate-400 cursor-pointer"
+                className={`p-1 rounded-lg cursor-pointer ${isDark ? 'hover:bg-white/5 text-slate-400' : 'hover:bg-slate-100 text-slate-600'}`}
               >
                 <ArrowLeft className="w-4 h-4" />
               </button>
@@ -387,18 +387,18 @@ export const AuthScreen: React.FC = () => {
 
             <p
               className={`text-xs ${
-                isDark ? 'text-slate-400' : 'text-slate-500'
+                isDark ? 'text-slate-400' : 'text-slate-600'
               }`}
             >
               Ingresa el correo asociado a tu cuenta para restablecer tu contraseña.
             </p>
 
             <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">
+              <label className={`block text-xs font-medium mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600 font-semibold'}`}>
                 Correo electrónico
               </label>
               <div className="relative">
-                <Mail className="w-4 h-4 absolute left-3 top-3.5 text-slate-400" />
+                <Mail className={`w-4 h-4 absolute left-3 top-3.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
                 <input
                   type="email"
                   required

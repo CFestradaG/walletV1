@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Fingerprint, Lock, Delete, AlertCircle, LogOut } from 'lucide-react';
+import { useWallet } from '../state/WalletContext';
 import {
   verifyUserPin,
   verifyBiometrics,
@@ -18,6 +19,7 @@ export const SecurityLockScreen: React.FC<SecurityLockScreenProps> = ({
   onUnlocked,
   onLogout,
 }) => {
+  const { isDark } = useWallet();
   const [pinInput, setPinInput] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isCheckingBio, setIsCheckingBio] = useState(false);
@@ -92,14 +94,26 @@ export const SecurityLockScreen: React.FC<SecurityLockScreenProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] bg-[#070B12] text-white flex flex-col justify-between items-center px-6 py-10 select-none overflow-y-auto">
+    <div
+      className={`fixed inset-0 z-[100] flex flex-col justify-between items-center px-6 py-10 select-none overflow-y-auto transition-colors ${
+        isDark ? 'bg-[#070B12] text-white' : 'bg-slate-50 text-slate-900'
+      }`}
+    >
       {/* Top branding & status */}
       <div className="w-full max-w-xs flex flex-col items-center pt-4">
-        <div className="w-16 h-16 rounded-3xl bg-gradient-to-tr from-emerald-500/20 to-teal-400/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400 mb-4 shadow-lg shadow-emerald-500/10">
+        <div
+          className={`w-16 h-16 rounded-3xl flex items-center justify-center mb-4 shadow-lg ${
+            isDark
+              ? 'bg-gradient-to-tr from-emerald-500/20 to-teal-400/20 border border-emerald-500/30 text-emerald-400 shadow-emerald-500/10'
+              : 'bg-emerald-50 border border-emerald-200 text-emerald-600 shadow-emerald-600/10'
+          }`}
+        >
           <Lock className="w-8 h-8 stroke-[2.2]" />
         </div>
-        <h2 className="text-xl font-bold tracking-tight text-white">Wallet Bloqueado</h2>
-        <p className="text-xs text-slate-400 mt-1 text-center">
+        <h2 className={`text-xl font-bold tracking-tight ${isDark ? 'text-white' : 'text-slate-900'}`}>
+          Wallet Bloqueado
+        </h2>
+        <p className={`text-xs mt-1 text-center font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
           Ingresa tu PIN de seguridad o utiliza tu huella dactilar
         </p>
 
@@ -116,8 +130,12 @@ export const SecurityLockScreen: React.FC<SecurityLockScreenProps> = ({
                 key={idx}
                 className={`w-4 h-4 rounded-full transition-all duration-200 ${
                   isFilled
-                    ? 'bg-emerald-400 scale-125 shadow-md shadow-emerald-400/50'
-                    : 'bg-white/15 border border-white/20'
+                    ? isDark
+                      ? 'bg-emerald-400 scale-125 shadow-md shadow-emerald-400/50'
+                      : 'bg-emerald-600 scale-125 shadow-md shadow-emerald-600/40'
+                    : isDark
+                    ? 'bg-white/15 border border-white/20'
+                    : 'bg-slate-200 border border-slate-300'
                 }`}
               />
             );
@@ -127,7 +145,7 @@ export const SecurityLockScreen: React.FC<SecurityLockScreenProps> = ({
         {/* Error message */}
         <div className="h-6 flex items-center justify-center">
           {errorMsg && (
-            <div className="flex items-center gap-1.5 text-xs text-rose-400 animate-in fade-in">
+            <div className="flex items-center gap-1.5 text-xs text-rose-500 font-semibold animate-in fade-in">
               <AlertCircle className="w-3.5 h-3.5" />
               <span>{errorMsg}</span>
             </div>
@@ -142,7 +160,11 @@ export const SecurityLockScreen: React.FC<SecurityLockScreenProps> = ({
             key={num}
             type="button"
             onClick={() => handleDigit(num)}
-            className="h-16 rounded-2xl bg-white/5 hover:bg-white/10 active:bg-emerald-500/20 active:scale-95 border border-white/5 flex items-center justify-center text-xl font-bold text-white transition-all cursor-pointer shadow-xs"
+            className={`h-16 rounded-2xl flex items-center justify-center text-xl font-bold transition-all cursor-pointer shadow-xs active:scale-95 ${
+              isDark
+                ? 'bg-white/5 hover:bg-white/10 active:bg-emerald-500/20 border border-white/5 text-white'
+                : 'bg-white hover:bg-slate-100 active:bg-emerald-100 border border-slate-200 text-slate-900 shadow-sm'
+            }`}
           >
             {num}
           </button>
@@ -155,7 +177,11 @@ export const SecurityLockScreen: React.FC<SecurityLockScreenProps> = ({
             onClick={handleBiometricAuth}
             disabled={isCheckingBio}
             title="Desbloquear con Huella o Face ID"
-            className="h-16 rounded-2xl bg-emerald-500/15 hover:bg-emerald-500/25 active:scale-95 border border-emerald-500/30 flex items-center justify-center text-emerald-400 transition-all cursor-pointer disabled:opacity-50"
+            className={`h-16 rounded-2xl flex items-center justify-center transition-all cursor-pointer disabled:opacity-50 active:scale-95 border ${
+              isDark
+                ? 'bg-emerald-500/15 hover:bg-emerald-500/25 border-emerald-500/30 text-emerald-400'
+                : 'bg-emerald-50 hover:bg-emerald-100 border-emerald-300 text-emerald-700 shadow-sm'
+            }`}
           >
             <Fingerprint className={`w-7 h-7 ${isCheckingBio ? 'animate-pulse' : ''}`} />
           </button>
@@ -167,7 +193,11 @@ export const SecurityLockScreen: React.FC<SecurityLockScreenProps> = ({
         <button
           type="button"
           onClick={() => handleDigit('0')}
-          className="h-16 rounded-2xl bg-white/5 hover:bg-white/10 active:bg-emerald-500/20 active:scale-95 border border-white/5 flex items-center justify-center text-xl font-bold text-white transition-all cursor-pointer shadow-xs"
+          className={`h-16 rounded-2xl flex items-center justify-center text-xl font-bold transition-all cursor-pointer shadow-xs active:scale-95 ${
+            isDark
+              ? 'bg-white/5 hover:bg-white/10 active:bg-emerald-500/20 border border-white/5 text-white'
+              : 'bg-white hover:bg-slate-100 active:bg-emerald-100 border border-slate-200 text-slate-900 shadow-sm'
+          }`}
         >
           0
         </button>
@@ -177,7 +207,11 @@ export const SecurityLockScreen: React.FC<SecurityLockScreenProps> = ({
           type="button"
           onClick={handleDelete}
           title="Borrar dígito"
-          className="h-16 rounded-2xl bg-white/5 hover:bg-white/10 active:scale-95 border border-white/5 flex items-center justify-center text-slate-300 transition-all cursor-pointer shadow-xs"
+          className={`h-16 rounded-2xl flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95 border ${
+            isDark
+              ? 'bg-white/5 hover:bg-white/10 border-white/5 text-slate-300'
+              : 'bg-white hover:bg-slate-100 border-slate-200 text-slate-700 shadow-sm'
+          }`}
         >
           <Delete className="w-6 h-6" />
         </button>
@@ -190,7 +224,11 @@ export const SecurityLockScreen: React.FC<SecurityLockScreenProps> = ({
             type="button"
             onClick={handleBiometricAuth}
             disabled={isCheckingBio}
-            className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1.5 py-1 transition-colors cursor-pointer"
+            className={`text-xs font-semibold flex items-center gap-1.5 py-1 transition-colors cursor-pointer ${
+              isDark
+                ? 'text-emerald-400 hover:text-emerald-300'
+                : 'text-emerald-700 hover:text-emerald-800'
+            }`}
           >
             <Fingerprint className="w-4 h-4" />
             <span>{isCheckingBio ? 'Escaneando biometría…' : 'Usar Huella Dactilar / Face ID'}</span>
@@ -201,7 +239,11 @@ export const SecurityLockScreen: React.FC<SecurityLockScreenProps> = ({
           <button
             type="button"
             onClick={onLogout}
-            className="text-xs text-slate-500 hover:text-rose-400 flex items-center gap-1.5 py-2 transition-colors cursor-pointer"
+            className={`text-xs flex items-center gap-1.5 py-2 transition-colors cursor-pointer ${
+              isDark
+                ? 'text-slate-500 hover:text-rose-400'
+                : 'text-slate-500 hover:text-rose-600 font-medium'
+            }`}
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>Cerrar sesión en este dispositivo</span>

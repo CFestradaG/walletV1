@@ -34,7 +34,7 @@ export const PeriodSelectorBar: React.FC<PeriodSelectorBarProps> = ({
       >
         <div className="flex items-center gap-2">
           <Calendar className="w-4 h-4 text-emerald-500" />
-          <span className="text-xs font-medium text-slate-400">
+          <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
             Sin período configurado
           </span>
         </div>
@@ -115,12 +115,12 @@ export const PeriodSelectorBar: React.FC<PeriodSelectorBarProps> = ({
               {activePeriod.name}
             </span>
             <span
-              className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
+              className={`text-[10px] px-1.5 py-0.5 rounded font-mono font-semibold ${
                 activePeriod.status === 'in_progress'
-                  ? 'bg-emerald-500/15 text-emerald-400'
+                  ? isDark ? 'bg-emerald-500/15 text-emerald-400' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                   : activePeriod.status === 'closed'
-                  ? 'bg-slate-500/15 text-slate-400'
-                  : 'bg-sky-500/15 text-sky-400'
+                  ? isDark ? 'bg-slate-500/15 text-slate-400' : 'bg-slate-100 text-slate-600 border border-slate-200'
+                  : isDark ? 'bg-sky-500/15 text-sky-400' : 'bg-sky-50 text-sky-700 border border-sky-200'
               }`}
             >
               {activePeriod.status === 'in_progress'
