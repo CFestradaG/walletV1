@@ -476,6 +476,35 @@ export function loadProjectionsPlan(
   return getDefaultProjectionsPlan(categories, year);
 }
 
+export function loadSavedProjectionsPlan(userId: string, year: number): AnnualProjectionsPlan | null {
+  const key = `wallet_category_projections_${userId}_${year}`;
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as AnnualProjectionsPlan;
+    return parsed?.year === year && parsed.projections ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+export function loadAllSavedProjectionsPlans(userId: string): AnnualProjectionsPlan[] {
+  const prefix = `wallet_category_projections_${userId}_`;
+  const plans: AnnualProjectionsPlan[] = [];
+  try {
+    for (let index = 0; index < localStorage.length; index++) {
+      const key = localStorage.key(index);
+      if (!key?.startsWith(prefix)) continue;
+      const year = Number(key.slice(prefix.length));
+      const plan = loadSavedProjectionsPlan(userId, year);
+      if (plan) plans.push(plan);
+    }
+  } catch {
+    return plans;
+  }
+  return plans;
+}
+
 export function saveProjectionsPlan(userId: string, plan: AnnualProjectionsPlan): void {
   const key = `wallet_category_projections_${userId}_${plan.year}`;
   try {

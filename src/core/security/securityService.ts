@@ -1,6 +1,6 @@
 /**
  * Security Service for PWA:
- * - Local PIN encryption & verification using Web Crypto API (SHA-256 + salt)
+ * - PIN verification using Web Crypto API (PBKDF2-SHA256 + salt)
  * - Platform Biometrics (Huella dactilar / Face ID / Touch ID) via WebAuthn API
  * - Auto-lock timing, app visibility detection, and offline lock state
  */
@@ -18,6 +18,11 @@ export interface SecurityStatus {
   isBiometricsSupported: boolean;
   isBiometricsRegistered: boolean;
   config: SecurityConfig;
+}
+
+export interface SyncedSecurityPreferences {
+  config: Pick<SecurityConfig, 'enabled' | 'pinEnabled' | 'lockTimeoutMinutes' | 'lockOnAppSwitch'>;
+  pinCredential: { salt: string; hash: string; algorithm?: 'PBKDF2-SHA256'; iterations?: number } | null;
 }
 
 const DEFAULT_CONFIG: SecurityConfig = {
@@ -40,20 +45,82 @@ function getBiometricKey(userId: string): string {
   return `wallet_security_bio_${userId}`;
 }
 
-// Convert string to SHA-256 hash
-async function hashPin(pin: string, salt: string): Promise<string> {
+const PIN_HASH_ITERATIONS = 310_000;
+
+function hex(bytes: Uint8Array): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function hashLegacyPin(pin: string, salt: string): Promise<string> {
   const enc = new TextEncoder();
   const data = enc.encode(`${salt}:${pin}:wallet_pwa_gtq`);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-  const hashArray = Array.from(new Uint8Array(hashBuffer));
-  return hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
+  return hex(new Uint8Array(hashBuffer));
 }
 
 // Generate random salt
 function generateSalt(): string {
   const array = new Uint8Array(16);
   crypto.getRandomValues(array);
-  return Array.from(array, (byte) => byte.toString(16).padStart(2, '0')).join('');
+  return hex(array);
+}
+
+async function createPinCredential(pin: string): Promise<NonNullable<SyncedSecurityPreferences['pinCredential']>> {
+  const salt = generateSalt();
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits(
+    { name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode(salt), iterations: PIN_HASH_ITERATIONS },
+    key,
+    256
+  );
+  return { salt, hash: hex(new Uint8Array(bits)), algorithm: 'PBKDF2-SHA256', iterations: PIN_HASH_ITERATIONS };
+}
+
+function readPinCredential(userId: string): SyncedSecurityPreferences['pinCredential'] {
+  try {
+    const raw = localStorage.getItem(getPinKey(userId));
+    if (!raw) return null;
+    const value = JSON.parse(raw);
+    if (typeof value?.salt !== 'string' || typeof value?.hash !== 'string') return null;
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+export function getSyncedSecurityPreferences(userId: string): SyncedSecurityPreferences {
+  const config = getSecurityConfig(userId);
+  return {
+    config: {
+      enabled: config.enabled && config.pinEnabled,
+      pinEnabled: config.pinEnabled,
+      lockTimeoutMinutes: config.lockTimeoutMinutes,
+      lockOnAppSwitch: config.lockOnAppSwitch,
+    },
+    pinCredential: config.pinEnabled ? readPinCredential(userId) : null,
+  };
+}
+
+export function applySyncedSecurityPreferences(userId: string, preferences: SyncedSecurityPreferences): void {
+  const localConfig = getSecurityConfig(userId);
+  const localBiometricsAvailable = localConfig.biometricsEnabled && hasBiometricsRegistered(userId);
+  const hasSyncedPin = Boolean(preferences.config.pinEnabled && preferences.pinCredential);
+  const nextEnabled = preferences.config.enabled && hasSyncedPin;
+  const lockStateChanged = localConfig.enabled !== nextEnabled;
+  saveSecurityConfig(userId, {
+    ...preferences.config,
+    enabled: nextEnabled,
+    pinEnabled: hasSyncedPin,
+    biometricsEnabled: localBiometricsAvailable,
+  });
+  if (preferences.config.pinEnabled && preferences.pinCredential) {
+    localStorage.setItem(getPinKey(userId), JSON.stringify(preferences.pinCredential));
+  } else if (!preferences.config.pinEnabled) {
+    localStorage.removeItem(getPinKey(userId));
+  }
+  if (lockStateChanged && typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('wallet-security-preferences-changed'));
+  }
 }
 
 /**
@@ -98,9 +165,8 @@ export function saveSecurityConfig(userId: string, config: Partial<SecurityConfi
  */
 export async function setupUserPin(userId: string, pin: string): Promise<boolean> {
   if (!pin || pin.length < 4) return false;
-  const salt = generateSalt();
-  const hash = await hashPin(pin, salt);
-  localStorage.setItem(getPinKey(userId), JSON.stringify({ salt, hash }));
+  const credential = await createPinCredential(pin);
+  localStorage.setItem(getPinKey(userId), JSON.stringify(credential));
   saveSecurityConfig(userId, { enabled: true, pinEnabled: true });
   return true;
 }
@@ -112,9 +178,30 @@ export async function verifyUserPin(userId: string, pin: string): Promise<boolea
   try {
     const raw = localStorage.getItem(getPinKey(userId));
     if (!raw) return false;
-    const { salt, hash } = JSON.parse(raw);
-    const computed = await hashPin(pin, salt);
-    return computed === hash;
+    const credential = JSON.parse(raw) as NonNullable<SyncedSecurityPreferences['pinCredential']>;
+    const isLegacy = credential.algorithm !== 'PBKDF2-SHA256';
+    let computed: string;
+    if (isLegacy) {
+      computed = await hashLegacyPin(pin, credential.salt);
+    } else {
+      const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+      const bits = await crypto.subtle.deriveBits(
+        {
+          name: 'PBKDF2',
+          hash: 'SHA-256',
+          salt: new TextEncoder().encode(credential.salt),
+          iterations: credential.iterations || PIN_HASH_ITERATIONS,
+        },
+        key,
+        256
+      );
+      computed = hex(new Uint8Array(bits));
+    }
+    if (computed !== credential.hash) return false;
+    if (isLegacy) {
+      localStorage.setItem(getPinKey(userId), JSON.stringify(await createPinCredential(pin)));
+    }
+    return true;
   } catch {
     return false;
   }
@@ -152,7 +239,9 @@ export async function registerBiometrics(userId: string, userDisplayName = 'Usua
           { alg: -257, type: 'public-key' }, // RS256
         ],
         authenticatorSelection: {
-          authenticatorAttachment: 'platform', // Built-in platform biometric sensor
+          // No forzamos 'platform' para máxima compatibilidad con Android (Redmi, MediaTek).
+          // El navegador seleccionará el autenticador integrado disponible (huella, FaceID, PIN).
+          residentKey: 'discouraged',
           userVerification: 'required',
           requireResidentKey: false,
         },

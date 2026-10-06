@@ -70,15 +70,26 @@ import {
   syncCategory,
   syncPeriod,
   syncProfile,
-  syncSettings,
   syncTransaction,
   syncTransactionWithAccounts,
   resetUserFinancialData,
+  loadSecurityPreferences,
 } from '../firebase/firestoreSync';
 import {
   offlineQueue,
   loadQueueFromStorage,
+  QueueProcessResult,
 } from '../sync/offlineQueue';
+import {
+  applySyncedSecurityPreferences,
+  getSyncedSecurityPreferences,
+  hasPinConfigured,
+  SyncedSecurityPreferences,
+} from '../security/securityService';
+import {
+  AnnualProjectionsPlan,
+} from '../../features/annual_budget/annualBudgetEngine';
+import { loadAllSavedProjectionsPlans } from '../../features/annual_budget/annualBudgetEngine';
 
 const STORAGE_KEY = 'wallet_app_v4_store';
 const SESSION_USER_KEY = 'wallet_app_v4_user_id';
@@ -128,10 +139,14 @@ function normalizeOwnedDocuments<T extends { id?: string; userId?: string }>(
   return documents.flatMap((document) => {
     const record = document.data() as T;
     const ownedRecord = { ...record, id: document.id, userId: uid } as T;
-    if (record.userId !== uid || record.id !== document.id) repairMissingOwner(ownedRecord);
+    // Only enqueue a repair when userId is actually missing or belongs to another user.
+    // Do NOT check record.id — Firestore documents don't store 'id' as a field,
+    // so that check would always be true and cause an infinite sync loop.
+    if (!record.userId || record.userId !== uid) repairMissingOwner(ownedRecord);
     return [ownedRecord];
   });
 }
+
 
 interface WalletContextValue {
   currentUser: UserProfile | null;
@@ -318,12 +333,14 @@ interface WalletContextValue {
   updateSettings: (partial: Partial<UserSettings>) => void;
   deleteCategory: (categoryId: string) => { ok: boolean; error?: string };
   deleteAccount: (accountId: string) => void;
+  saveSyncedSecurityPreferences: (preferences: SyncedSecurityPreferences) => void;
+  saveAnnualProjections: (plan: AnnualProjectionsPlan) => void;
 
   isOnline: boolean;
   isSyncing: boolean;
   pendingOfflineCount: number;
   lastSyncTime: number | null;
-  forceSyncNow: () => Promise<void>;
+  forceSyncNow: () => Promise<QueueProcessResult>;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -505,7 +522,34 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           return handleFirestoreError(error, OperationType.GET, path);
         };
         setRemoteTransactionsLoaded(false);
+        setCurrentUserId(null);
+        const localSecurity = getSyncedSecurityPreferences(uid);
+        const hasLocalSecurityPreferences =
+          localSecurity.config.enabled ||
+          localSecurity.config.pinEnabled ||
+          localSecurity.config.lockTimeoutMinutes !== 0 ||
+          !localSecurity.config.lockOnAppSwitch ||
+          hasPinConfigured(uid);
+
+        try {
+          const remoteSecurity = await loadSecurityPreferences(uid);
+          if (auth.currentUser?.uid !== uid) return;
+          if (remoteSecurity) {
+            applySyncedSecurityPreferences(uid, remoteSecurity);
+          } else if (hasLocalSecurityPreferences) {
+            offlineQueue.enqueue(uid, 'SAVE_SECURITY_PREFERENCES', { preferences: localSecurity });
+          }
+        } catch (error) {
+          console.warn('No se pudieron cargar las preferencias de seguridad desde la nube:', error);
+          if (hasLocalSecurityPreferences) {
+            offlineQueue.enqueue(uid, 'SAVE_SECURITY_PREFERENCES', { preferences: localSecurity });
+          }
+        }
+        if (auth.currentUser?.uid !== uid) return;
         setCurrentUserId(uid);
+        for (const plan of loadAllSavedProjectionsPlans(uid)) {
+          offlineQueue.enqueue(uid, 'MIGRATE_ANNUAL_PROJECTIONS', { plan });
+        }
 
         const profile: UserProfile = {
           id: uid,
@@ -813,10 +857,21 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         const unsubSettings = onSnapshot(
           collection(firestoreDb, 'users', uid, 'settings'),
           (snap) => {
+            const remoteSecurityDoc = snap.docs.find((item) => item.id === 'security');
+            if (remoteSecurityDoc?.data().userId === uid && remoteSecurityDoc.data().config) {
+              const securityData = remoteSecurityDoc.data();
+              applySyncedSecurityPreferences(uid, {
+                config: securityData.config,
+                pinCredential: securityData.pinCredential || null,
+              } as SyncedSecurityPreferences);
+            }
             const rawSettings = snap.docs.find((d) => d.id === 'default')?.data() as Partial<UserSettings> | undefined;
             const remoteSettings = rawSettings;
             if (remoteSettings) {
               const mergedSettings = { ...initialStore.settings, ...remoteSettings, userId: uid };
+              if (mergedSettings.themeMode === 'light' || mergedSettings.themeMode === 'dark' || mergedSettings.themeMode === 'system') {
+                setLocalThemeMode(mergedSettings.themeMode);
+              }
               if (remoteSettings.userId !== uid) offlineQueue.enqueue(uid, 'SAVE_SETTINGS', { settings: mergedSettings });
               setDb((prev) => {
                 const current = prev.users[uid] || initialStore;
@@ -1040,7 +1095,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       }));
       if (auth.currentUser?.uid === currentUserId) {
         offlineQueue.enqueue(currentUserId, 'SAVE_SETTINGS', { settings: nextSettings });
-        trackSync(syncSettings(currentUserId, nextSettings), 'la configuración');
       }
     }
   };
@@ -1052,7 +1106,9 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ...store,
       settings: nextSettings,
     }));
-    if (auth.currentUser?.uid === currentUserId) trackSync(syncSettings(currentUserId, nextSettings), 'la configuración');
+    if (auth.currentUser?.uid === currentUserId) {
+      offlineQueue.enqueue(currentUserId, 'SAVE_SETTINGS', { settings: nextSettings });
+    }
   };
 
   const accounts = currentUserStore?.accounts ?? [];
@@ -1995,7 +2051,20 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const forceSyncNow = async () => {
     if (currentUserId) {
-      await offlineQueue.processUserQueue(currentUserId);
+      return offlineQueue.processUserQueue(currentUserId);
+    }
+    return { pendingCount: 0, lastError: null };
+  };
+
+  const saveSyncedSecurityPreferences = (preferences: SyncedSecurityPreferences) => {
+    if (currentUserId && auth.currentUser?.uid === currentUserId) {
+      offlineQueue.enqueue(currentUserId, 'SAVE_SECURITY_PREFERENCES', { preferences });
+    }
+  };
+
+  const saveAnnualProjections = (plan: AnnualProjectionsPlan) => {
+    if (currentUserId && auth.currentUser?.uid === currentUserId) {
+      offlineQueue.enqueue(currentUserId, 'SAVE_ANNUAL_PROJECTIONS', { plan });
     }
   };
 
@@ -2044,6 +2113,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         addSubcategory,
         removeSubcategory,
         deleteCategory,
+        saveSyncedSecurityPreferences,
+        saveAnnualProjections,
 
         periods,
         activePeriod,

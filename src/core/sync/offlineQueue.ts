@@ -6,8 +6,11 @@ import {
   deleteTransactionWithAccounts,
   syncAccount,
   syncBudget,
+  syncAnnualProjections,
+  seedAnnualProjectionsIfMissing,
   syncCategory,
   syncPeriod,
+  syncSecurityPreferences,
   syncSettings,
   syncTransactionWithAccounts,
 } from '../firebase/firestoreSync';
@@ -23,7 +26,10 @@ export type MutationType =
   | 'DELETE_PERIOD'
   | 'SAVE_BUDGET'
   | 'DELETE_BUDGET'
-  | 'SAVE_SETTINGS';
+  | 'SAVE_SETTINGS'
+  | 'SAVE_SECURITY_PREFERENCES'
+  | 'SAVE_ANNUAL_PROJECTIONS'
+  | 'MIGRATE_ANNUAL_PROJECTIONS';
 
 export interface OfflineMutation {
   id: string;
@@ -74,6 +80,11 @@ type QueueListener = (status: {
   lastSyncTime: number | null;
   lastError: string | null;
 }) => void;
+
+export interface QueueProcessResult {
+  pendingCount: number;
+  lastError: string | null;
+}
 
 class OfflineQueueManager {
   private processingUsers = new Set<string>();
@@ -149,12 +160,15 @@ class OfflineQueueManager {
     return loadQueueFromStorage(userId).length;
   }
 
-  public async processUserQueue(userId: string): Promise<void> {
-    if (!userId || this.processingUsers.has(userId)) return;
+  public async processUserQueue(userId: string): Promise<QueueProcessResult> {
+    if (!userId) return { pendingCount: 0, lastError: null };
+    if (this.processingUsers.has(userId)) {
+      return { pendingCount: this.getPendingCount(userId), lastError: this.lastError };
+    }
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
       const q = loadQueueFromStorage(userId);
       this.notify(false, q.length);
-      return;
+      return { pendingCount: q.length, lastError: 'Sin conexión a internet.' };
     }
 
     this.processingUsers.add(userId);
@@ -190,15 +204,9 @@ class OfflineQueueManager {
             break;
           }
 
-          // If fatal or permanent error after 5 retries, advance to not block the rest of the queue
-          if (item.retries >= 5) {
-            console.warn(`Dropping permanently failed mutation ${item.id} after 5 retries`, item);
-            queue.shift();
-            saveQueueToStorage(userId, queue);
-          } else {
-            saveQueueToStorage(userId, queue);
-            break;
-          }
+          // Keep failed changes in the persistent queue so they are never silently lost.
+          saveQueueToStorage(userId, queue);
+          break;
         }
       }
     } finally {
@@ -206,6 +214,7 @@ class OfflineQueueManager {
       queue = loadQueueFromStorage(userId);
       this.notify(false, queue.length);
     }
+    return { pendingCount: this.getPendingCount(userId), lastError: this.lastError };
   }
 
   private async executeMutation(item: OfflineMutation): Promise<void> {
@@ -243,6 +252,15 @@ class OfflineQueueManager {
         break;
       case 'SAVE_SETTINGS':
         await syncSettings(userId, payload.settings);
+        break;
+      case 'SAVE_SECURITY_PREFERENCES':
+        await syncSecurityPreferences(userId, payload.preferences);
+        break;
+      case 'SAVE_ANNUAL_PROJECTIONS':
+        await syncAnnualProjections(userId, payload.plan);
+        break;
+      case 'MIGRATE_ANNUAL_PROJECTIONS':
+        await seedAnnualProjectionsIfMissing(userId, payload.plan);
         break;
       default:
         console.warn(`Unknown mutation type: ${type}`);

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowDownRight,
@@ -22,6 +22,7 @@ import {
   X,
 } from 'lucide-react';
 import { useWallet } from '../../core/state/WalletContext';
+import { subscribeAnnualProjections } from '../../core/firebase/firestoreSync';
 import { formatGTQ } from '../../core/utils/formatters';
 import {
   AnnualProjectionsPlan,
@@ -29,6 +30,7 @@ import {
   findPeriodForMonth,
   getDefaultProjectionsPlan,
   loadProjectionsPlan,
+  loadSavedProjectionsPlan,
   MONTH_NAMES_ES,
   MONTH_SHORT_ES,
   saveProjectionsPlan,
@@ -44,7 +46,7 @@ type ViewTab = 'matrix' | 'editor';
 type MatrixDisplayMode = 'comparison' | 'projected' | 'actual' | 'variance';
 
 export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, onClose }) => {
-  const { categories, transactions, periods, budgets, saveBudget, resolvedTheme, currentUser } =
+  const { categories, transactions, periods, budgets, saveBudget, saveAnnualProjections, resolvedTheme, currentUser } =
     useWallet();
   const isDark = resolvedTheme === 'dark';
 
@@ -61,6 +63,26 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
   const [plan, setPlan] = useState<AnnualProjectionsPlan>(() =>
     loadProjectionsPlan(userId, categories, selectedYear)
   );
+
+  useEffect(() => {
+    if (!isOpen || userId === 'default_user') return;
+    return subscribeAnnualProjections(
+      userId,
+      selectedYear,
+      (remotePlan, fromCache) => {
+        if (remotePlan) {
+          saveProjectionsPlan(userId, remotePlan);
+          setPlan(remotePlan);
+          return;
+        }
+        if (!fromCache) {
+          const cachedPlan = loadSavedProjectionsPlan(userId, selectedYear);
+          if (cachedPlan) saveAnnualProjections(cachedPlan);
+        }
+      },
+      (error) => console.error('No se pudo sincronizar el plan anual:', error)
+    );
+  }, [isOpen, userId, selectedYear]);
 
   const handleYearChange = (newYear: number) => {
     setSelectedYear(newYear);
@@ -114,6 +136,7 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
 
   const handleSavePlan = () => {
     saveProjectionsPlan(userId, editingPlan);
+    saveAnnualProjections(editingPlan);
     setPlan(editingPlan);
 
     // Sincronizar automáticamente hacia los presupuestos reales (budgets) de cada período
@@ -157,6 +180,7 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
     const defaultP = getDefaultProjectionsPlan(categories, selectedYear);
     setEditingPlan(defaultP);
     saveProjectionsPlan(userId, defaultP);
+    saveAnnualProjections(defaultP);
     setPlan(defaultP);
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 2500);

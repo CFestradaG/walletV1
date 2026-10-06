@@ -17,7 +17,8 @@ export const PWAInstallModal: React.FC<PWAInstallModalProps> = ({
   isInstallable,
   isIOS,
 }) => {
-  const { isDark } = useWallet();
+  const { resolvedTheme } = useWallet();
+  const isDark = resolvedTheme === 'dark';
   if (!isOpen) return null;
 
   return (

@@ -23,6 +23,7 @@ import {
   hasPinConfigured,
   hasBiometricsRegistered,
   removeSecurityLock,
+  getSyncedSecurityPreferences,
 } from './securityService';
 
 interface SecuritySettingsModalProps {
@@ -40,7 +41,7 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
   userDisplayName,
   onLockNow,
 }) => {
-  const { resolvedTheme } = useWallet();
+  const { resolvedTheme, saveSyncedSecurityPreferences } = useWallet();
   const isDark = resolvedTheme === 'dark';
   const [config, setConfig] = useState(getSecurityConfig(userId));
   const [hasPin, setHasPin] = useState(hasPinConfigured(userId));
@@ -105,6 +106,7 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
     // Save PIN
     const ok = await setupUserPin(userId, pinDraft);
     if (ok) {
+      saveSyncedSecurityPreferences(getSyncedSecurityPreferences(userId));
       setHasPin(true);
       setConfig(getSecurityConfig(userId));
       setIsSettingPin(false);
@@ -147,10 +149,12 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
     if (!checked) {
       // Disable lock
       const updated = saveSecurityConfig(userId, { enabled: false });
+      saveSyncedSecurityPreferences(getSyncedSecurityPreferences(userId));
       setConfig(updated);
       setNotice({ type: 'info', text: 'Bloqueo de aplicación desactivado.' });
     } else {
       const updated = saveSecurityConfig(userId, { enabled: true });
+      saveSyncedSecurityPreferences(getSyncedSecurityPreferences(userId));
       setConfig(updated);
       setNotice({ type: 'success', text: 'Bloqueo de aplicación activado.' });
     }
@@ -167,21 +171,24 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
 
   const handleTimeoutChange = (minutes: number) => {
     const updated = saveSecurityConfig(userId, { lockTimeoutMinutes: minutes });
+    saveSyncedSecurityPreferences(getSyncedSecurityPreferences(userId));
     setConfig(updated);
   };
 
   const handleToggleAppSwitch = (checked: boolean) => {
     const updated = saveSecurityConfig(userId, { lockOnAppSwitch: checked });
+    saveSyncedSecurityPreferences(getSyncedSecurityPreferences(userId));
     setConfig(updated);
   };
 
   const handleDisableAll = () => {
-    if (confirm('¿Deseas eliminar el PIN y la biometría registrada en este dispositivo?')) {
+    if (confirm('¿Deseas eliminar el PIN y desactivar el bloqueo en todos tus dispositivos? La biometría se eliminará solo de este dispositivo.')) {
       removeSecurityLock(userId);
+      saveSyncedSecurityPreferences(getSyncedSecurityPreferences(userId));
       setConfig(getSecurityConfig(userId));
       setHasPin(false);
       setHasBio(false);
-      setNotice({ type: 'info', text: 'PIN y biometría eliminados del dispositivo.' });
+      setNotice({ type: 'info', text: 'PIN eliminado y bloqueo desactivado en tus dispositivos. Biometría eliminada de este dispositivo.' });
     }
   };
 

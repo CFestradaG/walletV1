@@ -32,9 +32,18 @@ export function useAppLock(userId?: string) {
       return;
     }
     const cfg = getSecurityConfig(userId);
-    if (!cfg.enabled) {
-      setIsLocked(false);
-    }
+    setIsLocked(cfg.enabled);
+  }, [userId]);
+
+  // Activity & visibility listener
+  useEffect(() => {
+    if (!userId) return;
+
+    const handleSyncedSecurityChange = () => {
+      setIsLocked(getSecurityConfig(userId).enabled);
+    };
+    window.addEventListener('wallet-security-preferences-changed', handleSyncedSecurityChange);
+    return () => window.removeEventListener('wallet-security-preferences-changed', handleSyncedSecurityChange);
   }, [userId]);
 
   // Activity & visibility listener

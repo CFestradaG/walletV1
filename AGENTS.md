@@ -1,95 +1,99 @@
-# Contexto del proyecto Wallet
+# Wallet: contexto del proyecto
 
-Documento de orientación basado en el código y la configuración presentes en el repositorio al momento de su creación. No sustituye una auditoría funcional o de seguridad.
+Guía de orientación para trabajar en este repositorio. Describe la estructura y el comportamiento visibles en el código; no reemplaza una auditoría funcional o de seguridad. Mantener esta guía sincronizada cuando cambien arquitectura, flujos o comandos.
 
-## 1. Qué hace y stack
+## Producto y stack
 
-Wallet es una aplicación web de finanzas personales en español, enfocada en GTQ (quetzales). Permite registrar cuentas y tarjetas, ingresos, gastos y transferencias; organizar transacciones por períodos financieros; planificar y monitorear proyecciones y presupuestos a través de un único sistema unificado de **Presupuesto & Panorama Anual** (con vistas Anual, Semestral, Trimestral y Mensual) y consultar resúmenes acumulativos y análisis en tiempo real.
+Wallet es una aplicación web de finanzas personales en español, orientada a quetzales (GTQ). Permite gestionar cuentas, tarjetas, categorías, ingresos, gastos, transferencias, períodos financieros, presupuestos y análisis.
 
-| Área | Tecnología / evidencia |
+| Área | Implementación actual |
 |---|---|
-| Interfaz | React 19, TypeScript, Vite 8, Tailwind CSS 4 |
-| Componentes | Lucide React; Motion está declarado como dependencia |
-| Backend de datos y autenticación | Firebase Auth y Cloud Firestore, SDK web |
-| Progressive Web App (PWA) | `vite-plugin-pwa`, Workbox, manifest standalone, iconos conformes, precache offline y soporte WebAuthn |
-| Hosting configurado | Firebase Hosting, publica `dist/` y redirige rutas a `index.html` |
-| Idioma y moneda de interfaz | Español; formateo de moneda fijado a GTQ en `formatGTQ` |
+| Interfaz | React 19, TypeScript 7, Vite 8, Tailwind CSS 4 |
+| Componentes y animación | Lucide React y Motion |
+| Datos y autenticación | Firebase Auth y Cloud Firestore mediante SDK web |
+| PWA | `vite-plugin-pwa`/Workbox, actualización automática, manifest `standalone`, caché de recursos y caché de fuentes Google |
+| Backend adicional | Firebase Cloud Functions v2 callable en `functions/`, Node.js 22 y Firebase Admin |
+| Hosting | Firebase Hosting publica `dist/` y reescribe rutas a `index.html` |
+| Idioma y moneda | Interfaz en español; `formatGTQ` formatea GTQ |
 
-Se retiraron `@google/genai`, Express, `dotenv` y `@types/express`. También se eliminó la carpeta `/mobile` (Flutter) a solicitud del usuario para concentrar la experiencia en Progressive Web App (PWA) instalable, con biometría y modo sin conexión.
+La aplicación móvil Flutter ya no forma parte del repositorio. La experiencia móvil se entrega como PWA.
 
-## 2. Estructura y responsabilidades
+## Estructura
 
 | Ruta | Responsabilidad |
 |---|---|
-| `src/main.tsx` | Monta React y carga estilos globales. |
-| `src/App.tsx` | Shell autenticado, barra superior con botón de acción estilizado, navegación principal, tema, apertura de vistas/modales, botón de bloqueo rápido, botón de instalación PWA y overlay de bloqueo `SecurityLockScreen`. |
-| `src/index.css` | Estilos globales y reglas de alto contraste. |
-| `src/core/types/models.ts` | Tipos de dominio y modelos de datos (incluyendo `activePeriodId` en `UserSettings` y `monthIndex` en `FinancialPeriod`). |
-| `src/core/data/initialData.ts` | Categorías por defecto, tienda inicial vacía y datos de demostración. |
-| `src/core/state/WalletContext.tsx` | Estado central, autenticación, persistencia local, operaciones de dominio, reconciliación de snapshots y orquestación con la cola offline. |
-| `src/core/sync/offlineQueue.ts` | Gestor de cola offline persistente (`localStorage`), reprocesamiento secuencial ante eventos `online`, reintentos automáticos y emisión de estados. |
-| `src/core/security/securityService.ts` | Servicio de seguridad con biometría nativa WebAuthn (`PublicKeyCredential` para huella/FaceID), cifrado y hash de PIN (SHA-256 + salt con Web Crypto API) y reglas de autobloqueo 100% offline. |
-| `src/core/security/SecurityLockScreen.tsx` | Pantalla completa de bloqueo con teclado numérico táctil, indicadores de puntos, feedback táctil y botón de desbloqueo biométrico automático o por toque. |
-| `src/core/security/SecuritySettingsModal.tsx` | Modal de configuración de PIN de 4 dígitos, registro de huella/FaceID, temporizador de bloqueo (inmediato, 1m, 5m, 15m) y prueba de bloqueo. |
-| `src/core/security/useAppLock.ts` | Hook de gestión de bloqueo que vigila `visibilitychange`, foco de ventana e inactividad. |
-| `src/core/pwa/usePWAInstall.ts` | Hook de instalación PWA: detecta modo `standalone`, iOS Safari y evento `beforeinstallprompt`. |
-| `src/core/pwa/PWAInstallModal.tsx` | Modal guiado de instalación para teléfonos móviles y escritorios con instrucciones paso a paso para iOS Safari. |
-| `src/core/firebase/firebase.ts` | Inicialización de Firebase/Auth/Firestore, proveedor de Google y manejo de errores. |
-| `src/core/firebase/firestoreSync.ts` | Escritura/borrado atómico (`writeBatch`) de transacciones y saldos de cuentas, carga inicial segura y saneamiento de registros. |
-| `src/core/utils/formatters.ts` | Formateo de GTQ/fechas y evaluación de expresiones de calculadora. |
-| `src/core/widgets/` | Selectores reutilizables de cuenta (`AccountSelectDropdown`) y período (`PeriodSelectorBar`). |
-| `src/features/auth/` | Registro, inicio de sesión, Google y recuperación de contraseña. |
-| `src/features/dashboard/` | Inicio, resumen, accesos rápidos, actividad reciente, tarjeta estelar de **Resumen Acumulado del Año (Proyectado vs. Real YTD)** y alertas inteligentes de categorías. |
-| `src/features/accounts/` | Cuentas, tarjetas, creación/edición, archivo, pagos y selector de colores. |
-| `src/features/transactions/` | Lista, filtros y formulario modal con navegación en una sola fila; botón de nueva transacción de solo icono táctil estilizado; `financialEngine.ts` contiene validaciones y cálculos. |
-| `src/features/financial_periods/` | Administración y cálculo de períodos/subperíodos, con selector desplegable de mes representativo para el Panorama Anual (`monthIndex`). |
-| `src/features/annual_budget/` | **Único sistema unificado de Presupuesto y Panorama Anual**: matriz comparativa (Proyectado vs Real) en 4 horizontes temporales (Mensual 12M, Trimestral T1-T4, Semestral S1-S2, Anual Consolidado), basada 100% en las categorías configuradas del sistema, sincronizada con las fechas y metas de los períodos financieros, y exportación CSV. Incluye controles compactos, tipografía sutil optimizada para móviles y botón para colapsar/ocultar las tarjetas de Proyectado vs Real. |
-| `src/features/analytics/` | Resúmenes/visualizaciones, métricas y exportación CSV. |
-| `src/features/settings/` | Ajustes, categorías, opciones de seguridad & bloqueo PWA, instalación y sincronización. |
+| `src/main.tsx`, `src/App.tsx`, `src/index.css` | Punto de entrada, shell/navegación, tema y estilos globales. |
+| `src/core/types/models.ts` | Tipos de cuentas, movimientos, categorías, períodos, presupuestos, perfil y preferencias. |
+| `src/core/data/initialData.ts` | Tienda inicial, categorías y períodos predeterminados. |
+| `src/core/state/WalletContext.tsx` | Estado central, autenticación, persistencia local, listeners y operaciones de dominio. |
+| `src/core/sync/offlineQueue.ts` | Cola persistente en `localStorage`, procesamiento secuencial y reintentos/conectividad. |
+| `src/core/firebase/firebase.ts` | Inicialización de Firebase Auth/Firestore y tratamiento de errores. |
+| `src/core/firebase/firestoreSync.ts` | Sincronización de perfil, preferencias y entidades con Firestore; transacciones de cuenta/movimiento. |
+| `src/core/security/` | PIN local, biometría WebAuthn, configuración, pantalla de bloqueo y hook de autobloqueo. |
+| `src/core/pwa/` | Detección de instalación/modo standalone y modal de instrucciones PWA. |
+| `src/core/utils/formatters.ts` | Formato de importes/fechas y evaluación aritmética. |
+| `src/core/widgets/` | Selectores reutilizables de cuentas y períodos. |
+| `src/features/auth/` | Registro, acceso, Google y recuperación de contraseña. |
+| `src/features/accounts/` | Cuentas y tarjetas: visualización, edición, archivo y gestión de saldos. |
+| `src/features/transactions/` | Lista, modal y filtros de movimientos; `financialEngine.ts` valida movimientos y calcula saldos/resúmenes. |
+| `src/features/financial_periods/` | Gestión, validación y cálculo de períodos/subperíodos. |
+| `src/features/annual_budget/` | Presupuesto y Panorama Anual; matriz proyectado/real en vistas mensual, trimestral, semestral y anual, más exportación CSV. |
+| `src/features/analytics/` | Resúmenes, métricas, visualizaciones y exportación CSV. |
+| `src/features/dashboard/` | Resumen del período, saldos, actividad, acumulado YTD y alertas presupuestarias. |
+| `src/features/settings/` | Vista Más y accesos a configuración, seguridad e instalación. |
+| `functions/src/index.ts` | Callable Functions para operaciones de cuentas y movimientos y limpieza financiera. |
+| `public/` | Iconos PWA, favicon y Apple touch icon. |
 
-## 3. Modelo de datos y reglas de negocio
+## Modelo de datos
 
-Los documentos de datos se guardan bajo `users/{uid}`. Sus subcolecciones son `settings`, `accounts`, `categories`, `periods`, `transactions` y `budgets`; perfiles viven en el documento `users/{uid}`.
+Los datos de usuario se organizan en `users/{uid}`. El perfil está en el documento del usuario; las subcolecciones principales son `settings`, `accounts`, `categories`, `periods`, `transactions` y `budgets`. En `settings` se guardan el documento `default`, las preferencias de bloqueo en `security` y los planes anuales `projections_{year}`. También se usan `accountTombstones` en las Cloud Functions. Las reglas de Firestore se encuentran en `firestore.rules` y aplican denegación por defecto y aislamiento por propietario.
 
-Reglas confirmadas en el código:
+Modelos relevantes en `src/core/types/models.ts`:
 
-- **Arquitectura PWA y Sin Conexión (Offline-First):**
-  - La aplicación está configurada con `vite-plugin-pwa`, `manifest.webmanifest` independiente (`standalone`), iconos conformes (192px, 512px y 512px maskable con zona segura) y service worker Workbox que prealmacena en caché todos los activos estáticos y tipografías.
-  - La base de datos y la cola de transacciones locales permiten operar 100% sin conexión, registrando ingresos y gastos aun en zonas sin cobertura.
-- **Seguridad y Bloqueo Local (Biometría y PIN):**
-  - **Biometría WebAuthn (`PublicKeyCredential`):** Permite autenticación con la huella dactilar nativa (Android) o Touch ID / Face ID (Apple). Se almacena la credencial en el enclave seguro del navegador sin requerir servidores externos.
-  - **PIN Maestro (4 dígitos):** Se almacena utilizando sal criptográfica aleatoria de 16 bytes y hash SHA-256 generado con la Web Crypto API (`crypto.subtle.digest`).
-  - **Autobloqueo:** Configurable para activarse de inmediato al cambiar de app o minimizar (`visibilitychange`), o por inactividad tras 1, 5 o 15 minutos.
-  - **Botón de Bloqueo Inmediato:** Accesible desde el encabezado superior y desde la configuración de seguridad.
-- **Sistema Unificado de Presupuesto:** Un único presupuesto anual alimenta toda la aplicación y las alertas en tiempo real en el Dashboard.
-- **Atomicidad transaccional:** Toda creación, edición o eliminación de transacción sincroniza en Firestore la transacción y todos los saldos de cuenta afectados en una sola operación por lotes atómica (`writeBatch`).
-- **Cola offline persistente y reintentos:** Las operaciones se encolan en `localStorage` (`wallet_offline_queue_${userId}`). Si no hay conexión o falla la red, los cambios se retienen y se procesan automáticamente cuando el dispositivo recupera señal (`online`).
+- Las cuentas incluyen efectivo, banco, ahorro y tarjeta de crédito; estas últimas representan la deuda con saldo no positivo.
+- Los movimientos son gastos, ingresos o transferencias, con fecha ISO y referencias opcionales a período/subperíodo.
+- `FinancialPeriod` contempla `referenceMonth` y `monthIndex` para asociar períodos con meses del panorama.
+- `Budget` se relaciona con un período y categoría, con metas y alertas configurables. Los planes proyectados anuales se guardan por usuario/año en `users/{uid}/settings/projections_{year}`; las metas reales por período permanecen en `budgets`.
+- `UserSettings` incluye tema, ocultamiento de saldos y período activo.
 
-## 4. Flujos principales
+## Comportamientos implementados
 
-1. **Autenticación y Carga:** Al iniciar, si el bloqueo de seguridad está activo, `SecurityLockScreen` solicita el PIN o la biometría antes de permitir ver cualquier saldo. Al desbloquearse, conecta los oyentes en tiempo real.
-2. **Instalación PWA:** Desde el botón "Instalar" en el encabezado o en la sección Más, el usuario en Android/PC puede instalar la PWA nativamente en su pantalla de inicio; en iOS Safari se muestra la guía ilustrada de 3 pasos (Compartir -> Agregar a pantalla de inicio).
-3. **Registro y Edición de Transacciones:** Botón táctil estilizado, cálculo automático de saldos y encolamiento atómico offline.
-4. **Períodos y Presupuestos:** Selector desplegable de mes representativo (`monthIndex`), sincronizado con el Panorama Anual.
-5. **Configuración de Seguridad:** En "Más -> PWA & Seguridad Local", se puede configurar o cambiar el PIN, registrar el sensor biométrico, definir el tiempo de autobloqueo y probar el bloqueo de inmediato.
+- La tienda local del usuario se persiste en `localStorage`; los cambios remotos se sincronizan con listeners de Firestore.
+- `offlineQueue.ts` conserva operaciones pendientes por usuario en `localStorage` y las procesa cuando hay conexión. La disponibilidad offline depende de la operación y de datos previamente guardados; no asumir que todos los flujos remotos se pueden completar sin conexión.
+- `firestoreSync.ts` aplica validación de dominio y usa transacciones de Firestore para guardar/eliminar movimientos junto con saldos relacionados. No describir esto como `writeBatch`: el código usa `runTransaction`.
+- Las reglas de Firestore permiten operaciones autenticadas del propietario sujetas a validaciones específicas por colección.
+- `functions/src/index.ts` declara funciones callable para cuentas y movimientos. Confirmar si una función está conectada al cliente antes de describirla como parte del flujo normal; el cliente también implementa sincronización directa con SDK web.
+- El PIN nunca se sincroniza en texto: se sincroniza su verificador PBKDF2-SHA256 con sal y parámetros en `users/{uid}/settings/security`; verificadores SHA-256 antiguos se migran al validar el PIN. La configuración global del bloqueo se sincroniza. La credencial y activación biométrica WebAuthn siguen siendo locales a cada dispositivo. No afirmar que la información financiera está cifrada localmente ni que una credencial WebAuthn se almacena en un “enclave” específico.
+- El hook de seguridad gestiona bloqueo por visibilidad/inactividad; los tiempos y controles exactos se definen en `securityService.ts` y `SecuritySettingsModal.tsx`.
+- Vite configura manifest `standalone`, actualización automática del service worker, iconos PNG/SVG y precaché según `globPatterns`. Verificar archivos y configuración antes de afirmar compatibilidad o cobertura completa offline.
+- El Presupuesto & Panorama Anual calcula proyecciones y valores reales desde los datos configurados; verificar el engine antes de atribuirle reglas específicas.
 
-## 5. Estado actual
+## Comandos
 
-| Estado | Elementos |
-|---|---|
-| Implementado en el código | Vistas principales; Auth; CRUD de cuentas/categorías/períodos/transacciones; **PWA completa con manifest standalone y Service Worker Workbox**; **iconos 192, 512, maskable y apple-touch-icon**; **sistema de seguridad biométrica (WebAuthn / Huella / Face ID)**; **PIN maestro de 4 dígitos con cifrado local SHA-256**; **pantalla de bloqueo táctil y autobloqueo al salir de la app**; **modal guiado de instalación PWA con soporte iOS**; único sistema unificado de Presupuesto y Panorama Anual; tarjeta en Dashboard de Resumen Acumulado YTD; listeners Firestore con cola offline persistente; atomicidad con `writeBatch`; reglas de Firestore desplegadas. Carpeta `/mobile` eliminada con éxito. |
-| Comprobación técnica | `npm run lint` (`tsc --noEmit`) termina con código 0. `npm run build` (`vite build`) genera el bundle PWA con `sw.js` y `manifest.webmanifest` exitosamente. |
-
-## 6. Cómo ejecutar y comprobar
+Desde la raíz:
 
 ```bash
 npm install
-npm run dev
+npm run dev       # Vite en el puerto 3000, host 0.0.0.0
+npm run lint      # tsc --noEmit
+npm run build     # vite build; salida en dist/
+npm run preview
 ```
 
-Vite escucha en `http://localhost:3000`.
+Funciones:
 
 ```bash
-npm run lint     # ejecuta tsc --noEmit
-npm run build    # genera dist/ con Service Worker y manifest
+cd functions
+npm run build
+npm run deploy
 ```
+
+`npm run clean` está definido con sintaxis `rm -rf`; considerar que es un comando de eliminación y revisar el entorno antes de ejecutarlo.
+
+## Guía de mantenimiento
+
+- Revisar primero `git status`; preservar cambios locales que ya existan.
+- No inferir que una descripción antigua en este archivo sigue vigente: confirmar en el código y configuración.
+- Al modificar flujos de datos, revisar en conjunto el estado local, `offlineQueue.ts`, `firestoreSync.ts`, reglas y, cuando corresponda, `functions/`.
+- Al cambiar el modelo, actualizar los consumidores y este documento si la arquitectura o las reglas descritas cambian.
+- No ejecutar pruebas o comandos que muten datos remotos sin autorización explícita. Los comandos `lint` y `build` son comprobaciones locales.

@@ -13,6 +13,11 @@
     font-family: var(--font-body);
     overscroll-behavior-y: none;
     -webkit-tap-highlight-color: transparent;
+    /* iOS PWA safe area — respeta notch, Dynamic Island y barra inferior */
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   h1, h2, h3, h4, .font-display {

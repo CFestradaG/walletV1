@@ -6,6 +6,7 @@ import {
   verifyBiometrics,
   getSecurityConfig,
   hasBiometricsRegistered,
+  getSyncedSecurityPreferences,
 } from './securityService';
 
 interface SecurityLockScreenProps {
@@ -19,7 +20,8 @@ export const SecurityLockScreen: React.FC<SecurityLockScreenProps> = ({
   onUnlocked,
   onLogout,
 }) => {
-  const { isDark } = useWallet();
+  const { resolvedTheme, saveSyncedSecurityPreferences } = useWallet();
+  const isDark = resolvedTheme === 'dark';
   const [pinInput, setPinInput] = useState('');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isCheckingBio, setIsCheckingBio] = useState(false);
@@ -80,6 +82,7 @@ export const SecurityLockScreen: React.FC<SecurityLockScreenProps> = ({
   const validatePin = async (candidate: string) => {
     const valid = await verifyUserPin(userId, candidate);
     if (valid) {
+      saveSyncedSecurityPreferences(getSyncedSecurityPreferences(userId));
       if ('vibrate' in navigator) navigator.vibrate?.([40]);
       onUnlocked();
     } else {

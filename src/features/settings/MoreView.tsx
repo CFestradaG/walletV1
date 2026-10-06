@@ -62,6 +62,11 @@ export const MoreView: React.FC<MoreViewProps> = ({
     removeSubcategory,
     transactions,
     budgets,
+    isOnline,
+    isSyncing,
+    pendingOfflineCount,
+    lastSyncTime,
+    forceSyncNow,
   } = useWallet();
 
   const isDark = resolvedTheme === 'dark';
@@ -82,6 +87,27 @@ export const MoreView: React.FC<MoreViewProps> = ({
   const [categoryManagerNotice, setCategoryManagerNotice] = useState<string | null>(null);
   const [isResettingAccount, setIsResettingAccount] = useState(false);
   const [accountResetNotice, setAccountResetNotice] = useState<string | null>(null);
+  const [isCheckingSync, setIsCheckingSync] = useState(false);
+  const [syncCheckNotice, setSyncCheckNotice] = useState<string | null>(null);
+
+  const handleCheckSync = async () => {
+    if (!isOnline || isCheckingSync || isSyncing) return;
+    setIsCheckingSync(true);
+    setSyncCheckNotice(null);
+    try {
+      const result = await forceSyncNow();
+      if (result.pendingCount === 0) {
+        setSyncCheckNotice('Verificación completada. No quedan cambios pendientes en la cola local.');
+      } else {
+        setSyncCheckNotice(`Quedan ${result.pendingCount} cambio(s) pendientes. ${result.lastError || 'Se conservaron localmente para reintentar.'}`);
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'No se pudo completar la verificación.';
+      setSyncCheckNotice(`La verificación falló. Los cambios locales se conservaron. ${message}`);
+    } finally {
+      setIsCheckingSync(false);
+    }
+  };
 
   const filteredCategories = useMemo(() => {
     return categories.filter((c) => c.type === catManagerType);
@@ -449,6 +475,24 @@ export const MoreView: React.FC<MoreViewProps> = ({
                     Tus registros se guardan localmente y se sincronizan al recuperar internet.
                   </span>
                 </div>
+              </div>
+              <div className={`mt-2 p-3 rounded-2xl border ${isDark ? 'bg-black/25 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="text-[11px]">
+                    <span className={`font-semibold block ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                      {isOnline ? 'Cola de sincronización' : 'Sin conexión a internet'}
+                    </span>
+                    <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>
+                      {pendingOfflineCount > 0 ? `${pendingOfflineCount} cambio(s) pendiente(s).` : 'No hay cambios pendientes registrados.'}
+                      {lastSyncTime ? ` Último envío: ${new Date(lastSyncTime).toLocaleString('es-GT')}.` : ''}
+                    </span>
+                  </div>
+                  <button type="button" onClick={() => void handleCheckSync()} disabled={!isOnline || isCheckingSync || isSyncing} className={`shrink-0 px-3 py-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${isDark ? 'bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25' : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'}`}>
+                    <RotateCcw className={`w-3.5 h-3.5 ${isCheckingSync || isSyncing ? 'animate-spin' : ''}`} />
+                    {isCheckingSync || isSyncing ? 'Revisando' : 'Verificar'}
+                  </button>
+                </div>
+                {syncCheckNotice && <p role="status" className={`mt-2 text-[11px] ${pendingOfflineCount > 0 ? 'text-amber-600 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}`}>{syncCheckNotice}</p>}
               </div>
             </div>
           </div>

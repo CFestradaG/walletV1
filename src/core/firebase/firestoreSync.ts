@@ -4,6 +4,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  onSnapshot,
   runTransaction,
   setDoc,
   writeBatch,
@@ -18,6 +19,8 @@ import {
   UserSettings,
 } from '../types/models';
 import { UserDataStore } from '../data/initialData';
+import { AnnualProjectionsPlan } from '../../features/annual_budget/annualBudgetEngine';
+import { SyncedSecurityPreferences } from '../security/securityService';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { applyTransactionToAccounts, reverseTransactionOnAccounts, validateTransactionInput } from '../../features/transactions/financialEngine';
 
@@ -67,6 +70,74 @@ export async function syncSettings(userId: string, settings: UserSettings): Prom
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
+}
+
+export async function syncSecurityPreferences(userId: string, preferences: SyncedSecurityPreferences): Promise<void> {
+  if (auth.currentUser?.uid !== userId) throw new Error('Usuario no autenticado.');
+  const path = `users/${userId}/settings/security`;
+  try {
+    await setDoc(doc(db, 'users', userId, 'settings', 'security'), {
+      ...preferences,
+      userId,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function loadSecurityPreferences(userId: string): Promise<SyncedSecurityPreferences | null> {
+  const snapshot = await getDoc(doc(db, 'users', userId, 'settings', 'security'));
+  if (!snapshot.exists()) return null;
+  const data = snapshot.data();
+  if (data.userId !== userId || !data.config || typeof data.config !== 'object') return null;
+  return {
+    config: data.config,
+    pinCredential: data.pinCredential || null,
+  } as SyncedSecurityPreferences;
+}
+
+export async function syncAnnualProjections(userId: string, plan: AnnualProjectionsPlan): Promise<void> {
+  if (auth.currentUser?.uid !== userId) throw new Error('Usuario no autenticado.');
+  const docId = `projections_${plan.year}`;
+  const path = `users/${userId}/settings/${docId}`;
+  try {
+    await setDoc(doc(db, 'users', userId, 'settings', docId), { ...plan, userId, updatedAt: new Date().toISOString() });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function seedAnnualProjectionsIfMissing(userId: string, plan: AnnualProjectionsPlan): Promise<void> {
+  if (auth.currentUser?.uid !== userId) throw new Error('Usuario no autenticado.');
+  const ref = doc(db, 'users', userId, 'settings', `projections_${plan.year}`);
+  await runTransaction(db, async (transaction) => {
+    const existing = await transaction.get(ref);
+    if (!existing.exists()) {
+      transaction.set(ref, { ...plan, userId, updatedAt: new Date().toISOString() });
+    }
+  });
+}
+
+export function subscribeAnnualProjections(
+  userId: string,
+  year: number,
+  onPlan: (plan: AnnualProjectionsPlan | null, fromCache: boolean) => void,
+  onError: (error: Error) => void
+): () => void {
+  const ref = doc(db, 'users', userId, 'settings', `projections_${year}`);
+  return onSnapshot(ref, { includeMetadataChanges: true }, (snapshot) => {
+    if (!snapshot.exists()) {
+      onPlan(null, snapshot.metadata.fromCache);
+      return;
+    }
+    const data = snapshot.data();
+    if (data.userId !== userId || Number(data.year) !== year || !data.projections || typeof data.projections !== 'object') {
+      onPlan(null, snapshot.metadata.fromCache);
+      return;
+    }
+    onPlan({ year, projections: data.projections }, snapshot.metadata.fromCache);
+  }, onError);
 }
 
 export async function syncAccount(userId: string, account: Account): Promise<void> {
@@ -253,13 +324,10 @@ export async function seedUserInitialData(userId: string, initialStore: UserData
         pendingWrites += 1;
       }
     };
-    const hasExistingPeriods = existingDocs[collections.indexOf('periods')].docs.length > 0;
-    const hasExistingCategories = existingDocs[collections.indexOf('categories')].docs.length > 0;
-
     const records: [typeof collections[number], string, InitialRecord][] = [
       ['settings', 'default', initialStore.settings],
-      ...(hasExistingCategories ? [] : initialStore.categories.map((item): [typeof collections[number], string, InitialRecord] => ['categories', item.id, item])),
-      ...(hasExistingPeriods ? [] : initialStore.periods.map((item): [typeof collections[number], string, InitialRecord] => ['periods', item.id, item])),
+      ...initialStore.categories.map((item): [typeof collections[number], string, InitialRecord] => ['categories', item.id, item]),
+      ...initialStore.periods.map((item): [typeof collections[number], string, InitialRecord] => ['periods', item.id, item]),
       ...initialStore.budgets.map((item): [typeof collections[number], string, InitialRecord] => ['budgets', item.id, item]),
     ];
     for (const [name, id, data] of records) {
@@ -283,8 +351,10 @@ export async function resetUserFinancialData(userId: string, initialStore: UserD
 
   let batch = writeBatch(db);
   let pendingDeletes = 0;
-  for (const snapshot of snapshots) {
+  for (const [index, snapshot] of snapshots.entries()) {
     for (const item of snapshot.docs) {
+      // Keep the account-wide PIN and lock preferences when financial data is reset.
+      if (collectionNames[index] === 'settings' && item.id === 'security') continue;
       batch.delete(item.ref);
       pendingDeletes += 1;
       if (pendingDeletes >= 450) {
