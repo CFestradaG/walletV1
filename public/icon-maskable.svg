@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGradFull" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="50%" stop-color="#0B132B" />
+      <stop offset="100%" stop-color="#04201E" />
+    </linearGradient>
+    <linearGradient id="cardGradM" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="50%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+    <linearGradient id="goldGradM" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FCD34D" />
+      <stop offset="100%" stop-color="#F59E0B" />
+    </linearGradient>
+  </defs>
+
+  <!-- Full-bleed background for maskable safe-zone -->
+  <rect width="512" height="512" fill="url(#bgGradFull)" />
+
+  <!-- Center all art inside 75% safe area (384x384 at x=64, y=64) -->
+  <g transform="translate(64, 64) scale(0.75)">
+    <!-- Back card -->
+    <rect x="110" y="140" width="292" height="180" rx="24" fill="#1E293B" stroke="#334155" stroke-width="4" transform="rotate(-6 256 230)" opacity="0.85" />
+    
+    <!-- Top card -->
+    <rect x="136" y="130" width="240" height="130" rx="18" fill="url(#goldGradM)" transform="rotate(3 256 195)" />
+    <rect x="160" y="152" width="36" height="26" rx="6" fill="#78350F" opacity="0.3" transform="rotate(3 256 195)" />
+
+    <!-- Main Front Wallet -->
+    <rect x="100" y="180" width="312" height="210" rx="28" fill="url(#cardGradM)" stroke="#34D399" stroke-width="4" stroke-opacity="0.4" />
+
+    <!-- Pocket Arch -->
+    <path d="M 100 235 Q 256 270 412 235 L 412 362 C 412 377.46 399.46 390 384 390 L 128 390 C 112.54 390 100 377.46 100 362 Z" fill="#047857" opacity="0.95" />
+
+    <!-- Stitching -->
+    <path d="M 112 245 Q 256 278 400 245" fill="none" stroke="#6EE7B7" stroke-width="3" stroke-dasharray="6,6" opacity="0.7" />
+
+    <!-- Clasp -->
+    <g transform="translate(330, 252)">
+      <rect x="0" y="0" width="82" height="64" rx="18" fill="#0F172A" stroke="#34D399" stroke-width="2.5" />
+      <circle cx="41" cy="32" r="14" fill="url(#goldGradM)" />
+      <circle cx="41" cy="32" r="6" fill="#0F172A" />
+    </g>
+
+    <!-- Quetzal Symbol -->
+    <text x="210" y="340" font-family="Plus Jakarta Sans, Inter, sans-serif" font-size="70" font-weight="800" fill="#FFFFFF" text-anchor="middle">Q</text>
+  </g>
+</svg>

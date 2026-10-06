@@ -2,13 +2,16 @@ import React, { useState } from 'react';
 import {
   BarChart3,
   AlertTriangle,
+  Download,
   LayoutDashboard,
   Landmark,
+  Lock,
   Monitor,
   Moon,
   MoreHorizontal,
   Plus,
   ReceiptText,
+  Shield,
   Sun,
 } from 'lucide-react';
 import { WalletProvider, useWallet } from './core/state/WalletContext';
@@ -21,12 +24,20 @@ import { MoreView } from './features/settings/MoreView';
 import { TransactionModal } from './features/transactions/TransactionModal';
 import { PeriodsModal } from './features/financial_periods/PeriodsModal';
 import { AnnualBudgetModal } from './features/annual_budget/AnnualBudgetModal';
+import { SecurityLockScreen } from './core/security/SecurityLockScreen';
+import { SecuritySettingsModal } from './core/security/SecuritySettingsModal';
+import { PWAInstallModal } from './core/pwa/PWAInstallModal';
+import { usePWAInstall } from './core/pwa/usePWAInstall';
+import { useAppLock } from './core/security/useAppLock';
+import { getSecurityConfig } from './core/security/securityService';
 import { Transaction, TransactionType } from './core/types/models';
 
 type MainTab = 'inicio' | 'cuentas' | 'transacciones' | 'analisis' | 'mas';
 
 const WalletAppShell: React.FC = () => {
   const {
+    currentUser,
+    logout,
     isAuthenticated,
     themeMode,
     resolvedTheme,
@@ -42,6 +53,15 @@ const WalletAppShell: React.FC = () => {
   const isDark = resolvedTheme === 'dark';
 
   const [activeTab, setActiveTab] = useState<MainTab>('inicio');
+
+  // PWA Install state & hook
+  const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+
+  // Security Lock state & hook
+  const { isLocked, lockNow, unlockApp } = useAppLock(currentUser?.id);
+  const [isSecurityModalOpen, setIsSecurityModalOpen] = useState(false);
+  const securityConfig = currentUser ? getSecurityConfig(currentUser.id) : { enabled: false };
 
   // Transaction Modal State
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
@@ -60,6 +80,17 @@ const WalletAppShell: React.FC = () => {
 
   if (!isAuthenticated) {
     return <AuthScreen />;
+  }
+
+  // App Lock Screen overlay (protects financial data when locked)
+  if (isLocked && currentUser) {
+    return (
+      <SecurityLockScreen
+        userId={currentUser.id}
+        onUnlocked={unlockApp}
+        onLogout={logout}
+      />
+    );
   }
 
   const handleOpenNewTransaction = (options?: {
@@ -149,8 +180,44 @@ const WalletAppShell: React.FC = () => {
           })}
         </nav>
 
-        {/* Zone 3: Primary Actions (Theme Mode Switcher + Agregar Transacción) */}
-        <div className="flex items-center gap-2">
+        {/* Zone 3: Primary Actions (Lock + Install + Theme Mode Switcher + Agregar Transacción) */}
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {/* Quick Lock Button (only if security is active) */}
+          {securityConfig.enabled && (
+            <button
+              type="button"
+              onClick={lockNow}
+              title="Bloquear Wallet ahora"
+              aria-label="Bloquear Wallet ahora"
+              className={`min-h-[38px] px-2.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
+                isDark
+                  ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-400 hover:bg-emerald-500/20'
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100'
+              }`}
+            >
+              <Lock className="w-3.5 h-3.5" />
+              <span className="hidden lg:inline">Bloquear</span>
+            </button>
+          )}
+
+          {/* Quick Install PWA Button (if installable or iOS guide and not standalone) */}
+          {!isInstalled && (isInstallable || isIOS) && (
+            <button
+              type="button"
+              onClick={() => (isInstallable ? void install() : setIsInstallModalOpen(true))}
+              title="Instalar Wallet en tu dispositivo"
+              aria-label="Instalar Wallet en tu dispositivo"
+              className={`min-h-[38px] px-2.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+                isDark
+                  ? 'bg-teal-500/15 border-teal-500/30 text-teal-300 hover:bg-teal-500/25'
+                  : 'bg-teal-50 border-teal-200 text-teal-800 hover:bg-teal-100'
+              }`}
+            >
+              <Download className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Instalar</span>
+            </button>
+          )}
+
           <button
             type="button"
             onClick={cycleThemeMode}
@@ -278,6 +345,8 @@ const WalletAppShell: React.FC = () => {
           <MoreView
             onOpenPeriodsModal={() => setIsPeriodsModalOpen(true)}
             onOpenBudgetsModal={() => setIsAnnualBudgetModalOpen(true)}
+            onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
+            onOpenInstallModal={() => setIsInstallModalOpen(true)}
           />
         )}
       </main>
@@ -351,6 +420,22 @@ const WalletAppShell: React.FC = () => {
       <AnnualBudgetModal
         isOpen={isAnnualBudgetModalOpen}
         onClose={() => setIsAnnualBudgetModalOpen(false)}
+      />
+
+      <SecuritySettingsModal
+        isOpen={isSecurityModalOpen}
+        onClose={() => setIsSecurityModalOpen(false)}
+        userId={currentUser?.id || ''}
+        userDisplayName={currentUser?.name}
+        onLockNow={lockNow}
+      />
+
+      <PWAInstallModal
+        isOpen={isInstallModalOpen}
+        onClose={() => setIsInstallModalOpen(false)}
+        onInstallNative={install}
+        isInstallable={isInstallable}
+        isIOS={isIOS}
       />
     </div>
   );

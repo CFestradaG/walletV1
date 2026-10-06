@@ -343,19 +343,31 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         {/* Tarjetas YTD Acumuladas */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-4">
           {/* 1. Ingresos YTD */}
-          <div className="p-3 rounded-2xl bg-black/20 border border-white/5">
-            <span className="text-[11px] font-semibold text-slate-400 block mb-1">
+          <div
+            className={`p-3.5 rounded-2xl border transition-all ${
+              isDark ? 'bg-black/20 border-white/5' : 'bg-white border-slate-200 shadow-xs'
+            }`}
+          >
+            <span
+              className={`text-[11px] font-semibold block mb-1 ${
+                isDark ? 'text-slate-400' : 'text-slate-500'
+              }`}
+            >
               Ingresos Acumulados
             </span>
             <div className="flex items-baseline justify-between">
-              <span className="text-base font-bold font-display text-emerald-400">
+              <span className="text-base font-bold font-display text-emerald-500">
                 {hideBalances ? '••••' : formatGTQ(cumulativeSummary.ytdActualIncome)}
               </span>
-              <span className="text-[10px] text-slate-400">
+              <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 de {hideBalances ? '••••' : formatGTQ(cumulativeSummary.ytdProjectedIncome)}
               </span>
             </div>
-            <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden mt-2">
+            <div
+              className={`w-full h-1.5 rounded-full overflow-hidden mt-2 ${
+                isDark ? 'bg-white/10' : 'bg-slate-100 border border-slate-200/60'
+              }`}
+            >
               <div
                 className="h-full rounded-full bg-emerald-500 transition-all"
                 style={{
@@ -375,25 +387,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {/* 2. Egresos YTD */}
-          <div className="p-3 rounded-2xl bg-black/20 border border-white/5">
-            <span className="text-[11px] font-semibold text-slate-400 block mb-1">
+          <div
+            className={`p-3.5 rounded-2xl border transition-all ${
+              isDark ? 'bg-black/20 border-white/5' : 'bg-white border-slate-200 shadow-xs'
+            }`}
+          >
+            <span
+              className={`text-[11px] font-semibold block mb-1 ${
+                isDark ? 'text-slate-400' : 'text-slate-500'
+              }`}
+            >
               Egresos Acumulados
             </span>
             <div className="flex items-baseline justify-between">
               <span
                 className={`text-base font-bold font-display ${
                   cumulativeSummary.ytdActualExpense > cumulativeSummary.ytdProjectedExpense
-                    ? 'text-rose-400'
-                    : 'text-white'
+                    ? 'text-rose-500'
+                    : isDark
+                    ? 'text-white'
+                    : 'text-slate-900'
                 }`}
               >
                 {hideBalances ? '••••' : formatGTQ(cumulativeSummary.ytdActualExpense)}
               </span>
-              <span className="text-[10px] text-slate-400">
+              <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 de {hideBalances ? '••••' : formatGTQ(cumulativeSummary.ytdProjectedExpense)}
               </span>
             </div>
-            <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden mt-2">
+            <div
+              className={`w-full h-1.5 rounded-full overflow-hidden mt-2 ${
+                isDark ? 'bg-white/10' : 'bg-slate-100 border border-slate-200/60'
+              }`}
+            >
               <div
                 className={`h-full rounded-full transition-all ${
                   cumulativeSummary.ytdActualExpense > cumulativeSummary.ytdProjectedExpense
@@ -417,27 +443,39 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {/* 3. Ahorro / Superávit Neto YTD */}
-          <div className="p-3 rounded-2xl bg-black/20 border border-white/5">
-            <span className="text-[11px] font-semibold text-slate-400 block mb-1">
+          <div
+            className={`p-3.5 rounded-2xl border transition-all ${
+              isDark ? 'bg-black/20 border-white/5' : 'bg-white border-slate-200 shadow-xs'
+            }`}
+          >
+            <span
+              className={`text-[11px] font-semibold block mb-1 ${
+                isDark ? 'text-slate-400' : 'text-slate-500'
+              }`}
+            >
               Ahorro Neto Acumulado
             </span>
             <div className="flex items-baseline justify-between">
               <span
                 className={`text-base font-bold font-display ${
                   cumulativeSummary.ytdActualNet >= cumulativeSummary.ytdProjectedNet
-                    ? 'text-emerald-300'
-                    : 'text-amber-300'
+                    ? isDark
+                      ? 'text-emerald-300'
+                      : 'text-emerald-600'
+                    : isDark
+                    ? 'text-amber-300'
+                    : 'text-amber-600'
                 }`}
               >
                 {hideBalances ? '••••' : formatGTQ(cumulativeSummary.ytdActualNet)}
               </span>
-              <span className="text-[10px] text-slate-400">
+              <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 meta {hideBalances ? '••••' : formatGTQ(cumulativeSummary.ytdProjectedNet)}
               </span>
             </div>
-            <div className="mt-1 text-[10px] font-medium text-slate-400">
+            <div className={`mt-1 text-[10px] font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               {cumulativeSummary.ytdActualNet >= cumulativeSummary.ytdProjectedNet ? (
-                <span className="text-emerald-400">
+                <span className={isDark ? 'text-emerald-400' : 'text-emerald-600 font-semibold'}>
                   +
                   {formatGTQ(
                     cumulativeSummary.ytdActualNet - cumulativeSummary.ytdProjectedNet
@@ -445,7 +483,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                   sobre lo proyectado
                 </span>
               ) : (
-                <span className="text-amber-400">
+                <span className={isDark ? 'text-amber-400' : 'text-amber-600 font-semibold'}>
                   {formatGTQ(
                     cumulativeSummary.ytdActualNet - cumulativeSummary.ytdProjectedNet
                   )}{' '}
@@ -457,18 +495,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
         </div>
 
         {/* ALERTAS DE PRESUPUESTO DEL MES ACTUAL */}
-        <div className="pt-3 border-t border-white/5">
+        <div className={`pt-3 border-t ${isDark ? 'border-white/5' : 'border-slate-100'}`}>
           <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-bold text-slate-300">
+            <span className={`text-xs font-bold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
               Estado de Presupuesto en {cumulativeSummary.currentMonthName}
             </span>
             {activeAlerts.length > 0 ? (
-              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 border border-rose-500/20 flex items-center gap-1">
-                <AlertTriangle className="w-3 h-3 text-rose-400" />
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-500 border border-rose-500/20 flex items-center gap-1">
+                <AlertTriangle className="w-3 h-3 text-rose-500" />
                 <span>{activeAlerts.length} alerta(s) de gasto</span>
               </span>
             ) : (
-              <span className="text-[11px] font-semibold text-emerald-400 flex items-center gap-1">
+              <span className="text-[11px] font-semibold text-emerald-500 flex items-center gap-1">
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Todo dentro de lo proyectado</span>
               </span>
@@ -476,8 +514,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
 
           {activeAlerts.length === 0 ? (
-            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+            <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-600 dark:text-emerald-300 flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
               <span>
                 Tus gastos de {cumulativeSummary.currentMonthName} se mantienen dentro de la
                 proyección presupuestaria planificada.
@@ -488,33 +526,41 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {activeAlerts.map((alert) => (
                 <div
                   key={alert.category.id}
-                  className="p-2.5 rounded-xl bg-black/20 border border-white/5 space-y-1.5"
+                  className={`p-3 rounded-2xl border space-y-1.5 transition-all ${
+                    isDark
+                      ? 'bg-black/20 border-white/5'
+                      : 'bg-white border-slate-200 shadow-2xs'
+                  }`}
                 >
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
-                      <span>{alert.category.icon || '📦'}</span>
-                      <span className="font-semibold text-white">
+                      <span className="text-base">{alert.category.icon || '📦'}</span>
+                      <span className={`font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                         {alert.category.name}
                       </span>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <span className="text-[11px] text-slate-400">
+                      <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500 font-medium'}`}>
                         {formatGTQ(alert.actual)} / {formatGTQ(alert.projected)}
                       </span>
                       {alert.isOverBudget ? (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/25">
                           Sobregiro {alert.pct}%
                         </span>
                       ) : (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-600 dark:text-amber-300 border border-amber-500/25">
                           {alert.pct}% usado
                         </span>
                       )}
                     </div>
                   </div>
 
-                  <div className="w-full h-1.5 rounded-full bg-white/10 overflow-hidden">
+                  <div
+                    className={`w-full h-1.5 rounded-full overflow-hidden ${
+                      isDark ? 'bg-white/10' : 'bg-slate-100 border border-slate-200/60'
+                    }`}
+                  >
                     <div
                       className={`h-full rounded-full transition-all ${
                         alert.isOverBudget ? 'bg-rose-500' : 'bg-amber-400'

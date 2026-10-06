@@ -209,7 +209,7 @@ interface WalletContextValue {
   setActivePeriodId: (periodId: string) => void;
   createFinancialPeriod: (input: {
     name: string;
-    referenceMonth: number;
+    referenceMonth?: number;
     startDate: string;
     endDate: string;
     subdivisionMode: SubdivisionMode;
@@ -220,7 +220,7 @@ interface WalletContextValue {
     periodId: string,
     input: {
       name: string;
-      referenceMonth: number;
+      referenceMonth?: number;
       startDate: string;
       endDate: string;
       subdivisionMode: SubdivisionMode;
@@ -281,7 +281,7 @@ interface WalletContextValue {
   selectActivePeriod: (periodId: string) => void;
   createPeriod: (input: {
     name: string;
-    referenceMonth: number;
+    referenceMonth?: number;
     startDate: string;
     endDate: string;
     subdivisionMode: SubdivisionMode;
@@ -292,7 +292,7 @@ interface WalletContextValue {
     periodId: string,
     input: {
       name: string;
-      referenceMonth: number;
+      referenceMonth?: number;
       startDate: string;
       endDate: string;
       subdivisionMode: SubdivisionMode;
@@ -453,8 +453,18 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     hideBalances: false,
   };
 
+  const [localThemeMode, setLocalThemeMode] = useState<ThemeMode>(() => {
+    try {
+      const saved = localStorage.getItem('wallet_theme_mode');
+      if (saved === 'light' || saved === 'dark' || saved === 'system') return saved;
+    } catch {
+      // ignore
+    }
+    return 'dark';
+  });
+
   const settings = currentUserStore?.settings ?? defaultSettings;
-  const themeMode = settings.themeMode;
+  const themeMode: ThemeMode = localThemeMode;
 
   const resolvedTheme: 'light' | 'dark' = useMemo(() => {
     if (themeMode === 'system') {
@@ -468,7 +478,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     if (resolvedTheme === 'dark') {
       root.classList.add('dark');
       root.classList.remove('light');
-      document.body.style.backgroundColor = '#0F131C';
+      document.body.style.backgroundColor = '#0B0F17';
       document.body.style.color = '#DFE2EE';
     } else {
       root.classList.add('light');
@@ -1012,13 +1022,27 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const setThemeMode = (mode: ThemeMode) => {
-    if (!currentUserId || !currentUserStore) return;
-    const nextSettings = { ...currentUserStore.settings, themeMode };
-    updateCurrentUserStore((store) => ({
-      ...store,
-      settings: nextSettings,
-    }));
-    if (auth.currentUser?.uid === currentUserId) trackSync(syncSettings(currentUserId, nextSettings), 'la configuración');
+    try {
+      localStorage.setItem('wallet_theme_mode', mode);
+    } catch {
+      // ignore
+    }
+    setLocalThemeMode(mode);
+
+    if (currentUserId && currentUserStore) {
+      const nextSettings: UserSettings = {
+        ...currentUserStore.settings,
+        themeMode: mode,
+      };
+      updateCurrentUserStore((store) => ({
+        ...store,
+        settings: nextSettings,
+      }));
+      if (auth.currentUser?.uid === currentUserId) {
+        offlineQueue.enqueue(currentUserId, 'SAVE_SETTINGS', { settings: nextSettings });
+        trackSync(syncSettings(currentUserId, nextSettings), 'la configuración');
+      }
+    }
   };
 
   const toggleHideBalances = () => {
@@ -1381,7 +1405,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const createFinancialPeriod = (input: {
     name: string;
-    referenceMonth: number;
+    referenceMonth?: number;
     startDate: string;
     endDate: string;
     subdivisionMode: SubdivisionMode;
@@ -1407,12 +1431,13 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     );
 
     const shouldActivate = input.activateImmediately ?? true;
+    const computedRefMonth = input.referenceMonth ?? (input.monthIndex !== undefined ? input.monthIndex + 1 : (new Date(input.startDate).getMonth() + 1));
 
     const newPeriod: FinancialPeriod = {
       id: newPeriodId,
       userId: currentUserId,
       name: input.name.trim(),
-      referenceMonth: input.referenceMonth,
+      referenceMonth: computedRefMonth,
       startDate: input.startDate,
       endDate: input.endDate,
       subdivisionMode: input.subdivisionMode,
@@ -1452,7 +1477,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     periodId: string,
     input: {
       name: string;
-      referenceMonth: number;
+      referenceMonth?: number;
       startDate: string;
       endDate: string;
       subdivisionMode: SubdivisionMode;
@@ -1475,11 +1500,13 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       input.subdivisionMode
     );
 
+    const computedRefMonth = input.referenceMonth ?? (input.monthIndex !== undefined ? input.monthIndex + 1 : undefined);
+
     const updatedPeriods = currentUserStore.periods.map((period) => period.id === periodId
       ? {
           ...period,
           name: input.name.trim(),
-          referenceMonth: input.referenceMonth,
+          referenceMonth: computedRefMonth ?? period.referenceMonth,
           startDate: input.startDate,
           endDate: input.endDate,
           subdivisionMode: input.subdivisionMode,

@@ -268,37 +268,61 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
         {/* 3 Metrics Row */}
         <div className="grid grid-cols-3 gap-2 pt-2">
-          <div className="p-3 rounded-2xl bg-black/20 border border-white/5">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+          <div
+            className={`p-3 rounded-2xl border transition-all ${
+              isDark ? 'bg-black/20 border-white/5' : 'bg-slate-50 border-slate-200 shadow-2xs'
+            }`}
+          >
+            <span
+              className={`text-[10px] uppercase font-bold block mb-1 ${
+                isDark ? 'text-slate-400' : 'text-slate-500'
+              }`}
+            >
               Ingresos
             </span>
-            <span className="font-mono text-sm font-bold text-emerald-400 block">
+            <span className="font-mono text-sm font-bold text-emerald-500 block">
               {formatGTQ(totalIncome)}
             </span>
           </div>
 
-          <div className="p-3 rounded-2xl bg-black/20 border border-white/5">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+          <div
+            className={`p-3 rounded-2xl border transition-all ${
+              isDark ? 'bg-black/20 border-white/5' : 'bg-slate-50 border-slate-200 shadow-2xs'
+            }`}
+          >
+            <span
+              className={`text-[10px] uppercase font-bold block mb-1 ${
+                isDark ? 'text-slate-400' : 'text-slate-500'
+              }`}
+            >
               Gastos
             </span>
-            <span className="font-mono text-sm font-bold text-rose-400 block">
+            <span className="font-mono text-sm font-bold text-rose-500 block">
               {formatGTQ(totalExpense)}
             </span>
           </div>
 
-          <div className="p-3 rounded-2xl bg-black/20 border border-white/5">
-            <span className="text-[10px] uppercase font-bold text-slate-400 block mb-1">
+          <div
+            className={`p-3 rounded-2xl border transition-all ${
+              isDark ? 'bg-black/20 border-white/5' : 'bg-slate-50 border-slate-200 shadow-2xs'
+            }`}
+          >
+            <span
+              className={`text-[10px] uppercase font-bold block mb-1 ${
+                isDark ? 'text-slate-400' : 'text-slate-500'
+              }`}
+            >
               Ahorro Neto
             </span>
             <span
               className={`font-mono text-sm font-bold block ${
-                netSavings >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                netSavings >= 0 ? 'text-emerald-500' : 'text-rose-500'
               }`}
             >
               {netSavings >= 0 ? '+' : ''}
               {formatGTQ(netSavings)}
             </span>
-            <span className="text-[10px] text-slate-400 font-mono">
+            <span className={`text-[10px] font-mono ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
               ({savingsRate}% tasa de ahorro)
             </span>
           </div>
@@ -372,13 +396,15 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             {topSubcategories.map((sub, idx) => (
               <div
                 key={idx}
-                className="flex items-center justify-between p-2.5 rounded-xl bg-black/20 border border-white/5 text-xs"
+                className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all ${
+                  isDark ? 'bg-black/20 border-white/5' : 'bg-slate-50 border-slate-200'
+                }`}
               >
                 <div>
-                  <span className="font-bold text-white block">{sub.subName}</span>
-                  <span className="text-[10px] text-slate-400">{sub.catName}</span>
+                  <span className={`font-bold block ${isDark ? 'text-white' : 'text-slate-900'}`}>{sub.subName}</span>
+                  <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{sub.catName}</span>
                 </div>
-                <span className="font-mono font-bold text-rose-400">
+                <span className="font-mono font-bold text-rose-500">
                   {formatGTQ(sub.amount)}
                 </span>
               </div>

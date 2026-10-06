@@ -3,34 +3,45 @@ import {
   Calendar,
   Check,
   ChevronRight,
+  Download,
   Edit3,
   Eye,
   EyeOff,
+  Fingerprint,
   FolderTree,
   LogOut,
   Monitor,
   Moon,
   Plus,
   RotateCcw,
+  Shield,
   ShieldCheck,
+  Smartphone,
   Sun,
   Target,
   Trash2,
   User,
   Wallet,
+  Wifi,
   X,
 } from 'lucide-react';
 import { useWallet } from '../../core/state/WalletContext';
 import { Category, CategoryType, ThemeMode } from '../../core/types/models';
+import { getSecurityConfig } from '../../core/security/securityService';
+import { usePWAInstall } from '../../core/pwa/usePWAInstall';
 
 interface MoreViewProps {
   onOpenPeriodsModal: () => void;
   onOpenBudgetsModal: () => void;
+  onOpenSecurityModal?: () => void;
+  onOpenInstallModal?: () => void;
 }
 
 export const MoreView: React.FC<MoreViewProps> = ({
   onOpenPeriodsModal,
   onOpenBudgetsModal,
+  onOpenSecurityModal,
+  onOpenInstallModal,
 }) => {
   const {
     currentUser,
@@ -316,6 +327,104 @@ export const MoreView: React.FC<MoreViewProps> = ({
         </div>
       </div>
 
+      {/* PWA & SEGURIDAD AVANZADA */}
+      {(() => {
+        const secConfig = currentUser ? getSecurityConfig(currentUser.id) : { enabled: false };
+        return (
+          <div
+            className={`p-4 rounded-3xl border transition-all ${
+              isDark ? 'bg-[#131927] border-white/10' : 'bg-white border-slate-200 shadow-xs'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-xs font-bold block">PWA & Seguridad Local</span>
+              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                100% Offline
+              </span>
+            </div>
+
+            <div className="space-y-2">
+              {/* Seguridad & Bloqueo */}
+              <button
+                type="button"
+                onClick={onOpenSecurityModal}
+                className="w-full p-3 rounded-2xl border border-white/5 hover:bg-white/5 flex items-center justify-between text-left transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                    secConfig.enabled
+                      ? 'bg-emerald-500/15 text-emerald-400'
+                      : 'bg-indigo-500/15 text-indigo-400'
+                  }`}>
+                    {secConfig.enabled ? <Shield className="w-4 h-4" /> : <Fingerprint className="w-4 h-4" />}
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs text-white block">
+                      Seguridad & Bloqueo
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      {secConfig.enabled
+                        ? 'Protección activa con PIN y Biometría'
+                        : 'Configurar PIN de 4 dígitos o Huella / Face ID'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                    secConfig.enabled
+                      ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      : 'bg-slate-700/60 text-slate-300'
+                  }`}>
+                    {secConfig.enabled ? 'Activo' : 'Configurar'}
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                </div>
+              </button>
+
+              {/* Instalar PWA */}
+              <button
+                type="button"
+                onClick={onOpenInstallModal}
+                className="w-full p-3 rounded-2xl border border-white/5 hover:bg-white/5 flex items-center justify-between text-left transition-colors cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-teal-500/15 text-teal-400 flex items-center justify-center">
+                    <Smartphone className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-xs text-white block">
+                      Instalar en Teléfono / PC (PWA)
+                    </span>
+                    <span className="text-[11px] text-slate-400">
+                      Acceso rápido de pantalla de inicio sin barra de navegación
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                    Instalar
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-slate-400" />
+                </div>
+              </button>
+
+              {/* Estado Offline Firestore */}
+              <div className="p-3 rounded-2xl bg-black/25 border border-white/5 flex items-center gap-2.5">
+                <Wifi className="w-4 h-4 text-emerald-400 shrink-0" />
+                <div className="text-[11px]">
+                  <span className="text-slate-200 font-medium block">
+                    Persistencia sin conexión habilitada
+                  </span>
+                  <span className="text-slate-400">
+                    Tus registros se guardan localmente y se sincronizan al recuperar internet.
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* 4. PREFERENCES (PRIVACY & CURRENCY) */}
       <div
         className={`p-4 rounded-3xl border transition-all ${
@@ -421,14 +530,22 @@ export const MoreView: React.FC<MoreViewProps> = ({
 
             {/* Type selector tabs */}
             <div className="p-4 pb-2">
-              <div className="grid grid-cols-2 p-1 rounded-xl bg-black/20 border border-white/5 text-xs">
+              <div
+                className={`grid grid-cols-2 p-1 rounded-xl text-xs border ${
+                  isDark ? 'bg-black/20 border-white/5' : 'bg-slate-100 border-slate-200'
+                }`}
+              >
                 <button
                   type="button"
                   onClick={() => setCatManagerType('expense')}
                   className={`py-1.5 rounded-lg font-bold cursor-pointer transition-all ${
                     catManagerType === 'expense'
-                      ? 'bg-rose-500/20 text-rose-400'
-                      : 'text-slate-400'
+                      ? isDark
+                        ? 'bg-rose-500/20 text-rose-400'
+                        : 'bg-white text-rose-600 shadow-xs border border-rose-200'
+                      : isDark
+                      ? 'text-slate-400 hover:text-white'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   Gastos ({categories.filter((c) => c.type === 'expense').length})
@@ -438,8 +555,12 @@ export const MoreView: React.FC<MoreViewProps> = ({
                   onClick={() => setCatManagerType('income')}
                   className={`py-1.5 rounded-lg font-bold cursor-pointer transition-all ${
                     catManagerType === 'income'
-                      ? 'bg-emerald-500/20 text-emerald-400'
-                      : 'text-slate-400'
+                      ? isDark
+                        ? 'bg-emerald-500/20 text-emerald-400'
+                        : 'bg-white text-emerald-600 shadow-xs border border-emerald-200'
+                      : isDark
+                      ? 'text-slate-400 hover:text-white'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   Ingresos ({categories.filter((c) => c.type === 'income').length})
@@ -450,12 +571,12 @@ export const MoreView: React.FC<MoreViewProps> = ({
             {/* Category list */}
             <div className="flex-1 overflow-y-auto px-4 py-2 space-y-3">
               {categoryManagerNotice && (
-                <div role="status" className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-300 text-xs">
+                <div role="status" className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-500 text-xs">
                   {categoryManagerNotice}
                 </div>
               )}
               <div className="flex justify-between items-center">
-                <span className="text-xs text-slate-400 font-medium">
+                <span className={`text-xs font-medium ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                   Categorías registradas
                 </span>
                 <button
@@ -464,7 +585,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
                     setCategoryManagerNotice(null);
                     setIsNewCatModalOpen(true);
                   }}
-                  className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 text-xs font-bold flex items-center gap-1 cursor-pointer"
+                  className="px-2.5 py-1 rounded-lg bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 text-xs font-bold flex items-center gap-1 cursor-pointer hover:bg-emerald-500/25 transition-colors"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Nueva categoría</span>
@@ -474,12 +595,14 @@ export const MoreView: React.FC<MoreViewProps> = ({
               {filteredCategories.map((cat) => (
                 <div
                   key={cat.id}
-                  className="p-3 rounded-2xl bg-black/20 border border-white/5 space-y-2 text-xs"
+                  className={`p-3.5 rounded-2xl border space-y-2 text-xs transition-all ${
+                    isDark ? 'bg-black/20 border-white/5' : 'bg-white border-slate-200 shadow-xs'
+                  }`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
                       <span
-                        className="w-3 h-3 rounded-full"
+                        className="w-3 h-3 rounded-full shrink-0"
                         style={{ backgroundColor: cat.color }}
                       />
                       {editingCategoryId === cat.id ? (
@@ -493,14 +616,16 @@ export const MoreView: React.FC<MoreViewProps> = ({
                               if (e.key === 'Escape') setEditingCategoryId(null);
                             }}
                             aria-label="Nombre de la categoría"
-                            className="min-w-0 w-32 px-2 py-1 rounded-lg bg-black/30 border border-white/10 text-xs text-white"
+                            className={`min-w-0 w-32 px-2 py-1 rounded-lg text-xs border ${
+                              isDark ? 'bg-black/30 border-white/10 text-white' : 'bg-slate-50 border-slate-300 text-slate-900'
+                            }`}
                           />
-                          <button type="button" onClick={() => saveCategoryName(cat.id)} aria-label="Guardar nombre de categoría" className="text-emerald-400 hover:text-emerald-300"><Check className="w-3.5 h-3.5" /></button>
-                          <button type="button" onClick={() => setEditingCategoryId(null)} aria-label="Cancelar edición de categoría" className="text-slate-400 hover:text-white"><X className="w-3.5 h-3.5" /></button>
+                          <button type="button" onClick={() => saveCategoryName(cat.id)} aria-label="Guardar nombre de categoría" className="text-emerald-500 hover:text-emerald-400"><Check className="w-3.5 h-3.5" /></button>
+                          <button type="button" onClick={() => setEditingCategoryId(null)} aria-label="Cancelar edición de categoría" className="text-slate-400 hover:text-slate-600"><X className="w-3.5 h-3.5" /></button>
                         </>
                       ) : (
                         <>
-                          <span className="font-bold text-white">{cat.name}</span>
+                          <span className={`font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>{cat.name}</span>
                           <button
                             type="button"
                             onClick={() => {
@@ -509,14 +634,14 @@ export const MoreView: React.FC<MoreViewProps> = ({
                               setCategoryManagerNotice(null);
                             }}
                             aria-label={`Editar categoría ${cat.name}`}
-                            className="text-slate-400 hover:text-emerald-400"
+                            className="text-slate-400 hover:text-emerald-500 cursor-pointer"
                           ><Edit3 className="w-3 h-3" /></button>
                         </>
                       )}
-                      <span className="text-[10px] text-slate-400">
+                      <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                         ({cat.subcategories.length} subcategorías)
                       </span>
-                      {categoryHasRecords(cat) && <span className="text-[9px] text-amber-400">En uso</span>}
+                      {categoryHasRecords(cat) && <span className="text-[9px] font-bold text-amber-500">En uso</span>}
                     </div>
 
                     <div className="flex items-center gap-1">
@@ -526,7 +651,9 @@ export const MoreView: React.FC<MoreViewProps> = ({
                           setCategoryManagerNotice(null);
                           setTargetCatForSub(cat);
                         }}
-                        className="px-2 py-0.5 rounded-lg bg-white/5 hover:bg-white/10 text-slate-300 text-[11px] flex items-center gap-1 cursor-pointer"
+                        className={`px-2 py-0.5 rounded-lg text-[11px] flex items-center gap-1 cursor-pointer transition-colors ${
+                          isDark ? 'bg-white/5 hover:bg-white/10 text-slate-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                        }`}
                       >
                         <Plus className="w-3 h-3" />
                         <span>Subcategoría</span>
@@ -548,12 +675,17 @@ export const MoreView: React.FC<MoreViewProps> = ({
 
                   {/* Subcategories list */}
                   {cat.subcategories.length > 0 && (
-                    <div className="flex flex-wrap gap-1.5 pt-1 border-t border-white/5">
+                    <div className={`flex flex-wrap gap-1.5 pt-1.5 border-t ${isDark ? 'border-white/5' : 'border-slate-100'}`}>
                       {cat.subcategories.map((sub) => {
                         const isEditing = editingSubcategory?.categoryId === cat.id && editingSubcategory.subcategoryId === sub.id;
                         const hasRecords = subcategoryHasRecords(sub.id);
                         return (
-                          <div key={sub.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-white/5 border border-white/10 text-[11px] text-slate-300">
+                          <div
+                            key={sub.id}
+                            className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-[11px] border transition-colors ${
+                              isDark ? 'bg-white/5 border-white/10 text-slate-300' : 'bg-slate-50 border-slate-200 text-slate-700'
+                            }`}
+                          >
                             {isEditing ? (
                               <>
                                 <input
@@ -565,15 +697,17 @@ export const MoreView: React.FC<MoreViewProps> = ({
                                     if (e.key === 'Escape') setEditingSubcategory(null);
                                   }}
                                   aria-label="Nombre de la subcategoría"
-                                  className="w-28 px-1 py-0.5 rounded bg-black/30 border border-white/10 text-[11px] text-white"
+                                  className={`w-28 px-1 py-0.5 rounded text-[11px] border ${
+                                    isDark ? 'bg-black/30 border-white/10 text-white' : 'bg-white border-slate-300 text-slate-900'
+                                  }`}
                                 />
-                                <button type="button" onClick={() => saveSubcategoryName(cat.id, sub.id)} aria-label="Guardar nombre de subcategoría" className="text-emerald-400"><Check className="w-3 h-3" /></button>
+                                <button type="button" onClick={() => saveSubcategoryName(cat.id, sub.id)} aria-label="Guardar nombre de subcategoría" className="text-emerald-500"><Check className="w-3 h-3" /></button>
                                 <button type="button" onClick={() => setEditingSubcategory(null)} aria-label="Cancelar edición de subcategoría" className="text-slate-400"><X className="w-3 h-3" /></button>
                               </>
                             ) : (
                               <>
-                                <span>{sub.name}</span>
-                                {hasRecords && <span className="text-[9px] text-amber-400">En uso</span>}
+                                <span className={isDark ? 'text-slate-300' : 'text-slate-800 font-medium'}>{sub.name}</span>
+                                {hasRecords && <span className="text-[9px] font-bold text-amber-500">En uso</span>}
                                 <button
                                   type="button"
                                   onClick={() => {
@@ -582,13 +716,24 @@ export const MoreView: React.FC<MoreViewProps> = ({
                                     setCategoryManagerNotice(null);
                                   }}
                                   aria-label={`Editar subcategoría ${sub.name}`}
-                                  className="text-slate-400 hover:text-emerald-400"
+                                  className="text-slate-400 hover:text-emerald-500 cursor-pointer"
                                 ><Edit3 className="w-3 h-3" /></button>
                                 <button
                                   type="button"
                                   disabled={hasRecords || cat.subcategories.length <= 1}
                                   title={hasRecords ? 'Tiene transacciones o presupuestos asociados; puedes cambiarle el nombre.' : cat.subcategories.length <= 1 ? 'La categoría debe conservar al menos una subcategoría.' : 'Eliminar subcategoría'}
                                   onClick={() => deleteSubcategory(cat, sub.id)}
+                                  className="text-slate-400 hover:text-rose-500 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                                ><X className="w-3 h-3" /></button>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              ))}
                                   aria-label={`Eliminar subcategoría ${sub.name}`}
                                   className="text-slate-500 hover:text-rose-400 cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
                                 ><X className="w-3 h-3" /></button>

@@ -125,6 +125,7 @@ export const PeriodsModal: React.FC<PeriodsModalProps> = ({
     }
 
     try {
+      const refMonth = monthIndex !== undefined ? monthIndex + 1 : undefined;
       if (selectedPeriodId) {
         updatePeriod(selectedPeriodId, {
           name: name.trim(),
@@ -132,6 +133,7 @@ export const PeriodsModal: React.FC<PeriodsModalProps> = ({
           endDate,
           subdivisionMode,
           monthIndex,
+          referenceMonth: refMonth,
         });
       } else {
         createPeriod({
@@ -140,6 +142,7 @@ export const PeriodsModal: React.FC<PeriodsModalProps> = ({
           endDate,
           subdivisionMode,
           monthIndex,
+          referenceMonth: refMonth,
         });
       }
       setIsEditing(false);
