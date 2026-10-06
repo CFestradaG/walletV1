@@ -17,6 +17,7 @@ import {
   generateSubperiods,
   validateFinancialPeriod,
 } from './periodEngine';
+import { MONTH_NAMES_ES } from '../annual_budget/annualBudgetEngine';
 
 interface PeriodsModalProps {
   isOpen: boolean;
@@ -45,20 +46,37 @@ export const PeriodsModal: React.FC<PeriodsModalProps> = ({
 
   // Form State
   const [name, setName] = useState('');
-  const [referenceMonth, setReferenceMonth] = useState(new Date().getMonth() + 1);
   const [startDate, setStartDate] = useState(toISODate(new Date()));
   const [endDate, setEndDate] = useState(toISODate(new Date()));
   const [subdivisionMode, setSubdivisionMode] = useState<SubdivisionMode>('none');
+  const [monthIndex, setMonthIndex] = useState<number | undefined>(undefined);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const handleSelectMonth = (mIdx: number | undefined) => {
+    setMonthIndex(mIdx);
+    if (mIdx !== undefined) {
+      const year = new Date().getFullYear();
+      const currentMonthName = MONTH_NAMES_ES[mIdx];
+      // Si el nombre está vacío o empieza con un mes, sugerir el nombre nuevo
+      if (!name.trim() || MONTH_NAMES_ES.some((m) => name.toLowerCase().includes(m.toLowerCase()))) {
+        setName(`${currentMonthName} ${year}`);
+      }
+      if (!selectedPeriodId) {
+        setStartDate(toISODate(new Date(year, mIdx, 1)));
+        setEndDate(toISODate(new Date(year, mIdx + 1, 0)));
+      }
+    }
+  };
 
   const startCreateNew = () => {
     setIsEditing(true);
     setSelectedPeriodId(null);
-    setName('');
     const now = new Date();
-    setReferenceMonth(now.getMonth() + 1);
-    setStartDate(toISODate(new Date(now.getFullYear(), now.getMonth(), 1)));
-    setEndDate(toISODate(new Date(now.getFullYear(), now.getMonth() + 1, 0)));
+    const currentM = now.getMonth();
+    setMonthIndex(currentM);
+    setName(`${MONTH_NAMES_ES[currentM]} ${now.getFullYear()}`);
+    setStartDate(toISODate(new Date(now.getFullYear(), currentM, 1)));
+    setEndDate(toISODate(new Date(now.getFullYear(), currentM + 1, 0)));
     setSubdivisionMode('none');
     setErrorMsg(null);
   };
@@ -67,10 +85,10 @@ export const PeriodsModal: React.FC<PeriodsModalProps> = ({
     setIsEditing(true);
     setSelectedPeriodId(p.id);
     setName(p.name);
-    setReferenceMonth(p.referenceMonth ?? Number(p.startDate.slice(5, 7)));
     setStartDate(p.startDate);
     setEndDate(p.endDate);
     setSubdivisionMode(p.subdivisionMode);
+    setMonthIndex(p.monthIndex);
     setErrorMsg(null);
   };
 
@@ -92,10 +110,10 @@ export const PeriodsModal: React.FC<PeriodsModalProps> = ({
     const validation = validateFinancialPeriod(
       {
         name: name.trim(),
-        referenceMonth,
         startDate,
         endDate,
         subdivisionMode,
+        monthIndex,
       },
       periods,
       selectedPeriodId || undefined
@@ -110,18 +128,18 @@ export const PeriodsModal: React.FC<PeriodsModalProps> = ({
       if (selectedPeriodId) {
         updatePeriod(selectedPeriodId, {
           name: name.trim(),
-          referenceMonth,
           startDate,
           endDate,
           subdivisionMode,
+          monthIndex,
         });
       } else {
         createPeriod({
           name: name.trim(),
-          referenceMonth,
           startDate,
           endDate,
           subdivisionMode,
+          monthIndex,
         });
       }
       setIsEditing(false);
@@ -230,8 +248,13 @@ export const PeriodsModal: React.FC<PeriodsModalProps> = ({
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-bold text-sm">{p.name}</span>
+                              {p.monthIndex !== undefined && (
+                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/20 font-semibold">
+                                  {MONTH_NAMES_ES[p.monthIndex]} (Panorama)
+                                </span>
+                              )}
                               <span
                                 className={`text-[10px] px-1.5 py-0.5 rounded font-mono ${
                                   p.status === 'active' || p.status === 'in_progress'
@@ -309,38 +332,47 @@ export const PeriodsModal: React.FC<PeriodsModalProps> = ({
 
               <div>
                 <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                  Nombre del período
-                </label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="Ej. Quincena Febrero 1, Período Mensual, etc."
-                  className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
-                    isDark
-                      ? 'bg-black/30 border-white/10 text-white placeholder-slate-500'
-                      : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400'
-                  }`}
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-                  Mes que representa en el Panorama Anual
+                  Mes en el Panorama Anual (Dropdown de sincronización)
                 </label>
                 <select
-                  value={referenceMonth}
-                  onChange={(e) => setReferenceMonth(Number(e.target.value))}
+                  value={monthIndex !== undefined ? monthIndex : ''}
+                  onChange={(e) => {
+                    const val = e.target.value === '' ? undefined : parseInt(e.target.value, 10);
+                    handleSelectMonth(val);
+                  }}
                   className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
                     isDark
                       ? 'bg-black/30 border-white/10 text-white'
                       : 'bg-slate-50 border-slate-200 text-slate-900'
                   }`}
                 >
-                  {['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'].map((month, index) => (
-                    <option key={month} value={index + 1}>{month}</option>
+                  <option value="">Seleccionar mes correspondiente...</option>
+                  {MONTH_NAMES_ES.map((mName, idx) => (
+                    <option key={idx} value={idx}>
+                      {mName} (Columna {idx + 1} del Panorama Anual)
+                    </option>
                   ))}
                 </select>
+                <p className="text-[10px] text-slate-400 mt-1">
+                  Vincula este período directamente a la columna de ese mes en el Panorama de Presupuesto.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                  Nombre del período
+                </label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ej. Octubre 2026, Quincena Octubre 1, etc."
+                  className={`w-full p-2.5 rounded-xl border text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
+                    isDark
+                      ? 'bg-black/30 border-white/10 text-white placeholder-slate-500'
+                      : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400'
+                  }`}
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3">

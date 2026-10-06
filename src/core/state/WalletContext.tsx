@@ -214,6 +214,7 @@ interface WalletContextValue {
     endDate: string;
     subdivisionMode: SubdivisionMode;
     activateImmediately?: boolean;
+    monthIndex?: number;
   }) => PeriodValidationResult;
   updateFinancialPeriod: (
     periodId: string,
@@ -223,6 +224,7 @@ interface WalletContextValue {
       startDate: string;
       endDate: string;
       subdivisionMode: SubdivisionMode;
+      monthIndex?: number;
     }
   ) => PeriodValidationResult;
   deleteFinancialPeriod: (periodId: string) => { ok: boolean; error?: string };
@@ -284,6 +286,7 @@ interface WalletContextValue {
     endDate: string;
     subdivisionMode: SubdivisionMode;
     activateImmediately?: boolean;
+    monthIndex?: number;
   }) => PeriodValidationResult;
   updatePeriod: (
     periodId: string,
@@ -293,6 +296,7 @@ interface WalletContextValue {
       startDate: string;
       endDate: string;
       subdivisionMode: SubdivisionMode;
+      monthIndex?: number;
     }
   ) => PeriodValidationResult;
   deletePeriod: (periodId: string) => { ok: boolean; error?: string };
@@ -1382,6 +1386,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     endDate: string;
     subdivisionMode: SubdivisionMode;
     activateImmediately?: boolean;
+    monthIndex?: number;
   }): PeriodValidationResult => {
     if (!currentUserId || !currentUserStore) {
       return { valid: false, error: 'Usuario no autenticado.' };
@@ -1411,6 +1416,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       startDate: input.startDate,
       endDate: input.endDate,
       subdivisionMode: input.subdivisionMode,
+      monthIndex: input.monthIndex,
       status: shouldActivate ? 'active' : 'scheduled',
       isActive: shouldActivate,
       subperiods,
@@ -1450,6 +1456,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       startDate: string;
       endDate: string;
       subdivisionMode: SubdivisionMode;
+      monthIndex?: number;
     }
   ): PeriodValidationResult => {
     if (!currentUserStore) {
@@ -1476,6 +1483,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           startDate: input.startDate,
           endDate: input.endDate,
           subdivisionMode: input.subdivisionMode,
+          monthIndex: input.monthIndex !== undefined ? input.monthIndex : period.monthIndex,
           subperiods: newSubperiods,
           updatedAt: new Date().toISOString(),
         }

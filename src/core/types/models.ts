@@ -95,6 +95,7 @@ export interface FinancialPeriod {
   status: PeriodStatus;
   isActive: boolean;
   subperiods: Subperiod[];
+  monthIndex?: number; // 0 = Enero, ..., 11 = Diciembre (vinculación directa al Panorama Anual)
   createdAt: string;
   updatedAt: string;
 }

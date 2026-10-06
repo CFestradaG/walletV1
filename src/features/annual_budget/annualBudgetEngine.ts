@@ -75,33 +75,31 @@ export function findPeriodForMonth(
   year: number,
   monthIndex: number
 ): FinancialPeriod | undefined {
+  // 1. Coincidencia explícita por mes asignado en el dropdown y año correspondiente
+  const byExplicitMonth = periods.find(
+    (p) =>
+      p.monthIndex === monthIndex &&
+      (p.startDate.startsWith(String(year)) || p.endDate.startsWith(String(year)))
+  );
+  if (byExplicitMonth) return byExplicitMonth;
+
   const monthStr = String(monthIndex + 1).padStart(2, '0');
   const monthPrefix = `${year}-${monthStr}`;
   const monthMidDate = `${year}-${monthStr}-15`;
 
-  // El mes elegido en el período es la asociación explícita con el Panorama.
-  // El año se toma del rango para conservar el soporte de períodos que cruzan meses.
-  const explicitlyAssigned = periods.find((p) =>
-    p.referenceMonth === monthIndex + 1 &&
-    p.startDate && p.endDate &&
-    p.startDate.slice(0, 4) <= String(year) && p.endDate.slice(0, 4) >= String(year)
-  );
-  if (explicitlyAssigned) return explicitlyAssigned;
-
-  // 1. Período cuya fecha de inicio comience exactamente en este año y mes
-  const exactStart = periods.find((p) => !p.referenceMonth && p.startDate && p.startDate.startsWith(monthPrefix));
+  // 2. Período cuya fecha de inicio comience exactamente en este año y mes
+  const exactStart = periods.find((p) => p.startDate && p.startDate.startsWith(monthPrefix));
   if (exactStart) return exactStart;
 
-  // 2. Período cuyo rango de fechas configuradas (startDate <= 15 del mes <= endDate) abarque este mes
+  // 3. Período cuyo rango de fechas configuradas (startDate <= 15 del mes <= endDate) abarque este mes
   const overlapping = periods.find(
-    (p) => !p.referenceMonth && p.startDate && p.endDate && p.startDate <= monthMidDate && monthMidDate <= p.endDate
+    (p) => p.startDate && p.endDate && p.startDate <= monthMidDate && monthMidDate <= p.endDate
   );
   if (overlapping) return overlapping;
 
-  // 3. Período por nombre coincidente (ej. "Octubre 2026" o "Octubre")
+  // 4. Período por nombre coincidente (ej. "Octubre 2026" o "Octubre")
   const mName = MONTH_NAMES_ES[monthIndex].toLowerCase();
   const byName = periods.find((p) => {
-    if (p.referenceMonth) return false;
     const pName = (p.name || '').toLowerCase();
     const matchesMonth = pName.includes(mName);
     const matchesYear = pName.includes(String(year)) || (p.startDate && p.startDate.startsWith(String(year)));
@@ -605,3 +603,4 @@ export function calculateCumulativeYearSummary(
     currentMonthAlerts: alerts,
   };
 }
+

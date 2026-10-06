@@ -25,6 +25,7 @@ export function validateFinancialPeriod(
     startDate: string;
     endDate: string;
     subdivisionMode: SubdivisionMode;
+    monthIndex?: number;
   },
   existingPeriods: FinancialPeriod[],
   editingPeriodId?: string

@@ -10,6 +10,8 @@ import {
   ChevronRight,
   Download,
   Edit2,
+  Eye,
+  EyeOff,
   FileSpreadsheet,
   Link2,
   RotateCcw,
@@ -50,6 +52,9 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
   const [activeTab, setActiveTab] = useState<ViewTab>('matrix');
   const [matrixMode, setMatrixMode] = useState<MatrixDisplayMode>('comparison');
   const [timeHorizon, setTimeHorizon] = useState<TimeHorizon>('monthly');
+
+  // Control para mostrar u ocultar el bloque de resumen (Proyectado vs Real), ideal para teléfonos
+  const [showKpiCards, setShowKpiCards] = useState<boolean>(false);
 
   // Plan de proyecciones por categoría
   const userId = currentUser?.id || 'default_user';
@@ -284,189 +289,266 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
       >
         {/* HEADER BAR */}
         <div
-          className={`px-4 sm:px-6 py-3.5 border-b flex flex-wrap sm:flex-nowrap items-center justify-between gap-3 shrink-0 ${
+          className={`px-3 sm:px-6 py-2.5 sm:py-3 border-b flex items-center justify-between gap-2 shrink-0 ${
             isDark ? 'border-white/10 bg-[#121824]' : 'border-slate-200 bg-slate-50'
           }`}
         >
-          <div className="order-1 flex w-[calc(100%-3rem)] sm:w-auto min-w-0 flex-1 items-start sm:items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center border border-emerald-500/30">
-              <FileSpreadsheet className="w-5 h-5" />
+          {/* Título más sutil y limpio */}
+          <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
+              <FileSpreadsheet className="w-4 h-4" />
             </div>
-            <div>
-              <div className="flex items-center gap-2">
-                  <h2 className="text-xs sm:text-lg font-bold font-display tracking-tight leading-tight">
-                  Panorama de Presupuesto (Proyectado vs. Real)
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-xs sm:text-base font-bold text-white tracking-tight truncate">
+                  Panorama de Presupuesto
                 </h2>
-                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/20">
+                <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-400 border border-emerald-500/20 shrink-0">
                   GTQ
                 </span>
-                <span className="hidden sm:inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-sky-500/15 text-sky-400 border border-sky-500/20">
-                  <Link2 className="w-3 h-3" />
-                  <span>Conectado a Períodos</span>
-                </span>
               </div>
-              <p className="text-xs text-slate-400">
-                Sincronizado con tus períodos financieros, fechas y presupuestos por categoría
+              <p className="hidden sm:block text-[11px] text-slate-400 truncate">
+                Proyecciones y ejecución por categoría sincronizada con períodos
               </p>
             </div>
           </div>
 
-          <div className="order-3 flex w-full sm:order-none sm:w-auto items-center justify-end gap-2">
-            {/* Year selector */}
+          {/* Controles de la cabecera bien distribuidos */}
+          <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+            {/* Botón para ocultar/mostrar resumen de Proyectado vs Real */}
+            <button
+              type="button"
+              onClick={() => setShowKpiCards((prev) => !prev)}
+              className={`px-2 py-1 sm:px-2.5 sm:py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer ${
+                showKpiCards
+                  ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
+                  : isDark
+                  ? 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-100'
+              }`}
+              title={showKpiCards ? 'Ocultar tarjetas' : 'Mostrar tarjetas'}
+            >
+              {showKpiCards ? (
+                <EyeOff className="w-3.5 h-3.5" />
+              ) : (
+                <Eye className="w-3.5 h-3.5 text-emerald-400" />
+              )}
+              <span className="text-[11px] font-bold">
+                {showKpiCards ? 'Ocultar' : 'Resumen'}
+              </span>
+            </button>
+
+            {/* Selector de año compacto */}
             <div
-              className={`flex items-center gap-1 px-2 py-1 rounded-xl border text-xs font-semibold ${
+              className={`flex items-center gap-0.5 px-1 sm:px-1.5 py-1 rounded-lg border text-xs font-semibold ${
                 isDark ? 'bg-black/30 border-white/10' : 'bg-white border-slate-200'
               }`}
             >
               <button
                 type="button"
                 onClick={() => handleYearChange(selectedYear - 1)}
-                className="p-1 hover:text-emerald-400 cursor-pointer"
+                className="p-0.5 hover:text-emerald-400 cursor-pointer"
                 title="Año anterior"
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
               </button>
-              <span className="px-1 text-sm font-bold">{selectedYear}</span>
+              <span className="px-1 text-[11px] sm:text-xs font-bold">{selectedYear}</span>
               <button
                 type="button"
                 onClick={() => handleYearChange(selectedYear + 1)}
-                className="p-1 hover:text-emerald-400 cursor-pointer"
+                className="p-0.5 hover:text-emerald-400 cursor-pointer"
                 title="Año siguiente"
               >
                 <ChevronRight className="w-3.5 h-3.5" />
               </button>
             </div>
 
-            {/* Export CSV */}
+            {/* Exportar CSV */}
             <button
               type="button"
               onClick={handleExportCSV}
               title="Descargar tabla en CSV compatible con Excel"
-              className={`p-2 rounded-xl border text-xs font-medium flex items-center gap-1.5 transition-colors cursor-pointer ${
+              className={`p-1.5 rounded-lg border text-xs transition-colors cursor-pointer ${
                 isDark
                   ? 'bg-white/5 border-white/10 hover:bg-white/10 text-slate-300'
                   : 'bg-white border-slate-200 hover:bg-slate-100 text-slate-700'
               }`}
             >
-              <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">Exportar</span>
+              <Download className="w-3.5 h-3.5" />
             </button>
 
+            {/* Cerrar modal */}
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Cerrar modal"
+              className={`p-1.5 rounded-lg border transition-colors cursor-pointer ${
+                isDark
+                  ? 'border-white/10 hover:bg-white/10 text-slate-400 hover:text-white'
+                  : 'border-slate-200 hover:bg-slate-100 text-slate-500'
+              }`}
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
-
-          {/* Close stays beside the title on narrow screens. */}
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Cerrar panorama de presupuesto"
-            title="Cerrar panorama"
-            className={`order-2 shrink-0 p-2.5 rounded-xl border transition-colors cursor-pointer ${
-              isDark
-                ? 'border-white/10 hover:bg-white/10 text-slate-400 hover:text-white'
-                : 'border-slate-200 hover:bg-slate-100 text-slate-500'
-            }`}
-          >
-            <X className="w-4 h-4" />
-          </button>
         </div>
 
-        {/* TOP SUMMARY KPIS */}
-        <div className="px-4 sm:px-6 pt-4 pb-3 grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 shrink-0">
-          {/* KPI 1: Ingresos */}
+        {/* TOP SUMMARY KPIS (COLAPSABLE / OCULTABLE CON BOTÓN PARA DISPOSITIVOS MÓVILES) */}
+        {!showKpiCards ? (
           <div
-            className={`p-3.5 rounded-xl border ${
-              isDark ? 'bg-[#131927] border-white/5' : 'bg-slate-50 border-slate-200'
-            }`}
-          >
-            <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-              <span>Ingresos ({selectedYear})</span>
-              <span className="text-emerald-400 font-bold">Proyectado vs Real</span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-lg font-bold font-display text-emerald-400">
-                {formatGTQ(matrix.totalIncome.annualProjected)}
-              </span>
-              <span className="text-xs text-slate-400">plan</span>
-            </div>
-            <div className="mt-1 flex items-center justify-between text-xs text-slate-300 border-t border-white/5 pt-1">
-              <span>Real registrado:</span>
-              <span className="font-bold text-white">
-                {formatGTQ(matrix.totalIncome.annualActual)}
-              </span>
-            </div>
-          </div>
-
-          {/* KPI 2: Egresos */}
-          <div
-            className={`p-3.5 rounded-xl border ${
-              isDark ? 'bg-[#131927] border-white/5' : 'bg-slate-50 border-slate-200'
-            }`}
-          >
-            <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
-              <span>Egresos ({selectedYear})</span>
-              <span className="text-rose-400 font-bold">Proyectado vs Real</span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-lg font-bold font-display text-rose-400">
-                {formatGTQ(matrix.totalExpense.annualProjected)}
-              </span>
-              <span className="text-xs text-slate-400">plan</span>
-            </div>
-            <div className="mt-1 flex items-center justify-between text-xs text-slate-300 border-t border-white/5 pt-1">
-              <span>Real gastado:</span>
-              <span className="font-bold text-white">
-                {formatGTQ(matrix.totalExpense.annualActual)}
-              </span>
-            </div>
-          </div>
-
-          {/* KPI 3: Diferencia Neta */}
-          <div
-            className={`p-3.5 rounded-xl border ${
+            onClick={() => setShowKpiCards(true)}
+            className={`px-3 sm:px-6 py-2 border-b flex items-center justify-between gap-2 text-xs shrink-0 cursor-pointer transition-colors select-none ${
               isDark
-                ? 'bg-emerald-950/20 border-emerald-500/20'
-                : 'bg-emerald-50 border-emerald-200'
+                ? 'bg-black/20 border-white/5 hover:bg-black/30'
+                : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
             }`}
           >
-            <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1">
-              <span>Diferencia Neta (Superávit)</span>
-              <span className="text-emerald-300 font-bold">Ahorro</span>
-            </div>
-            <div className="flex items-baseline justify-between">
-              <span className="text-lg font-bold font-display text-emerald-300">
-                {formatGTQ(matrix.netDifference.annualProjected)}
+            {/* Etiquetas limpias sin scroll horizontal feo */}
+            <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap text-[11px] leading-tight min-w-0">
+              <span className="font-semibold text-slate-400 shrink-0">Año {selectedYear}:</span>
+              <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono text-[11px] font-medium whitespace-nowrap">
+                Ing: {formatGTQ(matrix.totalIncome.annualProjected)}
               </span>
-              <span className="text-xs text-emerald-400/80">plan</span>
-            </div>
-            <div className="mt-1 flex items-center justify-between text-xs text-slate-300 border-t border-emerald-500/10 pt-1">
-              <span>Resultado real a hoy:</span>
+              <span className="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 font-mono text-[11px] font-medium whitespace-nowrap">
+                Egr: {formatGTQ(matrix.totalExpense.annualProjected)}
+              </span>
               <span
-                className={`font-bold ${
-                  matrix.netDifference.annualActual >= matrix.netDifference.annualProjected
-                    ? 'text-emerald-400'
-                    : 'text-amber-400'
+                className={`px-1.5 py-0.5 rounded font-mono text-[11px] font-medium whitespace-nowrap ${
+                  matrix.netDifference.annualProjected >= 0
+                    ? 'bg-emerald-500/15 text-emerald-300'
+                    : 'bg-rose-500/15 text-rose-300'
                 }`}
               >
-                {formatGTQ(matrix.netDifference.annualActual)}
+                Neto: {formatGTQ(matrix.netDifference.annualProjected)}
               </span>
             </div>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowKpiCards(true);
+              }}
+              className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 shrink-0 px-2 py-0.5 rounded-lg hover:bg-emerald-500/10 transition-colors ml-auto"
+            >
+              <span>Tarjetas</span>
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
           </div>
-        </div>
+        ) : (
+          <div className="border-b border-white/5 shrink-0 bg-black/15 animate-in fade-in duration-150">
+            <div className="px-3 sm:px-6 pt-2.5 pb-1 flex items-center justify-between text-xs">
+              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                Resumen Proyectado vs. Real ({selectedYear})
+              </span>
+              <button
+                type="button"
+                onClick={() => setShowKpiCards(false)}
+                className="text-[11px] font-bold text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer py-0.5 px-2 rounded-lg hover:bg-white/5"
+              >
+                <EyeOff className="w-3 h-3 text-emerald-400" />
+                <span>Ocultar tarjetas</span>
+              </button>
+            </div>
+
+            <div className="px-3 sm:px-6 pt-1 pb-3 grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
+              {/* KPI 1: Ingresos */}
+              <div
+                className={`p-3 rounded-xl border ${
+                  isDark ? 'bg-[#131927] border-white/5' : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                  <span>Ingresos ({selectedYear})</span>
+                  <span className="text-emerald-400 font-bold">Proyectado vs Real</span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-lg font-bold font-display text-emerald-400">
+                    {formatGTQ(matrix.totalIncome.annualProjected)}
+                  </span>
+                  <span className="text-xs text-slate-400">plan</span>
+                </div>
+                <div className="mt-1 flex items-center justify-between text-xs text-slate-300 border-t border-white/5 pt-1">
+                  <span>Real registrado:</span>
+                  <span className="font-bold text-white">
+                    {formatGTQ(matrix.totalIncome.annualActual)}
+                  </span>
+                </div>
+              </div>
+
+              {/* KPI 2: Egresos */}
+              <div
+                className={`p-3 rounded-xl border ${
+                  isDark ? 'bg-[#131927] border-white/5' : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                  <span>Egresos ({selectedYear})</span>
+                  <span className="text-rose-400 font-bold">Proyectado vs Real</span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-lg font-bold font-display text-rose-400">
+                    {formatGTQ(matrix.totalExpense.annualProjected)}
+                  </span>
+                  <span className="text-xs text-slate-400">plan</span>
+                </div>
+                <div className="mt-1 flex items-center justify-between text-xs text-slate-300 border-t border-white/5 pt-1">
+                  <span>Real gastado:</span>
+                  <span className="font-bold text-white">
+                    {formatGTQ(matrix.totalExpense.annualActual)}
+                  </span>
+                </div>
+              </div>
+
+              {/* KPI 3: Diferencia Neta */}
+              <div
+                className={`p-3 rounded-xl border ${
+                  isDark
+                    ? 'bg-emerald-950/20 border-emerald-500/20'
+                    : 'bg-emerald-50 border-emerald-200'
+                }`}
+              >
+                <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1">
+                  <span>Diferencia Neta (Superávit)</span>
+                  <span className="text-emerald-300 font-bold">Ahorro</span>
+                </div>
+                <div className="flex items-baseline justify-between">
+                  <span className="text-lg font-bold font-display text-emerald-300">
+                    {formatGTQ(matrix.netDifference.annualProjected)}
+                  </span>
+                  <span className="text-xs text-emerald-400/80">plan</span>
+                </div>
+                <div className="mt-1 flex items-center justify-between text-xs text-slate-300 border-t border-emerald-500/10 pt-1">
+                  <span>Resultado real a hoy:</span>
+                  <span
+                    className={`font-bold ${
+                      matrix.netDifference.annualActual >= matrix.netDifference.annualProjected
+                        ? 'text-emerald-400'
+                        : 'text-amber-400'
+                    }`}
+                  >
+                    {formatGTQ(matrix.netDifference.annualActual)}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* TABS & CONTROLS BAR */}
         <div
-          className={`px-4 sm:px-6 py-2 border-b flex flex-wrap items-center justify-between gap-2.5 shrink-0 ${
+          className={`px-3 sm:px-6 py-2 border-b flex flex-wrap items-center justify-between gap-2 shrink-0 ${
             isDark ? 'border-white/10 bg-[#0F141F]' : 'border-slate-200 bg-slate-100'
           }`}
         >
-          {/* Main views */}
-          <div className="flex items-center gap-1 p-1 rounded-xl bg-black/20 dark:bg-black/40 border border-white/5">
+          {/* Main views con tipografía sutil y compacta */}
+          <div className="flex items-center gap-1 p-0.5 sm:p-1 rounded-xl bg-black/20 dark:bg-black/40 border border-white/5">
             <button
               type="button"
               onClick={() => setActiveTab('matrix')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+              className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'matrix'
-                  ? 'bg-emerald-500 text-slate-950 shadow-xs'
+                  ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
@@ -475,58 +557,59 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
             <button
               type="button"
               onClick={handleStartEdit}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+              className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 whitespace-nowrap ${
                 activeTab === 'editor'
-                  ? 'bg-emerald-500 text-slate-950 shadow-xs'
+                  ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
                   : 'text-slate-400 hover:text-white'
               }`}
             >
-              <Edit2 className="w-3.5 h-3.5" />
-              <span>Editar Presupuesto de Categorías</span>
+              <Edit2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
+              <span>Editar Presupuesto</span>
+              <span className="hidden sm:inline"> de Categorías</span>
             </button>
           </div>
 
           {/* Time Horizon Selector (Mensual, Trimestral, Semestral, Anual) */}
           {activeTab === 'matrix' && (
             <div className="flex items-center gap-1.5 flex-wrap">
-              <div className="flex items-center p-0.5 rounded-xl bg-black/30 border border-white/10 text-xs">
+              <div className="flex items-center p-0.5 rounded-xl bg-black/30 border border-white/10 text-[10px] sm:text-xs">
                 <button
                   type="button"
                   onClick={() => setTimeHorizon('monthly')}
-                  className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                  className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
                     timeHorizon === 'monthly'
                       ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  Mensual (12M)
+                  Mensual <span className="hidden sm:inline">(12M)</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setTimeHorizon('quarterly')}
-                  className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                  className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
                     timeHorizon === 'quarterly'
                       ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  Trimestral (T1-T4)
+                  Trimestral <span className="hidden sm:inline">(T1-T4)</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setTimeHorizon('semiannual')}
-                  className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                  className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
                     timeHorizon === 'semiannual'
                       ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
                       : 'text-slate-400 hover:text-white'
                   }`}
                 >
-                  Semestral (S1-S2)
+                  Semestral <span className="hidden sm:inline">(S1-S2)</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setTimeHorizon('annual')}
-                  className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                  className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
                     timeHorizon === 'annual'
                       ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
                       : 'text-slate-400 hover:text-white'
@@ -537,11 +620,11 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
               </div>
 
               {/* Mode toggles */}
-              <div className="flex items-center gap-1 text-[11px] font-semibold">
+              <div className="flex items-center gap-1 text-[10px] sm:text-[11px] font-semibold">
                 <button
                   type="button"
                   onClick={() => setMatrixMode('comparison')}
-                  className={`px-2 py-1 rounded-lg border transition-all cursor-pointer ${
+                  className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-lg border transition-all cursor-pointer whitespace-nowrap ${
                     matrixMode === 'comparison'
                       ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold'
                       : 'text-slate-400 border-transparent hover:bg-white/5'
@@ -552,7 +635,7 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                 <button
                   type="button"
                   onClick={() => setMatrixMode('projected')}
-                  className={`px-2 py-1 rounded-lg border transition-all cursor-pointer ${
+                  className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-lg border transition-all cursor-pointer whitespace-nowrap ${
                     matrixMode === 'projected'
                       ? 'bg-sky-500/20 text-sky-300 border-sky-500/40 font-bold'
                       : 'text-slate-400 border-transparent hover:bg-white/5'
@@ -563,7 +646,7 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                 <button
                   type="button"
                   onClick={() => setMatrixMode('actual')}
-                  className={`px-2 py-1 rounded-lg border transition-all cursor-pointer ${
+                  className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-lg border transition-all cursor-pointer whitespace-nowrap ${
                     matrixMode === 'actual'
                       ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold'
                       : 'text-slate-400 border-transparent hover:bg-white/5'
@@ -574,7 +657,7 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                 <button
                   type="button"
                   onClick={() => setMatrixMode('variance')}
-                  className={`px-2 py-1 rounded-lg border transition-all cursor-pointer ${
+                  className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-lg border transition-all cursor-pointer whitespace-nowrap ${
                     matrixMode === 'variance'
                       ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 font-bold'
                       : 'text-slate-400 border-transparent hover:bg-white/5'
@@ -588,7 +671,7 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
         </div>
 
         {/* BODY CONTENT AREA */}
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+        <div className="flex-1 overflow-y-auto p-2.5 sm:p-5">
           {/* TAB 1: MATRIZ DE PROYECCIÓN */}
           {activeTab === 'matrix' && (
             <div className="space-y-4">
