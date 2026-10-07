@@ -317,7 +317,8 @@ export function calculateCategoryMatrix(
         if (matchingPeriod && matchingPeriod.startDate && matchingPeriod.endDate) {
           monthActual = transactions
             .filter((t) => {
-              if (t.type !== type || t.categoryId !== cat.id) return false;
+              const isMatch = (t.type === type || (type === 'expense' && t.type === 'transfer')) && t.categoryId === cat.id;
+              if (!isMatch) return false;
               // Coincidencia por ID de período o por inclusión en fechas del período
               const matchesPeriodId = t.periodId && t.periodId === matchingPeriod.id;
               const matchesDateRange =
@@ -328,7 +329,10 @@ export function calculateCategoryMatrix(
         } else {
           // Si no hay período configurado para este mes, usar fechas del mes calendario
           monthActual = transactions
-            .filter((t) => t.date.startsWith(monthPrefix) && t.type === type && t.categoryId === cat.id)
+            .filter((t) => {
+              const isMatch = (t.type === type || (type === 'expense' && t.type === 'transfer')) && t.categoryId === cat.id;
+              return t.date.startsWith(monthPrefix) && isMatch;
+            })
             .reduce((sum, t) => sum + t.amount, 0);
         }
 

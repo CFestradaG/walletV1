@@ -142,16 +142,32 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       }
 
       // Default category
-      const defaultCats = categories.filter(
-        (c) => c.type === (initialType === 'income' ? 'income' : 'expense') && c.isActive
-      );
-      if (defaultCats.length > 0) {
-        setCategoryId(defaultCats[0].id);
-        const sub = defaultCats[0].subcategories.find((s) => s.isActive !== false);
-        setSubcategoryId(sub ? sub.id : '');
+      if (initialType === 'transfer') {
+        const financeCat = categories.find(
+          (c) => c.type === 'expense' && c.isActive && /finanz|pago|tarjeta|deuda/i.test(c.name)
+        );
+        if (financeCat) {
+          setCategoryId(financeCat.id);
+          const sub = financeCat.subcategories.find((s) => s.isActive !== false);
+          setSubcategoryId(sub ? sub.id : '');
+        } else {
+          const firstExp = categories.find((c) => c.type === 'expense' && c.isActive);
+          setCategoryId(firstExp ? firstExp.id : '');
+          const sub = firstExp?.subcategories.find((s) => s.isActive !== false);
+          setSubcategoryId(sub ? sub.id : '');
+        }
       } else {
-        setCategoryId('');
-        setSubcategoryId('');
+        const defaultCats = categories.filter(
+          (c) => c.type === (initialType === 'income' ? 'income' : 'expense') && c.isActive
+        );
+        if (defaultCats.length > 0) {
+          setCategoryId(defaultCats[0].id);
+          const sub = defaultCats[0].subcategories.find((s) => s.isActive !== false);
+          setSubcategoryId(sub ? sub.id : '');
+        } else {
+          setCategoryId('');
+          setSubcategoryId('');
+        }
       }
     }
   }, [
@@ -170,8 +186,22 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     setErrorMsg(null);
     setIsBrowsingCategories(false);
     if (newType === 'transfer') {
-      setCategoryId('');
-      setSubcategoryId('');
+      const financeCat = categories.find(
+        (c) => c.type === 'expense' && c.isActive && /finanz|pago|tarjeta|deuda/i.test(c.name)
+      );
+      if (financeCat) {
+        setCategoryId(financeCat.id);
+        const sub = financeCat.subcategories.find((s) => s.isActive !== false);
+        setSubcategoryId(sub ? sub.id : '');
+      } else {
+        const currentExp = categories.find((c) => c.id === categoryId && c.type === 'expense');
+        if (!currentExp) {
+          const firstExp = categories.find((c) => c.type === 'expense' && c.isActive);
+          setCategoryId(firstExp ? firstExp.id : '');
+          const sub = firstExp?.subcategories.find((s) => s.isActive !== false);
+          setSubcategoryId(sub ? sub.id : '');
+        }
+      }
     } else {
       const filtered = categories.filter(
         (c) => c.type === (newType === 'income' ? 'income' : 'expense') && c.isActive
@@ -278,8 +308,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           accountId,
           originAccountId: type === 'transfer' ? accountId : undefined,
           destinationAccountId: type === 'transfer' ? destinationAccountId : undefined,
-          categoryId: type !== 'transfer' ? categoryId : undefined,
-          subcategoryId: type !== 'transfer' ? (subcategoryId || undefined) : undefined,
+          categoryId: categoryId || undefined,
+          subcategoryId: subcategoryId || undefined,
           date: dateStr,
           note: note.trim(),
           isCreditCardPayment: isCreditCardDestination,
@@ -295,8 +325,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           accountId,
           originAccountId: type === 'transfer' ? accountId : undefined,
           destinationAccountId: type === 'transfer' ? destinationAccountId : undefined,
-          categoryId: type !== 'transfer' ? categoryId : undefined,
-          subcategoryId: type !== 'transfer' ? (subcategoryId || undefined) : undefined,
+          categoryId: categoryId || undefined,
+          subcategoryId: subcategoryId || undefined,
           date: dateStr,
           note: note.trim(),
           isCreditCardPayment: isCreditCardDestination,
@@ -467,7 +497,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   className={`w-full pl-8 pr-3 py-2 rounded-xl border text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
                     isDark
                       ? 'bg-black/30 border-white/10 text-white'
-                      : 'bg-slate-50 border-slate-200 text-slate-900'
+                      : 'bg-white border-slate-200 text-slate-900 shadow-2xs'
                   }`}
                 />
               </div>
@@ -487,7 +517,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                   className={`w-full pl-8 pr-3 py-2 rounded-xl border text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500 ${
                     isDark
                       ? 'bg-black/30 border-white/10 text-white placeholder-slate-500'
-                      : 'bg-slate-50 border-slate-200 text-slate-900 placeholder-slate-400'
+                      : 'bg-white border-slate-200 text-slate-900 placeholder-slate-400 shadow-2xs'
                   }`}
                 />
               </div>
@@ -495,53 +525,58 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           </div>
 
           {/* 3. CATEGORIES & SUBCATEGORIES SINGLE-ROW HIERARCHICAL SELECTOR */}
-          {type !== 'transfer' && (
-            <div
-              className={`p-3 rounded-2xl border transition-all space-y-2 ${
-                isDark ? 'bg-black/20 border-white/10' : 'bg-slate-50 border-slate-200'
-              }`}
-            >
-              {/* Category Breadcrumb & Change button */}
-              <div className={`flex items-center justify-between px-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                <div className="flex items-center gap-1.5 text-[11px] font-semibold truncate">
-                  <span className="uppercase tracking-wider">
-                    {isBrowsingCategories ? 'Categoría' : 'Subcategoría'}:
-                  </span>
-                  {selectedCategory ? (
-                    <span
-                      className="font-bold flex items-center gap-1"
-                      style={{ color: selectedCategory.color || '#10B981' }}
-                    >
-                      <span
-                        className="w-2 h-2 rounded-full shrink-0"
-                        style={{ backgroundColor: selectedCategory.color || '#10B981' }}
-                      />
-                      <span>{selectedCategory.name}</span>
-                    </span>
-                  ) : (
-                    <span className={`italic ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Sin seleccionar</span>
-                  )}
-                  {!isBrowsingCategories && selectedCategory && (
-                    <span className={`truncate ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                      › {subcategoryId
-                        ? selectedCategory.subcategories.find((s) => s.id === subcategoryId)?.name || 'Personalizada'
-                        : `General (${selectedCategory.name})`}
-                    </span>
-                  )}
-                </div>
-
-                {!isBrowsingCategories && (
-                  <button
-                    type="button"
-                    onClick={() => setIsBrowsingCategories(true)}
-                    className={`text-xs font-semibold flex items-center gap-0.5 cursor-pointer shrink-0 ml-2 ${
-                      isDark ? 'text-emerald-400 hover:text-emerald-300' : 'text-emerald-600 hover:text-emerald-700'
-                    }`}
+          <div
+            className={`p-3 rounded-2xl border transition-all space-y-2 ${
+              isDark ? 'bg-black/20 border-white/10' : 'bg-white border-slate-200 shadow-xs'
+            }`}
+          >
+            {/* Category Breadcrumb & Change button */}
+            <div className={`flex items-center justify-between px-0.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold truncate">
+                <span className="uppercase tracking-wider">
+                  {type === 'transfer'
+                    ? 'Categoría (Panorama):'
+                    : isBrowsingCategories
+                    ? 'Categoría'
+                    : 'Subcategoría'}:
+                </span>
+                {selectedCategory ? (
+                  <span
+                    className="font-bold flex items-center gap-1"
+                    style={{ color: selectedCategory.color || '#10B981' }}
                   >
-                    <span>Cambiar</span>
-                  </button>
+                    <span
+                      className="w-2 h-2 rounded-full shrink-0"
+                      style={{ backgroundColor: selectedCategory.color || '#10B981' }}
+                    />
+                    <span>{selectedCategory.name}</span>
+                  </span>
+                ) : (
+                  <span className={`italic ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    {type === 'transfer' ? 'Opcional (ej. Finanzas)' : 'Sin seleccionar'}
+                  </span>
+                )}
+                {!isBrowsingCategories && selectedCategory && (
+                  <span className={`truncate ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                    › {subcategoryId
+                      ? selectedCategory.subcategories.find((s) => s.id === subcategoryId)?.name || 'Personalizada'
+                      : `General (${selectedCategory.name})`}
+                  </span>
                 )}
               </div>
+
+              {!isBrowsingCategories && (
+                <button
+                  type="button"
+                  onClick={() => setIsBrowsingCategories(true)}
+                  className={`text-xs font-semibold flex items-center gap-0.5 cursor-pointer shrink-0 ml-2 ${
+                    isDark ? 'text-emerald-400 hover:text-emerald-300' : 'text-emerald-600 hover:text-emerald-700'
+                  }`}
+                >
+                  <span>Cambiar</span>
+                </button>
+              )}
+            </div>
 
               {/* SINGLE COMPACT ROW FOR NAVIGATION */}
               <div className="w-full">
@@ -662,7 +697,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
                 )}
               </div>
             </div>
-          )}
 
           {/* 4. ACCOUNTS SELECTION */}
           {type === 'transfer' ? (
@@ -697,13 +731,18 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               </div>
 
               {isCreditCardDestination && (
-                <div className={`flex items-center gap-2 p-2.5 rounded-xl border ${
+                <div className={`flex items-start gap-2.5 p-3 rounded-2xl border ${
                   isDark
-                    ? 'bg-sky-500/10 border-sky-500/20 text-sky-300'
+                    ? 'bg-sky-500/10 border-sky-500/25 text-sky-300'
                     : 'bg-sky-50 border-sky-200 text-sky-800'
                 }`}>
-                  <CreditCard className="w-3.5 h-3.5" />
-                  <span className="text-xs font-medium">Pago de tarjeta de crédito</span>
+                  <CreditCard className="w-4 h-4 shrink-0 mt-0.5 text-sky-500" />
+                  <div className="text-xs">
+                    <span className="font-bold block">Pago a Tarjeta de Crédito</span>
+                    <span className="text-[11px] opacity-90 block mt-0.5">
+                      Reduce la deuda de la tarjeta y la salida de efectivo se asigna a la categoría seleccionada (ej. Finanzas) para contabilizarse en el Panorama y Presupuesto Anual.
+                    </span>
+                  </div>
                 </div>
               )}
             </div>

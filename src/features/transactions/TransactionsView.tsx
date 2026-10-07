@@ -487,7 +487,9 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                             <div className="flex items-center gap-2">
                               <span className={`font-bold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>
                                 {tx.type === 'transfer'
-                                  ? 'Transferencia'
+                                  ? cat?.name
+                                    ? `${cat.name} (Transferencia)`
+                                    : 'Transferencia'
                                   : cat?.name || 'Sin categoría'}
                               </span>
                               {tx.isCreditCardPayment && (

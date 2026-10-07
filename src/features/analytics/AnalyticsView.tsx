@@ -65,7 +65,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
   const totalExpense = useMemo(() => {
     return periodTransactions
-      .filter((t) => t.type === 'expense')
+      .filter((t) => t.type === 'expense' || (t.type === 'transfer' && Boolean(t.categoryId)))
       .reduce((s, t) => s + t.amount, 0);
   }, [periodTransactions]);
 
@@ -77,7 +77,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const categoryBreakdown = useMemo(() => {
     const map = new Map<string, number>();
     for (const t of periodTransactions) {
-      if (t.type === 'expense' && t.categoryId) {
+      if ((t.type === 'expense' || t.type === 'transfer') && t.categoryId) {
         map.set(t.categoryId, (map.get(t.categoryId) || 0) + t.amount);
       }
     }
@@ -102,7 +102,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const topSubcategories = useMemo(() => {
     const map = new Map<string, { catName: string; subName: string; amount: number; color: string }>();
     for (const t of periodTransactions) {
-      if (t.type === 'expense' && t.subcategoryId) {
+      if ((t.type === 'expense' || t.type === 'transfer') && t.subcategoryId) {
         const cat = categories.find((c) => c.id === t.categoryId);
         const sub = cat?.subcategories.find((s) => s.id === t.subcategoryId);
         const key = t.subcategoryId;
@@ -165,7 +165,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       const spent = periodTransactions
         .filter(
           (t) =>
-            t.type === 'expense' &&
+            (t.type === 'expense' || (t.type === 'transfer' && Boolean(t.categoryId))) &&
             t.categoryId === b.categoryId &&
             (!b.subcategoryId || t.subcategoryId === b.subcategoryId)
         )
@@ -289,7 +289,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         <div className="grid grid-cols-3 gap-2 pt-2">
           <div
             className={`p-3 rounded-2xl border transition-all ${
-              isDark ? 'bg-black/20 border-white/5' : 'bg-slate-50 border-slate-200 shadow-2xs'
+              isDark ? 'bg-black/20 border-white/5' : 'bg-white border-slate-200 shadow-xs'
             }`}
           >
             <span
@@ -306,7 +306,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
           <div
             className={`p-3 rounded-2xl border transition-all ${
-              isDark ? 'bg-black/20 border-white/5' : 'bg-slate-50 border-slate-200 shadow-2xs'
+              isDark ? 'bg-black/20 border-white/5' : 'bg-white border-slate-200 shadow-xs'
             }`}
           >
             <span
@@ -323,7 +323,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
           <div
             className={`p-3 rounded-2xl border transition-all ${
-              isDark ? 'bg-black/20 border-white/5' : 'bg-slate-50 border-slate-200 shadow-2xs'
+              isDark ? 'bg-black/20 border-white/5' : 'bg-white border-slate-200 shadow-xs'
             }`}
           >
             <span
@@ -416,7 +416,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
               <div
                 key={idx}
                 className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all ${
-                  isDark ? 'bg-black/20 border-white/5' : 'bg-slate-50 border-slate-200'
+                  isDark ? 'bg-black/20 border-white/5' : 'bg-white border-slate-200 shadow-xs'
                 }`}
               >
                 <div>

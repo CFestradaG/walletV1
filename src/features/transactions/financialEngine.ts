@@ -132,6 +132,22 @@ export function validateTransactionInput(
       return { valid: false, error: 'La cuenta de destino no existe o está inactiva.' };
     }
 
+    if (input.categoryId) {
+      const category = categories.find((c) => c.id === input.categoryId && c.userId === input.userId);
+      if (!category) {
+        return { valid: false, error: 'La categoría seleccionada no existe o no pertenece al usuario.' };
+      }
+      if (input.subcategoryId) {
+        const belongsToCategory = category.subcategories.some((s) => s.id === input.subcategoryId);
+        if (!belongsToCategory) {
+          return {
+            valid: false,
+            error: 'La subcategoría seleccionada no pertenece a la categoría principal.',
+          };
+        }
+      }
+    }
+
     return { valid: true };
   }
 
@@ -305,6 +321,9 @@ export function calculatePeriodSummary(
       if (tx.isCreditCardPayment) {
         totalCardPayments += tx.amount;
       }
+      if (tx.categoryId) {
+        totalExpense += tx.amount;
+      }
     }
   }
 
@@ -350,7 +369,7 @@ export function calculateBudgetProgress(
     : undefined;
 
   const matchingExpenses = transactions.filter((tx) => {
-    if (tx.type !== 'expense') return false;
+    if (tx.type !== 'expense' && !(tx.type === 'transfer' && tx.categoryId)) return false;
     if (tx.date < period.startDate || tx.date > period.endDate) return false;
     if (tx.categoryId !== budget.categoryId) return false;
     if (budget.subcategoryId && tx.subcategoryId !== budget.subcategoryId) return false;

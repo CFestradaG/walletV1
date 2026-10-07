@@ -139,6 +139,19 @@ export function createDefaultCategories(userId: string): Category[] {
       ],
     },
     {
+      id: `cat_fin_${userId}`,
+      name: 'Finanzas',
+      type: 'expense',
+      icon: '💳',
+      color: '#3B82F6',
+      isActive: true,
+      subcategories: [
+        { id: `sub_tc_pay_${userId}`, categoryId: `cat_fin_${userId}`, name: 'Pago Tarjeta de Crédito', icon: '💳' },
+        { id: `sub_loan_${userId}`, categoryId: `cat_fin_${userId}`, name: 'Préstamos / Deudas', icon: '🏦' },
+        { id: `sub_interests_${userId}`, categoryId: `cat_fin_${userId}`, name: 'Intereses y Comisiones', icon: '📈' },
+      ],
+    },
+    {
       id: `cat_other_${userId}`,
       name: 'Otros',
       type: 'expense',

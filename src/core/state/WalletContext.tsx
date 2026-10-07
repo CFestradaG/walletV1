@@ -896,7 +896,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
             const remoteSettings = rawSettings;
             if (remoteSettings) {
               const mergedSettings = { ...initialStore.settings, ...remoteSettings, userId: uid };
-              if (mergedSettings.themeMode === 'light' || mergedSettings.themeMode === 'dark' || mergedSettings.themeMode === 'system') {
+              const savedLocal = localStorage.getItem('wallet_theme_mode');
+              if (!savedLocal && (mergedSettings.themeMode === 'light' || mergedSettings.themeMode === 'dark' || mergedSettings.themeMode === 'system')) {
                 setLocalThemeMode(mergedSettings.themeMode);
               }
               if (remoteSettings.userId !== uid) offlineQueue.enqueue(uid, 'SAVE_SETTINGS', { settings: mergedSettings });

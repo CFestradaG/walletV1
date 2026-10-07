@@ -113,8 +113,7 @@ const WalletAppShell: React.FC = () => {
   };
 
   const cycleThemeMode = () => {
-    if (themeMode === 'dark') setThemeMode('light');
-    else if (themeMode === 'light') setThemeMode('system');
+    if (resolvedTheme === 'dark') setThemeMode('light');
     else setThemeMode('dark');
   };
 

@@ -350,7 +350,7 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
         {/* HEADER BAR */}
         <div
           className={`px-3 sm:px-6 py-2.5 sm:py-3 border-b flex items-center justify-between gap-2 shrink-0 ${
-            isDark ? 'border-white/10 bg-[#121824]' : 'border-slate-200 bg-slate-50'
+            isDark ? 'border-white/10 bg-[#121824]' : 'border-slate-200 bg-white'
           }`}
         >
           {/* Título más sutil y limpio */}
@@ -405,7 +405,7 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
             {/* Selector de año compacto */}
             <div
               className={`flex items-center gap-0.5 px-1 sm:px-1.5 py-1 rounded-lg border text-xs font-semibold ${
-                isDark ? 'bg-black/30 border-white/10' : 'bg-white border-slate-200'
+                isDark ? 'bg-black/30 border-white/10' : 'bg-white border-slate-200 shadow-2xs'
               }`}
             >
               <button
@@ -464,23 +464,23 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
             className={`px-3 sm:px-6 py-2 border-b flex items-center justify-between gap-2 text-xs shrink-0 cursor-pointer transition-colors select-none ${
               isDark
                 ? 'bg-black/20 border-white/5 hover:bg-black/30'
-                : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                : 'bg-white border-slate-200 hover:bg-slate-50 shadow-2xs'
             }`}
           >
             {/* Etiquetas limpias sin scroll horizontal feo */}
             <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap text-[11px] leading-tight min-w-0">
-              <span className="font-semibold text-slate-400 shrink-0">Año {selectedYear}:</span>
-              <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono text-[11px] font-medium whitespace-nowrap">
+              <span className={`font-semibold shrink-0 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>Año {selectedYear}:</span>
+              <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 font-mono text-[11px] font-medium whitespace-nowrap">
                 Ing: {formatGTQ(matrix.totalIncome.annualProjected)}
               </span>
-              <span className="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-400 font-mono text-[11px] font-medium whitespace-nowrap">
+              <span className="px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-500 font-mono text-[11px] font-medium whitespace-nowrap">
                 Egr: {formatGTQ(matrix.totalExpense.annualProjected)}
               </span>
               <span
                 className={`px-1.5 py-0.5 rounded font-mono text-[11px] font-medium whitespace-nowrap ${
                   matrix.netDifference.annualProjected >= 0
-                    ? 'bg-emerald-500/15 text-emerald-300'
-                    : 'bg-rose-500/15 text-rose-300'
+                    ? isDark ? 'bg-emerald-500/15 text-emerald-300' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    : isDark ? 'bg-rose-500/15 text-rose-300' : 'bg-rose-50 text-rose-700 border border-rose-200'
                 }`}
               >
                 Neto: {formatGTQ(matrix.netDifference.annualProjected)}
@@ -493,24 +493,30 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                 e.stopPropagation();
                 setShowKpiCards(true);
               }}
-              className="text-[11px] font-bold text-emerald-400 hover:text-emerald-300 flex items-center gap-1 shrink-0 px-2 py-0.5 rounded-lg hover:bg-emerald-500/10 transition-colors ml-auto"
+              className="text-[11px] font-bold text-emerald-500 hover:text-emerald-400 flex items-center gap-1 shrink-0 px-2 py-0.5 rounded-lg hover:bg-emerald-500/10 transition-colors ml-auto cursor-pointer"
             >
               <span>Tarjetas</span>
               <ChevronDown className="w-3.5 h-3.5" />
             </button>
           </div>
         ) : (
-          <div className="border-b border-white/5 shrink-0 bg-black/15 animate-in fade-in duration-150">
+          <div className={`border-b shrink-0 animate-in fade-in duration-150 ${
+            isDark ? 'border-white/5 bg-black/15' : 'border-slate-200 bg-slate-50/50'
+          }`}>
             <div className="px-3 sm:px-6 pt-2.5 pb-1 flex items-center justify-between text-xs">
-              <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+              <span className={`text-[11px] font-bold uppercase tracking-wider ${
+                isDark ? 'text-slate-400' : 'text-slate-500'
+              }`}>
                 Resumen Proyectado vs. Real ({selectedYear})
               </span>
               <button
                 type="button"
                 onClick={() => setShowKpiCards(false)}
-                className="text-[11px] font-bold text-slate-400 hover:text-white flex items-center gap-1 cursor-pointer py-0.5 px-2 rounded-lg hover:bg-white/5"
+                className={`text-[11px] font-bold flex items-center gap-1 cursor-pointer py-0.5 px-2 rounded-lg transition-colors ${
+                  isDark ? 'text-slate-400 hover:text-white hover:bg-white/5' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+                }`}
               >
-                <EyeOff className="w-3 h-3 text-emerald-400" />
+                <EyeOff className="w-3 h-3 text-emerald-500" />
                 <span>Ocultar tarjetas</span>
               </button>
             </div>
@@ -518,23 +524,27 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
             <div className="px-3 sm:px-6 pt-1 pb-3 grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3">
               {/* KPI 1: Ingresos */}
               <div
-                className={`p-3 rounded-xl border ${
-                  isDark ? 'bg-[#131927] border-white/5' : 'bg-slate-50 border-slate-200'
+                className={`p-3 rounded-2xl border transition-all ${
+                  isDark ? 'bg-[#131927] border-white/5' : 'bg-white border-slate-200 shadow-xs'
                 }`}
               >
-                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                <div className={`flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider mb-1 ${
+                  isDark ? 'text-slate-400' : 'text-slate-500'
+                }`}>
                   <span>Ingresos ({selectedYear})</span>
-                  <span className="text-emerald-400 font-bold">Proyectado vs Real</span>
+                  <span className="text-emerald-500 font-bold">Proyectado vs Real</span>
                 </div>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-lg font-bold font-display text-emerald-400">
+                  <span className="text-lg font-bold font-display text-emerald-500">
                     {formatGTQ(matrix.totalIncome.annualProjected)}
                   </span>
-                  <span className="text-xs text-slate-400">plan</span>
+                  <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>plan</span>
                 </div>
-                <div className="mt-1 flex items-center justify-between text-xs text-slate-300 border-t border-white/5 pt-1">
+                <div className={`mt-1 flex items-center justify-between text-xs border-t pt-1 ${
+                  isDark ? 'border-white/5 text-slate-300' : 'border-slate-100 text-slate-600'
+                }`}>
                   <span>Real registrado:</span>
-                  <span className="font-bold text-white">
+                  <span className={`font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                     {formatGTQ(matrix.totalIncome.annualActual)}
                   </span>
                 </div>
@@ -542,23 +552,27 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
 
               {/* KPI 2: Egresos */}
               <div
-                className={`p-3 rounded-xl border ${
-                  isDark ? 'bg-[#131927] border-white/5' : 'bg-slate-50 border-slate-200'
+                className={`p-3 rounded-2xl border transition-all ${
+                  isDark ? 'bg-[#131927] border-white/5' : 'bg-white border-slate-200 shadow-xs'
                 }`}
               >
-                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-400 uppercase tracking-wider mb-1">
+                <div className={`flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider mb-1 ${
+                  isDark ? 'text-slate-400' : 'text-slate-500'
+                }`}>
                   <span>Egresos ({selectedYear})</span>
-                  <span className="text-rose-400 font-bold">Proyectado vs Real</span>
+                  <span className="text-rose-500 font-bold">Proyectado vs Real</span>
                 </div>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-lg font-bold font-display text-rose-400">
+                  <span className="text-lg font-bold font-display text-rose-500">
                     {formatGTQ(matrix.totalExpense.annualProjected)}
                   </span>
-                  <span className="text-xs text-slate-400">plan</span>
+                  <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>plan</span>
                 </div>
-                <div className="mt-1 flex items-center justify-between text-xs text-slate-300 border-t border-white/5 pt-1">
+                <div className={`mt-1 flex items-center justify-between text-xs border-t pt-1 ${
+                  isDark ? 'border-white/5 text-slate-300' : 'border-slate-100 text-slate-600'
+                }`}>
                   <span>Real gastado:</span>
-                  <span className="font-bold text-white">
+                  <span className={`font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                     {formatGTQ(matrix.totalExpense.annualActual)}
                   </span>
                 </div>
@@ -566,31 +580,27 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
 
               {/* KPI 3: Diferencia Neta */}
               <div
-                className={`p-3 rounded-xl border ${
+                className={`p-3 rounded-2xl border transition-all ${
                   isDark
                     ? 'bg-emerald-950/20 border-emerald-500/20'
-                    : 'bg-emerald-50 border-emerald-200'
+                    : 'bg-emerald-50/70 border-emerald-200 shadow-xs'
                 }`}
               >
-                <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mb-1">
                   <span>Diferencia Neta (Superávit)</span>
-                  <span className="text-emerald-300 font-bold">Ahorro</span>
+                  <span className="text-emerald-600 dark:text-emerald-300 font-bold">Ahorro</span>
                 </div>
                 <div className="flex items-baseline justify-between">
-                  <span className="text-lg font-bold font-display text-emerald-300">
+                  <span className="text-lg font-bold font-display text-emerald-600 dark:text-emerald-300">
                     {formatGTQ(matrix.netDifference.annualProjected)}
                   </span>
-                  <span className="text-xs text-emerald-400/80">plan</span>
+                  <span className="text-xs text-emerald-700/80 dark:text-emerald-400/80">plan</span>
                 </div>
-                <div className="mt-1 flex items-center justify-between text-xs text-slate-300 border-t border-emerald-500/10 pt-1">
-                  <span>Resultado real a hoy:</span>
-                  <span
-                    className={`font-bold ${
-                      matrix.netDifference.annualActual >= matrix.netDifference.annualProjected
-                        ? 'text-emerald-400'
-                        : 'text-amber-400'
-                    }`}
-                  >
+                <div className={`mt-1 flex items-center justify-between text-xs border-t pt-1 ${
+                  isDark ? 'border-emerald-500/10 text-slate-300' : 'border-emerald-200/60 text-slate-600'
+                }`}>
+                  <span>Real ejecutado:</span>
+                  <span className={`font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
                     {formatGTQ(matrix.netDifference.annualActual)}
                   </span>
                 </div>
@@ -602,18 +612,22 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
         {/* TABS & CONTROLS BAR */}
         <div
           className={`px-3 sm:px-6 py-2 border-b flex flex-wrap items-center justify-between gap-2 shrink-0 ${
-            isDark ? 'border-white/10 bg-[#0F141F]' : 'border-slate-200 bg-slate-100'
+            isDark ? 'border-white/10 bg-[#0F141F]' : 'border-slate-200 bg-white'
           }`}
         >
           {/* Main views con tipografía sutil y compacta */}
-          <div className="flex items-center gap-1 p-0.5 sm:p-1 rounded-xl bg-black/20 dark:bg-black/40 border border-white/5">
+          <div className={`flex items-center gap-1 p-0.5 sm:p-1 rounded-xl border ${
+            isDark ? 'bg-black/20 border-white/5' : 'bg-slate-100 border-slate-200'
+          }`}>
             <button
               type="button"
               onClick={() => setActiveTab('matrix')}
               className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all cursor-pointer whitespace-nowrap ${
                 activeTab === 'matrix'
                   ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
-                  : 'text-slate-400 hover:text-white'
+                  : isDark
+                  ? 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               Matriz de Proyección
@@ -624,7 +638,9 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
               className={`px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg text-[11px] sm:text-xs font-semibold transition-all cursor-pointer flex items-center gap-1 sm:gap-1.5 whitespace-nowrap ${
                 activeTab === 'editor'
                   ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
-                  : 'text-slate-400 hover:text-white'
+                  : isDark
+                  ? 'text-slate-400 hover:text-white'
+                  : 'text-slate-600 hover:text-slate-900'
               }`}
             >
               <Edit2 className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
@@ -636,14 +652,18 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
           {/* Time Horizon Selector (Mensual, Trimestral, Semestral, Anual) */}
           {activeTab === 'matrix' && (
             <div className="flex items-center gap-1.5 flex-wrap">
-              <div className="flex items-center p-0.5 rounded-xl bg-black/30 border border-white/10 text-[10px] sm:text-xs">
+              <div className={`flex items-center p-0.5 rounded-xl border text-[10px] sm:text-xs ${
+                isDark ? 'bg-black/30 border-white/10' : 'bg-slate-100 border-slate-200'
+              }`}>
                 <button
                   type="button"
                   onClick={() => setTimeHorizon('monthly')}
                   className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
                     timeHorizon === 'monthly'
                       ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
-                      : 'text-slate-400 hover:text-white'
+                      : isDark
+                      ? 'text-slate-400 hover:text-white'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   Mensual <span className="hidden sm:inline">(12M)</span>
@@ -654,7 +674,9 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                   className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
                     timeHorizon === 'quarterly'
                       ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
-                      : 'text-slate-400 hover:text-white'
+                      : isDark
+                      ? 'text-slate-400 hover:text-white'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   Trimestral <span className="hidden sm:inline">(T1-T4)</span>
@@ -665,7 +687,9 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                   className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
                     timeHorizon === 'semiannual'
                       ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
-                      : 'text-slate-400 hover:text-white'
+                      : isDark
+                      ? 'text-slate-400 hover:text-white'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   Semestral <span className="hidden sm:inline">(S1-S2)</span>
@@ -676,7 +700,9 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                   className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-lg font-semibold transition-all cursor-pointer whitespace-nowrap ${
                     timeHorizon === 'annual'
                       ? 'bg-emerald-500 text-slate-950 font-bold shadow-xs'
-                      : 'text-slate-400 hover:text-white'
+                      : isDark
+                      ? 'text-slate-400 hover:text-white'
+                      : 'text-slate-600 hover:text-slate-900'
                   }`}
                 >
                   Anual
@@ -690,8 +716,10 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                   onClick={() => setMatrixMode('comparison')}
                   className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-lg border transition-all cursor-pointer whitespace-nowrap ${
                     matrixMode === 'comparison'
-                      ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40 font-bold'
-                      : 'text-slate-400 border-transparent hover:bg-white/5'
+                      ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 border-emerald-500/40 font-bold'
+                      : isDark
+                      ? 'text-slate-400 border-transparent hover:bg-white/5'
+                      : 'text-slate-600 border-transparent hover:bg-slate-100'
                   }`}
                 >
                   Comparativa
@@ -701,8 +729,10 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                   onClick={() => setMatrixMode('projected')}
                   className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-lg border transition-all cursor-pointer whitespace-nowrap ${
                     matrixMode === 'projected'
-                      ? 'bg-sky-500/20 text-sky-300 border-sky-500/40 font-bold'
-                      : 'text-slate-400 border-transparent hover:bg-white/5'
+                      ? 'bg-sky-500/20 text-sky-600 dark:text-sky-300 border-sky-500/40 font-bold'
+                      : isDark
+                      ? 'text-slate-400 border-transparent hover:bg-white/5'
+                      : 'text-slate-600 border-transparent hover:bg-slate-100'
                   }`}
                 >
                   Proyectado
@@ -712,8 +742,10 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                   onClick={() => setMatrixMode('actual')}
                   className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-lg border transition-all cursor-pointer whitespace-nowrap ${
                     matrixMode === 'actual'
-                      ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 font-bold'
-                      : 'text-slate-400 border-transparent hover:bg-white/5'
+                      ? 'bg-amber-500/20 text-amber-600 dark:text-amber-300 border-amber-500/40 font-bold'
+                      : isDark
+                      ? 'text-slate-400 border-transparent hover:bg-white/5'
+                      : 'text-slate-600 border-transparent hover:bg-slate-100'
                   }`}
                 >
                   Real
@@ -723,8 +755,10 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                   onClick={() => setMatrixMode('variance')}
                   className={`px-1.5 py-0.5 sm:px-2 sm:py-1 rounded-lg border transition-all cursor-pointer whitespace-nowrap ${
                     matrixMode === 'variance'
-                      ? 'bg-purple-500/20 text-purple-300 border-purple-500/40 font-bold'
-                      : 'text-slate-400 border-transparent hover:bg-white/5'
+                      ? 'bg-purple-500/20 text-purple-600 dark:text-purple-300 border-purple-500/40 font-bold'
+                      : isDark
+                      ? 'text-slate-400 border-transparent hover:bg-white/5'
+                      : 'text-slate-600 border-transparent hover:bg-slate-100'
                   }`}
                 >
                   Diferencia (+/-)
@@ -1051,10 +1085,10 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
 
                     {/* FILA FINAL: DIFERENCIA NETA (INGRESOS - EGRESOS) */}
                     <tr className={`font-extrabold border-t-2 border-emerald-500/40 ${
-                      isDark ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-900'
+                      isDark ? 'bg-slate-900 text-white' : 'bg-slate-50 text-slate-900'
                     }`}>
                       <td className={`sticky left-0 z-10 py-3 px-3 text-left border-r ${
-                        isDark ? 'bg-black border-white/10 text-emerald-400' : 'bg-slate-200 border-slate-300 text-emerald-800'
+                        isDark ? 'bg-black border-white/10 text-emerald-400' : 'bg-white border-slate-200 text-emerald-800'
                       }`}>
                         Diferencia (Ingresos - Egresos)
                       </td>
@@ -1119,7 +1153,11 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                   <button
                     type="button"
                     onClick={handleResetToDefault}
-                    className="px-3 py-1.5 rounded-xl border border-white/10 text-xs text-slate-300 hover:text-white hover:bg-white/5 flex items-center gap-1.5 cursor-pointer"
+                    className={`px-3 py-1.5 rounded-xl border text-xs flex items-center gap-1.5 cursor-pointer transition-colors ${
+                      isDark
+                        ? 'border-white/10 text-slate-300 hover:text-white hover:bg-white/5'
+                        : 'border-slate-200 text-slate-700 hover:bg-slate-100 bg-white shadow-2xs'
+                    }`}
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
                     <span>Restablecer</span>

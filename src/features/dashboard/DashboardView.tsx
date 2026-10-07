@@ -97,7 +97,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const periodExpense = useMemo(() => {
     return periodTransactions
-      .filter((t) => t.type === 'expense')
+      .filter((t) => t.type === 'expense' || (t.type === 'transfer' && Boolean(t.categoryId)))
       .reduce((sum, t) => sum + t.amount, 0);
   }, [periodTransactions]);
 
@@ -661,8 +661,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                         : tx.type === 'transfer'
                         ? 'text-sky-600 dark:text-sky-400'
                         : isDark
-                        ? 'text-slate-200'
-                        : 'text-slate-800'
+                        ? 'text-rose-400'
+                        : 'text-rose-600'
                     }`}
                   >
                     {tx.type === 'income' ? '+' : tx.type === 'expense' ? '-' : ''}
