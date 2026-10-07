@@ -15,6 +15,7 @@ import {
   Category,
   FinancialPeriod,
   Transaction,
+  TransactionTemplate,
   UserProfile,
   UserSettings,
 } from '../types/models';
@@ -162,6 +163,7 @@ export async function deleteAccountFromDb(userId: string, accountId: string): Pr
 }
 
 export async function syncCategory(userId: string, category: Category): Promise<void> {
+  if (auth.currentUser?.uid !== userId) throw new Error('Usuario no autenticado.');
   const path = `users/${userId}/categories/${category.id}`;
   try {
     await setDoc(doc(db, 'users', userId, 'categories', category.id), ownedRecord(category, userId));
@@ -281,12 +283,23 @@ export async function deleteTransactionWithAccounts(
 }
 
 export async function syncBudget(userId: string, budget: Budget): Promise<void> {
+  if (auth.currentUser?.uid !== userId) throw new Error('Usuario no autenticado.');
   const path = `users/${userId}/budgets/${budget.id}`;
   try {
     await setDoc(doc(db, 'users', userId, 'budgets', budget.id), ownedRecord(budget, userId));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, path);
   }
+}
+
+export async function saveTransactionTemplate(userId: string, template: TransactionTemplate): Promise<void> {
+  if (auth.currentUser?.uid !== userId || template.userId !== userId) throw new Error('Usuario no autenticado.');
+  await setDoc(doc(db, 'users', userId, 'templates', template.id), ownedRecord(template, userId));
+}
+
+export async function deleteTransactionTemplate(userId: string, templateId: string): Promise<void> {
+  if (auth.currentUser?.uid !== userId) throw new Error('Usuario no autenticado.');
+  await deleteDoc(doc(db, 'users', userId, 'templates', templateId));
 }
 
 export async function deleteBudgetFromDb(userId: string, budgetId: string): Promise<void> {
@@ -324,13 +337,16 @@ export async function seedUserInitialData(userId: string, initialStore: UserData
       pendingWrites += 1;
     }
 
-    // Only seed categories if the user has NONE in Firestore (brand new account initialization)
-    if (!hasExistingCategories) {
-      for (const item of initialStore.categories) {
-        batch.set(doc(db, 'users', userId, 'categories', item.id), ownedRecord(item, userId));
-        pendingWrites += 1;
-        await commitBatchIfFull();
-      }
+    // Reconcile locally saved user records by ID. Existing remote documents are
+    // immutable during bootstrap; create only records that are still absent.
+    const existingCategoryIds = new Set(existingDocs[collections.indexOf('categories')].docs.map((item) => item.id));
+    for (const item of initialStore.categories) {
+      if (existingCategoryIds.has(item.id)) continue;
+      const ref = doc(db, 'users', userId, 'categories', item.id);
+      await runTransaction(db, async (transaction) => {
+        const snapshot = await transaction.get(ref);
+        if (!snapshot.exists()) transaction.set(ref, ownedRecord(item, userId));
+      });
     }
 
     // Only seed periods if the user has NONE in Firestore
@@ -349,13 +365,20 @@ export async function seedUserInitialData(userId: string, initialStore: UserData
       await commitBatchIfFull();
     }
 
-    // Only seed initial budgets on completely fresh accounts (never resurrect deleted budgets)
-    if (!hasExistingBudgets && !hasExistingCategories && !hasExistingPeriods && initialStore.budgets.length > 0) {
-      for (const item of initialStore.budgets) {
-        batch.set(doc(db, 'users', userId, 'budgets', item.id), ownedRecord(item, userId));
-        pendingWrites += 1;
-        await commitBatchIfFull();
-      }
+    // Like categories, upload locally saved budgets only when their IDs are
+    // absent. Defaults are included only for a genuinely new financial profile.
+    const existingBudgetIds = new Set(existingDocs[collections.indexOf('budgets')].docs.map((item) => item.id));
+    const defaultBudgetIds = new Set([`bdg_super_${userId}`, `bdg_gas_${userId}`]);
+    const budgetsToSeed = hasExistingBudgets || hasExistingCategories || hasExistingPeriods
+      ? initialStore.budgets.filter((item) => !defaultBudgetIds.has(item.id))
+      : initialStore.budgets;
+    for (const item of budgetsToSeed) {
+      if (existingBudgetIds.has(item.id)) continue;
+      const ref = doc(db, 'users', userId, 'budgets', item.id);
+      await runTransaction(db, async (transaction) => {
+        const snapshot = await transaction.get(ref);
+        if (!snapshot.exists()) transaction.set(ref, ownedRecord(item, userId));
+      });
     }
 
     if (pendingWrites > 0) await batch.commit();

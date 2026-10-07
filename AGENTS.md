@@ -23,7 +23,7 @@ La aplicación móvil Flutter ya no forma parte del repositorio. La experiencia 
 | Ruta | Responsabilidad |
 |---|---|
 | `src/main.tsx`, `src/App.tsx`, `src/index.css` | Punto de entrada, shell/navegación, tema y estilos globales. |
-| `src/core/types/models.ts` | Tipos de cuentas, movimientos, categorías, períodos, presupuestos, perfil y preferencias. |
+| `src/core/types/models.ts` | Tipos de cuentas, movimientos, plantillas, categorías, períodos, presupuestos, perfil y preferencias. |
 | `src/core/data/initialData.ts` | Tienda inicial, categorías y períodos predeterminados. |
 | `src/core/state/WalletContext.tsx` | Estado central, autenticación, persistencia local, listeners y operaciones de dominio. |
 | `src/core/sync/offlineQueue.ts` | Cola persistente en `localStorage`, procesamiento secuencial y reintentos/conectividad. |
@@ -36,6 +36,7 @@ La aplicación móvil Flutter ya no forma parte del repositorio. La experiencia 
 | `src/features/auth/` | Registro, acceso, Google y recuperación de contraseña. |
 | `src/features/accounts/` | Cuentas y tarjetas: visualización, edición, archivo y gestión de saldos. |
 | `src/features/transactions/` | Lista, modal y filtros de movimientos; `financialEngine.ts` valida movimientos y calcula saldos/resúmenes. |
+| `src/features/transactions/TemplatesView.tsx` | Gestión por usuario de plantillas y recordatorios periódicos de movimientos. |
 | `src/features/financial_periods/` | Gestión, validación y cálculo de períodos/subperíodos. |
 | `src/features/annual_budget/` | Presupuesto y Panorama Anual; matriz proyectado/real en vistas mensual, trimestral, semestral y anual, más exportación CSV. |
 | `src/features/analytics/` | Resúmenes, métricas, visualizaciones y exportación CSV. |
@@ -46,7 +47,7 @@ La aplicación móvil Flutter ya no forma parte del repositorio. La experiencia 
 
 ## Modelo de datos
 
-Los datos de usuario se organizan en `users/{uid}`. El perfil está en el documento del usuario; las subcolecciones principales son `settings`, `accounts`, `categories`, `periods`, `transactions` y `budgets`. En `settings` se guardan el documento `default`, las preferencias de bloqueo en `security` y los planes anuales `projections_{year}`. También se usan `accountTombstones` en las Cloud Functions. Las reglas de Firestore se encuentran en `firestore.rules` y aplican denegación por defecto y aislamiento por propietario.
+Los datos de usuario se organizan en `users/{uid}`. El perfil está en el documento del usuario; las subcolecciones principales son `settings`, `accounts`, `categories`, `periods`, `transactions`, `budgets` y `templates`. En `settings` se guardan el documento `default`, las preferencias de bloqueo en `security` y los planes anuales `projections_{year}`. También se usan `accountTombstones` en las Cloud Functions. Las reglas de Firestore se encuentran en `firestore.rules` y aplican denegación por defecto y aislamiento por propietario.
 
 Modelos relevantes en `src/core/types/models.ts`:
 
@@ -54,6 +55,7 @@ Modelos relevantes en `src/core/types/models.ts`:
 - Los movimientos son gastos, ingresos o transferencias, con fecha ISO y referencias opcionales a período/subperíodo.
 - `FinancialPeriod` contempla `referenceMonth` y `monthIndex` para asociar períodos con meses del panorama.
 - `Budget` se relaciona con un período y categoría, con metas y alertas configurables. Los planes proyectados anuales se guardan por usuario/año en `users/{uid}/settings/projections_{year}`; las metas reales por período permanecen en `budgets`.
+- `TransactionTemplate` guarda categoría, subcategoría, monto, cuenta y nota; opcionalmente define fecha base y recurrencia semanal (7 días), quincenal (15 días) o mensual. Se guarda en `users/{uid}/templates`.
 - `UserSettings` incluye tema, ocultamiento de saldos y período activo.
 
 ## Comportamientos implementados
@@ -71,6 +73,8 @@ Modelos relevantes en `src/core/types/models.ts`:
 - Al fijar una meta o mes en cero (`0`) en el plan, el sistema elimina limpiamente cualquier presupuesto directo existente en ese período (`deleteBudget`) en lugar de rechazarlo, y la matriz respeta los overrides en cero prioritariamente (soportando claves numéricas y string).
 - El módulo de Cumplimiento de Presupuestos en Análisis evalúa únicamente categorías de egreso y desduplica los registros por categoría.
 - `seedUserInitialData` en `firestoreSync.ts` valida la presencia previa de documentos antes de inicializar colecciones; jamás recrea categorías, períodos o presupuestos que el usuario haya eliminado deliberadamente. `mergeLocalStoreForUpload` no reinyecta categorías predeterminadas ya descartadas en el almacenamiento local.
+- Al reconciliar categorías y presupuestos locales se crean solo documentos cuyos IDs todavía no existen en Firestore; cada creación vuelve a comprobar la ausencia dentro de una transacción. Los documentos remotos existentes no se sobrescriben durante esta recuperación.
+- Las notificaciones de plantillas requieren permiso del navegador y la aplicación abierta; al abrir una, el formulario de transacción carga sus campos para confirmar o ajustar el movimiento. El siguiente ciclo se calcula desde la fecha base y avanza al guardar el movimiento.
 - Al eliminar una categoría (`deleteCategory`), se remueven también sus proyecciones anuales vinculadas para evitar claves huérfanas.
 
 ## Comandos

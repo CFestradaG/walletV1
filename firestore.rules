@@ -104,6 +104,16 @@ service cloud.firestore {
           && request.resource.data.userId == userId;
         allow delete: if isOwner(userId) && isValidId(budgetId);
       }
+
+      // Saved transaction templates belong to one authenticated user.
+      match /templates/{templateId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidId(templateId)
+          && request.resource.data.id == templateId
+          && request.resource.data.userId == userId;
+        allow delete: if isOwner(userId) && isValidId(templateId);
+      }
     }
 
     function transactionAccountsExist(userId, data) {

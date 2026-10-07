@@ -121,8 +121,9 @@ function mergeLocalStoreForUpload(defaultStore: UserDataStore, localStore: UserD
     // Local account copies may be stale after another device deletes or edits a record.
     // Server snapshots are authoritative; queued offline writes are reconciled separately.
     accounts: defaultStore.accounts,
-    // Preserve local user category deletions (never re-inject deleted default categories like Freelance)
-    categories: localStore.categories && localStore.categories.length > 0 ? localStore.categories : defaultStore.categories,
+    // Preserve an intentionally empty local collection as well as partial custom
+    // collections; fall back to defaults only before this UID has local data.
+    categories: localStore.categories ?? defaultStore.categories,
     periods: localStore.periods && localStore.periods.length > 0 ? localStore.periods : defaultStore.periods,
     transactions: defaultStore.transactions,
     budgets: localStore.budgets || [],

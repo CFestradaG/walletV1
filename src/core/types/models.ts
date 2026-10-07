@@ -116,6 +116,25 @@ export interface Budget {
   updatedAt: string;
 }
 
+export interface TransactionTemplate {
+  id: string;
+  userId: string;
+  name?: string;
+  transactionType?: CategoryType;
+  categoryId: string;
+  subcategoryId?: string;
+  amount: number;
+  accountId: string;
+  note: string;
+  recurrenceStartDate?: string;
+  recurrenceFrequency?: 'weekly' | 'biweekly' | 'monthly';
+  /** Compatibilidad temporal con recordatorios de la versión anterior. */
+  reminderFrequency?: 'weekly' | 'monthly';
+  nextReminderAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface UserProfile {
   id: string;
   name: string;

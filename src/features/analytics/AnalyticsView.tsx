@@ -15,6 +15,15 @@ import {
 import { useWallet } from '../../core/state/WalletContext';
 import { PeriodSelectorBar } from '../../core/widgets/PeriodSelectorBar';
 import { formatGTQ } from '../../core/utils/formatters';
+import { subscribeAnnualProjections } from '../../core/firebase/firestoreSync';
+import {
+  calculateCategoryMatrix,
+  findPeriodForMonth,
+  loadProjectionsPlan,
+  loadSavedProjectionsPlan,
+  saveProjectionsPlan,
+} from '../annual_budget/annualBudgetEngine';
+import { AnnualProjectionsPlan } from '../annual_budget/annualBudgetEngine';
 
 interface AnalyticsViewProps {
   onOpenPeriodsModal: () => void;
@@ -36,11 +45,37 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     budgets,
     categories,
     accounts,
+    currentUser,
+    saveAnnualProjections,
     resolvedTheme,
   } = useWallet();
 
   const isDark = resolvedTheme === 'dark';
   const [selectedSubperiodId, setSelectedSubperiodId] = useState('');
+  const annualYear = activePeriod ? Number(activePeriod.startDate.slice(0, 4)) : new Date().getFullYear();
+  const annualUserId = currentUser?.id || 'default_user';
+  const [annualPlan, setAnnualPlan] = useState<AnnualProjectionsPlan>(() =>
+    loadProjectionsPlan(annualUserId, categories, annualYear)
+  );
+
+  useEffect(() => {
+    setAnnualPlan(loadProjectionsPlan(annualUserId, categories, annualYear));
+    if (annualUserId === 'default_user') return;
+    return subscribeAnnualProjections(
+      annualUserId,
+      annualYear,
+      (remotePlan, fromCache) => {
+        if (remotePlan) {
+          saveProjectionsPlan(annualUserId, remotePlan);
+          setAnnualPlan(remotePlan);
+        } else if (!fromCache) {
+          const cachedPlan = loadSavedProjectionsPlan(annualUserId, annualYear);
+          if (cachedPlan) saveAnnualProjections(cachedPlan);
+        }
+      },
+      (error) => console.error('No se pudo sincronizar el plan anual en Análisis:', error)
+    );
+  }, [annualUserId, annualYear, categories]);
 
   useEffect(() => {
     setSelectedSubperiodId('');
@@ -144,49 +179,33 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   // MODULE 5: Cumplimiento de Presupuestos (Solo categorías de egreso, desduplicadas)
   const budgetPerformance = useMemo(() => {
     if (!activePeriod) return [];
-    // Filtrar solo presupuestos de egresos válidos para el período activo
-    const pBudgets = budgets.filter((b) => {
-      if (b.periodId !== activePeriod.id) return false;
-      const cat = categories.find((c) => c.id === b.categoryId);
-      return Boolean(cat && cat.type === 'expense' && (b.targetAmount ?? b.amount ?? 0) > 0);
-    });
-
-    // Desduplicar por (categoryId + subcategoryId) en caso de que existan registros repetidos
-    const uniqueMap = new Map<string, (typeof pBudgets)[0]>();
-    pBudgets.forEach((b) => {
-      const key = `${b.categoryId}_${b.subcategoryId || 'root'}`;
-      const existing = uniqueMap.get(key);
-      if (!existing || (b.updatedAt && (!existing.updatedAt || b.updatedAt > existing.updatedAt))) {
-        uniqueMap.set(key, b);
-      }
-    });
-
-    return Array.from(uniqueMap.values()).map((b) => {
-      const spent = periodTransactions
-        .filter(
-          (t) =>
-            (t.type === 'expense' || (t.type === 'transfer' && Boolean(t.categoryId))) &&
-            t.categoryId === b.categoryId &&
-            (!b.subcategoryId || t.subcategoryId === b.subcategoryId)
-        )
-        .reduce((sum, t) => sum + t.amount, 0);
-
-      const cat = categories.find((c) => c.id === b.categoryId);
-      const sub = cat?.subcategories.find((s) => s.id === b.subcategoryId);
-      const budgetAmount = b.targetAmount ?? b.amount ?? 0;
-      const pct = budgetAmount > 0 ? Math.round((spent / budgetAmount) * 100) : 0;
-
-      return {
-        id: b.id,
-        name: sub ? `${cat?.name} (${sub.name})` : cat?.name || 'Categoría',
-        color: cat?.color || '#10B981',
-        budget: budgetAmount,
-        spent,
+    // Use the same monthly matrix as Panorama Anual so projection overrides,
+    // direct budgets and period date ranges resolve identically in both views.
+    const matrix = calculateCategoryMatrix(
+      categories, transactions, periods, budgets, annualPlan, annualYear, 'monthly'
+    );
+    const matrixMonth = Array.from({ length: 12 }, (_, index) => index).find((index) =>
+      findPeriodForMonth(periods, annualYear, index)?.id === activePeriod.id
+    );
+    const monthIndex = matrixMonth ?? activePeriod.monthIndex ??
+      (activePeriod.referenceMonth ? activePeriod.referenceMonth - 1 : Number(activePeriod.startDate.slice(5, 7)) - 1);
+    const column = matrix.columns.find((item) => item.id === `m_${monthIndex}`);
+    if (!column) return [];
+    return matrix.expenseRows.flatMap((row) => {
+      const cell = row.cells[column.id];
+      if (!cell || (cell.projected <= 0 && cell.actual <= 0)) return [];
+      const pct = cell.projected > 0 ? Math.round((cell.actual / cell.projected) * 100) : cell.actual > 0 ? 100 : 0;
+      return [{
+        id: row.category.id,
+        name: row.category.name,
+        color: row.category.color || '#10B981',
+        budget: cell.projected,
+        spent: cell.actual,
         pct,
-        isOver: spent > budgetAmount,
-      };
-    });
-  }, [budgets, activePeriod, periodTransactions, categories]);
+        isOver: cell.actual > cell.projected && cell.projected > 0,
+      }];
+    }).sort((a, b) => b.pct - a.pct);
+  }, [activePeriod, annualPlan, annualYear, budgets, categories, periods, transactions]);
 
   // Export CSV summary
   const exportSummaryCSV = () => {

@@ -193,6 +193,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           </button>
         </div>
 
+        <div className="flex items-center gap-1.5">
         <button
           type="button"
           onClick={onOpenNewTransaction}
@@ -202,6 +203,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         >
           <Plus className="w-4 h-4 stroke-[2.75] transition-transform duration-200 group-hover:rotate-90" />
         </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-2">

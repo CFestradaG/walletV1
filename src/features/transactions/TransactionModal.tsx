@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { collection, onSnapshot } from 'firebase/firestore';
 import {
   ArrowLeft,
   ArrowRightLeft,
@@ -15,9 +16,12 @@ import {
   X,
 } from 'lucide-react';
 import { useWallet } from '../../core/state/WalletContext';
-import { Account, Transaction, TransactionType } from '../../core/types/models';
+import { Account, Transaction, TransactionTemplate, TransactionType } from '../../core/types/models';
 import { evaluateArithmetic, formatGTQ, toISODate } from '../../core/utils/formatters';
 import { AccountSelectDropdown } from '../../core/widgets/AccountSelectDropdown';
+import { saveTransactionTemplate } from '../../core/firebase/firestoreSync';
+import { auth, db } from '../../core/firebase/firebase';
+import { getNextTemplateOccurrence } from './templateRecurrence';
 
 function getContrastTextColor(hexColor?: string): string {
   if (!hexColor || !hexColor.startsWith('#')) return '#FFFFFF';
@@ -37,6 +41,8 @@ interface TransactionModalProps {
   initialType?: TransactionType;
   preselectedAccountId?: string;
   preselectedDestinationCardId?: string;
+  initialTemplate?: TransactionTemplate | null;
+  onManageTemplates?: () => void;
 }
 
 export const TransactionModal: React.FC<TransactionModalProps> = ({
@@ -46,6 +52,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   initialType = 'expense',
   preselectedAccountId,
   preselectedDestinationCardId,
+  initialTemplate,
+  onManageTemplates,
 }) => {
   const {
     accounts,
@@ -53,6 +61,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     createTransaction,
     updateTransaction,
     deleteTransaction,
+    currentUser,
     resolvedTheme,
   } = useWallet();
 
@@ -70,6 +79,25 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [note, setNote] = useState<string>('');
   const [showKeypad, setShowKeypad] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [saveAsTemplate, setSaveAsTemplate] = useState(false);
+  const [templates, setTemplates] = useState<TransactionTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const [templatesLoading, setTemplatesLoading] = useState(false);
+  const [templatesLoadError, setTemplatesLoadError] = useState(false);
+
+  useEffect(() => {
+    const uid = currentUser?.id;
+    if (!isOpen || !uid) return;
+    setTemplatesLoading(true);
+    setTemplatesLoadError(false);
+    return onSnapshot(collection(db, 'users', uid, 'templates'), (snapshot) => {
+      setTemplates(snapshot.docs.map((item) => ({ ...item.data(), id: item.id } as TransactionTemplate)));
+      setTemplatesLoading(false);
+    }, () => {
+      setTemplatesLoading(false);
+      setTemplatesLoadError(true);
+    });
+  }, [isOpen, currentUser?.id]);
 
   // Available categories based on transaction type
   const availableCategories = useMemo(() => {
@@ -107,6 +135,8 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     if (!isOpen) return;
 
     if (editingTransaction) {
+      setSelectedTemplateId('');
+      setSaveAsTemplate(false);
       setType(editingTransaction.type);
       setAmountStr(String(editingTransaction.amount));
       setAccountId(editingTransaction.accountId || '');
@@ -125,11 +155,15 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         activeAccs[0] ||
         null;
 
-      setType(initialType);
-      setAmountStr('0');
-      setAccountId(defaultAcc ? defaultAcc.id : '');
+      setSaveAsTemplate(false);
+      setSelectedTemplateId(initialTemplate?.id || '');
+      setType(initialTemplate
+        ? initialTemplate.transactionType || categories.find((category) => category.id === initialTemplate.categoryId)?.type || 'expense'
+        : initialType);
+      setAmountStr(initialTemplate ? String(initialTemplate.amount) : '0');
+      setAccountId(initialTemplate?.accountId || (defaultAcc ? defaultAcc.id : ''));
       setDateStr(toISODate(new Date()));
-      setNote('');
+      setNote(initialTemplate?.note || '');
       setShowKeypad(true);
       setIsBrowsingCategories(false);
       setErrorMsg(null);
@@ -141,8 +175,11 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         setDestinationAccountId(destAcc ? destAcc.id : '');
       }
 
-      // Default category
-      if (initialType === 'transfer') {
+      // Apply a saved template before normal defaults.
+      if (initialTemplate) {
+        setCategoryId(initialTemplate.categoryId);
+        setSubcategoryId(initialTemplate.subcategoryId || '');
+      } else if (initialType === 'transfer') {
         const financeCat = categories.find(
           (c) => c.type === 'expense' && c.isActive && /finanz|pago|tarjeta|deuda/i.test(c.name)
         );
@@ -176,12 +213,27 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
     initialType,
     preselectedAccountId,
     preselectedDestinationCardId,
+    initialTemplate,
     accounts,
     categories,
   ]);
 
+  const handleTemplateSelection = (templateId: string) => {
+    setSelectedTemplateId(templateId);
+    const template = templates.find((item) => item.id === templateId);
+    if (!template) return;
+    setType(template.transactionType || categories.find((category) => category.id === template.categoryId)?.type || 'expense');
+    setAmountStr(String(template.amount));
+    setAccountId(template.accountId);
+    setCategoryId(template.categoryId);
+    setSubcategoryId(template.subcategoryId || '');
+    setNote(template.note || '');
+    setErrorMsg(null);
+  };
+
   // Switch type handler
   const handleTypeChange = (newType: TransactionType) => {
+    setSelectedTemplateId('');
     setType(newType);
     setErrorMsg(null);
     setIsBrowsingCategories(false);
@@ -270,7 +322,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   }, [amountStr]);
 
   // Submit
-  const handleSave = () => {
+  const handleSave = async () => {
     setErrorMsg(null);
     const finalAmount = evaluateArithmetic(amountStr);
 
@@ -334,6 +386,50 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
         if (!res.valid) {
           setErrorMsg(res.error || 'Error al guardar la transacción.');
           return;
+        }
+      }
+      if (!editingTransaction && saveAsTemplate && auth.currentUser && type !== 'transfer') {
+        const now = new Date().toISOString();
+        try {
+          await saveTransactionTemplate(auth.currentUser.uid, {
+            id: `tpl_${Date.now()}`, userId: auth.currentUser.uid,
+          name: note.trim() || selectedCategory?.name || 'Plantilla',
+          transactionType: type === 'income' ? 'income' : 'expense',
+            categoryId, subcategoryId: subcategoryId || undefined,
+            amount: finalAmount, accountId, note: note.trim(), createdAt: now, updatedAt: now,
+          });
+        } catch (templateError) {
+          console.error('El movimiento se guardó, pero no se pudo guardar la plantilla:', templateError);
+          const code = (templateError as { code?: string })?.code;
+          onClose();
+          window.setTimeout(() => window.alert(
+            code === 'permission-denied'
+              ? 'El movimiento se guardó, pero Firebase rechazó la plantilla. Despliega las reglas de Firestore para users/{uid}/templates e inténtalo de nuevo.'
+              : 'El movimiento se guardó, pero no se pudo guardar la plantilla. Revisa tu conexión e inténtalo de nuevo.'
+          ), 0);
+          return;
+        }
+      }
+      if (!editingTransaction && initialTemplate && auth.currentUser) {
+        const frequency = initialTemplate.recurrenceFrequency || initialTemplate.reminderFrequency;
+        const dueDate = (initialTemplate.nextReminderAt || '').slice(0, 10);
+        if (frequency && initialTemplate.recurrenceStartDate && dueDate && dueDate <= toISODate(new Date())) {
+          const nextDate = getNextTemplateOccurrence(
+            initialTemplate.recurrenceStartDate,
+            frequency,
+            toISODate(new Date())
+          );
+          try {
+            await saveTransactionTemplate(auth.currentUser.uid, {
+              ...initialTemplate,
+              recurrenceFrequency: frequency,
+              reminderFrequency: undefined,
+              nextReminderAt: nextDate,
+              updatedAt: new Date().toISOString(),
+            });
+          } catch (syncError) {
+            console.error('No se pudo actualizar la próxima fecha de la plantilla:', syncError);
+          }
         }
       }
       onClose();
@@ -482,6 +578,32 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
             </button>
           </div>
 
+          {!editingTransaction && type !== 'transfer' && (
+            <label className={`block text-[11px] font-semibold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+              Usar plantilla
+              <select
+                value={selectedTemplateId}
+                disabled={templatesLoading || templates.length === 0}
+                onChange={(event) => handleTemplateSelection(event.target.value)}
+                className={`mt-1.5 w-full rounded-xl border px-3 py-2.5 text-xs normal-case tracking-normal outline-none focus:border-emerald-500 disabled:opacity-60 ${isDark ? 'bg-[#131927] border-white/10 text-white' : 'bg-white border-slate-200 text-slate-900'}`}
+              >
+                <option value="">{templatesLoading ? 'Cargando plantillas...' : templatesLoadError ? 'No se pudieron cargar las plantillas' : templates.length ? 'Selecciona una plantilla (opcional)' : 'No tienes plantillas guardadas'}</option>
+                {templates.map((template) => {
+                  const category = categories.find((item) => item.id === template.categoryId);
+                  const subcategory = category?.subcategories.find((item) => item.id === template.subcategoryId);
+                  const displayName = template.name?.trim() || template.note?.trim() || category?.name || 'Plantilla';
+                  const content = [category?.name, subcategory?.name, `Q ${template.amount.toFixed(2)}`, accounts.find((item) => item.id === template.accountId)?.name || 'Cuenta'].filter(Boolean).join(' | ');
+                  return <option key={template.id} value={template.id}>{displayName} — {content}</option>;
+                })}
+              </select>
+              {templates.length === 0 && !templatesLoading && !templatesLoadError && onManageTemplates && (
+                <button type="button" onClick={() => { onClose(); onManageTemplates(); }} className="mt-1 text-[10px] font-semibold text-emerald-500 hover:underline">
+                  Crear una en Configuración
+                </button>
+              )}
+            </label>
+          )}
+
           {/* 2. DATE & NOTES INLINE */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
             <div>
@@ -523,6 +645,13 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               </div>
             </div>
           </div>
+
+          {!editingTransaction && type !== 'transfer' && auth.currentUser && (
+            <label className="flex items-center gap-2 text-xs mt-3 cursor-pointer">
+              <input type="checkbox" checked={saveAsTemplate} onChange={(event) => setSaveAsTemplate(event.target.checked)} />
+              Guardar también como plantilla
+            </label>
+          )}
 
           {/* 3. CATEGORIES & SUBCATEGORIES SINGLE-ROW HIERARCHICAL SELECTOR */}
           <div

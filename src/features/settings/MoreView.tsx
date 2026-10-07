@@ -3,6 +3,7 @@ import {
   Calendar,
   Check,
   ChevronRight,
+  ClipboardList,
   Download,
   Edit3,
   Eye,
@@ -35,6 +36,7 @@ interface MoreViewProps {
   onOpenBudgetsModal: () => void;
   onOpenSecurityModal?: () => void;
   onOpenInstallModal?: () => void;
+  onOpenTemplates: () => void;
 }
 
 export const MoreView: React.FC<MoreViewProps> = ({
@@ -42,6 +44,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
   onOpenBudgetsModal,
   onOpenSecurityModal,
   onOpenInstallModal,
+  onOpenTemplates,
 }) => {
   const {
     currentUser,
@@ -341,6 +344,21 @@ export const MoreView: React.FC<MoreViewProps> = ({
               </div>
             </div>
             <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenTemplates}
+            className={`w-full p-3 rounded-2xl border flex items-center justify-between text-left transition-colors cursor-pointer ${isDark ? 'border-white/5 hover:bg-white/5' : 'border-slate-200 hover:bg-slate-50'}`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center"><ClipboardList className="w-4 h-4" /></div>
+              <div>
+                <span className={`font-bold text-xs block ${isDark ? 'text-white' : 'text-slate-900'}`}>Plantillas</span>
+                <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Gestionar movimientos frecuentes y recordatorios</span>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-slate-400" />
           </button>
 
           {/* Presupuesto y Panorama Anual */}

@@ -22,6 +22,7 @@ import { TransactionsView } from './features/transactions/TransactionsView';
 import { AnalyticsView } from './features/analytics/AnalyticsView';
 import { MoreView } from './features/settings/MoreView';
 import { TransactionModal } from './features/transactions/TransactionModal';
+import { TemplatesView } from './features/transactions/TemplatesView';
 import { PeriodsModal } from './features/financial_periods/PeriodsModal';
 import { AnnualBudgetModal } from './features/annual_budget/AnnualBudgetModal';
 import { SecurityLockScreen } from './core/security/SecurityLockScreen';
@@ -30,9 +31,9 @@ import { PWAInstallModal } from './core/pwa/PWAInstallModal';
 import { usePWAInstall } from './core/pwa/usePWAInstall';
 import { useAppLock } from './core/security/useAppLock';
 import { getSecurityConfig } from './core/security/securityService';
-import { Transaction, TransactionType } from './core/types/models';
+import { Transaction, TransactionTemplate, TransactionType } from './core/types/models';
 
-type MainTab = 'inicio' | 'cuentas' | 'transacciones' | 'analisis' | 'mas';
+type MainTab = 'inicio' | 'cuentas' | 'transacciones' | 'plantillas' | 'analisis' | 'mas';
 
 const WalletAppShell: React.FC = () => {
   const {
@@ -66,6 +67,7 @@ const WalletAppShell: React.FC = () => {
   // Transaction Modal State
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+  const [initialTemplate, setInitialTemplate] = useState<TransactionTemplate | null>(null);
   const [initialTxType, setInitialTxType] = useState<TransactionType>('expense');
   const [preselectedAccountId, setPreselectedAccountId] = useState<string | undefined>(
     undefined
@@ -99,6 +101,7 @@ const WalletAppShell: React.FC = () => {
     destinationCardId?: string;
   }) => {
     setEditingTx(null);
+    setInitialTemplate(null);
     setInitialTxType(options?.type || 'expense');
     setPreselectedAccountId(options?.accountId);
     setPreselectedDestinationCardId(options?.destinationCardId);
@@ -110,6 +113,15 @@ const WalletAppShell: React.FC = () => {
     setPreselectedAccountId(undefined);
     setPreselectedDestinationCardId(undefined);
     setIsTxModalOpen(true);
+  };
+
+  const handleUseTemplate = (template: TransactionTemplate) => {
+    setEditingTx(null);
+    setInitialTemplate(template);
+    setInitialTxType(template.transactionType || 'expense');
+    setPreselectedAccountId(template.accountId);
+    setIsTxModalOpen(true);
+    setActiveTab('transacciones');
   };
 
   const cycleThemeMode = () => {
@@ -156,7 +168,7 @@ const WalletAppShell: React.FC = () => {
         <nav className="hidden sm:flex items-center gap-1 p-1 rounded-2xl border border-white/5 bg-black/20 dark:bg-black/30">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeTab === item.id;
+            const isActive = activeTab === item.id || (activeTab === 'plantillas' && item.id === 'mas');
             return (
               <button
                 key={item.id}
@@ -331,6 +343,8 @@ const WalletAppShell: React.FC = () => {
           />
         )}
 
+        <TemplatesView onUse={handleUseTemplate} visible={activeTab === 'plantillas'} />
+
         {activeTab === 'analisis' && (
           <AnalyticsView
             onOpenPeriodsModal={() => setIsPeriodsModalOpen(true)}
@@ -346,6 +360,7 @@ const WalletAppShell: React.FC = () => {
             onOpenBudgetsModal={() => setIsAnnualBudgetModalOpen(true)}
             onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
             onOpenInstallModal={() => setIsInstallModalOpen(true)}
+            onOpenTemplates={() => setActiveTab('plantillas')}
           />
         )}
       </main>
@@ -377,7 +392,7 @@ const WalletAppShell: React.FC = () => {
         <div className="max-w-md mx-auto h-full grid grid-cols-5 items-center px-2">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = activeTab === item.id;
+            const isActive = activeTab === item.id || (activeTab === 'plantillas' && item.id === 'mas');
             return (
               <button
                 key={item.id}
@@ -404,11 +419,13 @@ const WalletAppShell: React.FC = () => {
       {/* GLOBAL MODALS */}
       <TransactionModal
         isOpen={isTxModalOpen}
-        onClose={() => setIsTxModalOpen(false)}
+        onClose={() => { setIsTxModalOpen(false); setInitialTemplate(null); }}
         editingTransaction={editingTx}
         initialType={initialTxType}
         preselectedAccountId={preselectedAccountId}
         preselectedDestinationCardId={preselectedDestinationCardId}
+        initialTemplate={initialTemplate}
+        onManageTemplates={() => setActiveTab('plantillas')}
       />
 
       <PeriodsModal
