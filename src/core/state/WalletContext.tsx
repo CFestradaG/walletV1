@@ -89,6 +89,7 @@ import {
 import {
   AnnualProjectionsPlan,
   loadAllSavedProjectionsPlans,
+  loadSavedProjectionsPlan,
   saveProjectionsPlan,
 } from '../../features/annual_budget/annualBudgetEngine';
 
@@ -112,11 +113,6 @@ function readLocalUserStore(userId: string): UserDataStore | null {
 
 function mergeLocalStoreForUpload(defaultStore: UserDataStore, localStore: UserDataStore | null, uid: string): UserDataStore {
   if (!localStore) return defaultStore;
-  const mergeById = <T extends { id: string }>(defaults: T[], local: T[]) => {
-    const records = new Map(defaults.map((item) => [item.id, item]));
-    local.forEach((item) => records.set(item.id, item));
-    return [...records.values()];
-  };
   return {
     ...defaultStore,
     ...localStore,
@@ -125,10 +121,11 @@ function mergeLocalStoreForUpload(defaultStore: UserDataStore, localStore: UserD
     // Local account copies may be stale after another device deletes or edits a record.
     // Server snapshots are authoritative; queued offline writes are reconciled separately.
     accounts: defaultStore.accounts,
-    categories: mergeById(defaultStore.categories, localStore.categories || []),
-    periods: mergeById(defaultStore.periods, localStore.periods || []),
+    // Preserve local user category deletions (never re-inject deleted default categories like Freelance)
+    categories: localStore.categories && localStore.categories.length > 0 ? localStore.categories : defaultStore.categories,
+    periods: localStore.periods && localStore.periods.length > 0 ? localStore.periods : defaultStore.periods,
     transactions: defaultStore.transactions,
-    budgets: mergeById(defaultStore.budgets, localStore.budgets || []),
+    budgets: localStore.budgets || [],
   };
 }
 
@@ -336,6 +333,7 @@ interface WalletContextValue {
   deleteAccount: (accountId: string) => void;
   saveSyncedSecurityPreferences: (preferences: SyncedSecurityPreferences) => void;
   saveAnnualProjections: (plan: AnnualProjectionsPlan) => void;
+  projectionsVersion: number;
 
   isOnline: boolean;
   isSyncing: boolean;
@@ -387,6 +385,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [isSyncing, setIsSyncing] = useState<boolean>(false);
   const [pendingOfflineCount, setPendingOfflineCount] = useState<number>(0);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
+  const [projectionsVersion, setProjectionsVersion] = useState<number>(0);
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => {
     try {
       const saved = localStorage.getItem(SESSION_USER_KEY);
@@ -878,6 +877,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
             // Sincronizar en tiempo real cualquier plan de proyecciones anuales (projections_{year})
             const projectionDocs = snap.docs.filter((item) => item.id.startsWith('projections_'));
+            let hasNewProjections = false;
             for (const pDoc of projectionDocs) {
               const pData = pDoc.data();
               if (pData.userId === uid && pData.year && pData.projections) {
@@ -885,7 +885,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                   year: Number(pData.year),
                   projections: pData.projections,
                 });
+                hasNewProjections = true;
               }
+            }
+            if (hasNewProjections) {
+              setProjectionsVersion((v) => v + 1);
             }
 
             const rawSettings = snap.docs.find((d) => d.id === 'default')?.data() as Partial<UserSettings> | undefined;
@@ -1922,8 +1926,11 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       return { ok: false, error: 'El período seleccionado no pertenece a esta cuenta.' };
     }
     const category = currentUserStore.categories.find((item) => item.id === input.categoryId);
-    if (!category || (input.subcategoryId && !category.subcategories.some((item) => item.id === input.subcategoryId))) {
-      return { ok: false, error: 'La categoría o subcategoría seleccionada no es válida.' };
+    if (!category || category.type !== 'expense') {
+      return { ok: false, error: 'Los presupuestos solo pueden asignarse a categorías de egreso.' };
+    }
+    if (input.subcategoryId && !category.subcategories.some((item) => item.id === input.subcategoryId)) {
+      return { ok: false, error: 'La subcategoría seleccionada no es válida.' };
     }
 
     const now = new Date().toISOString();
@@ -2060,6 +2067,19 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       ...store,
       categories: store.categories.filter((c) => c.id !== categoryId),
     }));
+    // Clean up any annual projection entry for this deleted category
+    const currentYear = new Date().getFullYear();
+    const currentPlan = loadSavedProjectionsPlan(currentUserId, currentYear);
+    if (currentPlan && currentPlan.projections && currentPlan.projections[categoryId]) {
+      const updatedProjections = { ...currentPlan.projections };
+      delete updatedProjections[categoryId];
+      const updatedPlan = { ...currentPlan, projections: updatedProjections };
+      saveProjectionsPlan(currentUserId, updatedPlan);
+      if (auth.currentUser?.uid === currentUserId) {
+        offlineQueue.enqueue(currentUserId, 'SAVE_ANNUAL_PROJECTIONS', { plan: updatedPlan });
+      }
+      setProjectionsVersion((v) => v + 1);
+    }
     if (auth.currentUser?.uid === currentUserId) {
       offlineQueue.enqueue(currentUserId, 'DELETE_CATEGORY', { categoryId });
     }
@@ -2098,8 +2118,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const saveAnnualProjections = (plan: AnnualProjectionsPlan) => {
-    if (currentUserId && auth.currentUser?.uid === currentUserId) {
-      offlineQueue.enqueue(currentUserId, 'SAVE_ANNUAL_PROJECTIONS', { plan });
+    if (currentUserId) {
+      saveProjectionsPlan(currentUserId, plan);
+      if (auth.currentUser?.uid === currentUserId) {
+        offlineQueue.enqueue(currentUserId, 'SAVE_ANNUAL_PROJECTIONS', { plan });
+      }
+      setProjectionsVersion((v) => v + 1);
     }
   };
 
@@ -2150,6 +2174,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         deleteCategory,
         saveSyncedSecurityPreferences,
         saveAnnualProjections,
+        projectionsVersion,
 
         periods,
         activePeriod,

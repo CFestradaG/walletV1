@@ -280,9 +280,14 @@ export function calculateCategoryMatrix(
         let mProj = 0;
         let isDirect = false;
 
-        // Si el plan tiene un override explícito de 0 para este mes, respetarlo prioritariamente
-        if (projConfig?.monthlyOverrides?.[mIdx] === 0) {
-          mProj = 0;
+        const overrideVal =
+          projConfig?.monthlyOverrides?.[mIdx] !== undefined
+            ? projConfig.monthlyOverrides[mIdx]
+            : (projConfig?.monthlyOverrides as Record<string, number> | undefined)?.[String(mIdx)];
+
+        // Si el plan tiene un override explícito (incluso 0) para este mes, respetarlo prioritariamente
+        if (overrideVal !== undefined) {
+          mProj = overrideVal;
           isDirect = true;
           hasDirectBudget = false;
         } else if (matchingPeriod && cat.type === 'expense') {
@@ -298,11 +303,9 @@ export function calculateCategoryMatrix(
           }
         }
 
-        // Prioridad 2: Si no hay Budget manual en el período, usar la proyección del plan anual
+        // Prioridad 2: Si no hay Budget manual en el período ni override, usar la proyección del plan anual
         if (!isDirect && projConfig) {
-          mProj = projConfig.monthlyOverrides?.[mIdx] !== undefined
-            ? projConfig.monthlyOverrides[mIdx]!
-            : projConfig.monthlyAmount;
+          mProj = projConfig.monthlyAmount;
         }
 
         colProjected += mProj;

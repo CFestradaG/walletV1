@@ -56,6 +56,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     currentUser,
     toggleHideBalances,
     resolvedTheme,
+    projectionsVersion,
   } = useWallet();
 
   const isDark = resolvedTheme === 'dark';
@@ -109,7 +110,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
 
   const plan = useMemo(
     () => loadProjectionsPlan(userId, categories, currentYear),
-    [userId, categories, currentYear]
+    [userId, categories, currentYear, projectionsVersion]
   );
 
   const cumulativeSummary = useMemo(() => {

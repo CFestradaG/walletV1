@@ -66,10 +66,12 @@ Modelos relevantes en `src/core/types/models.ts`:
 - El PIN nunca se sincroniza en texto: se sincroniza su verificador PBKDF2-SHA256 con sal y parámetros en `users/{uid}/settings/security`; verificadores SHA-256 antiguos se migran al validar el PIN. La configuración global del bloqueo se sincroniza. La credencial y activación biométrica WebAuthn siguen siendo locales a cada dispositivo. No afirmar que la información financiera está cifrada localmente ni que una credencial WebAuthn se almacena en un “enclave” específico.
 - El hook de seguridad gestiona bloqueo por visibilidad/inactividad; los tiempos y controles exactos se definen en `securityService.ts` y `SecuritySettingsModal.tsx`.
 - Vite configura manifest `standalone`, actualización automática del service worker, iconos PNG/SVG y precaché según `globPatterns`. Verificar archivos y configuración antes de afirmar compatibilidad o cobertura completa offline.
-- El Presupuesto & Panorama Anual calcula proyecciones y valores reales desde los datos configurados; los planes anuales se sincronizan en `users/{uid}/settings/projections_{year}` en tiempo real.
-- La sincronización automática hacia presupuestos por período (`budgets`) aplica exclusivamente a categorías de egreso (`type === 'expense'`); las categorías de ingreso no generan documentos de presupuesto.
-- Al fijar una meta o mes en cero (`0`) en el plan, el sistema elimina limpiamente cualquier presupuesto directo existente en ese período (`deleteBudget`) en lugar de rechazarlo, y la matriz respeta los overrides en cero prioritariamente.
+- El Presupuesto & Panorama Anual calcula proyecciones y valores reales desde los datos configurados; los planes anuales se sincronizan en `users/{uid}/settings/projections_{year}` en tiempo real y el contexto reactivo (`projectionsVersion`) actualiza el resumen del Dashboard al guardar o recibir cambios.
+- La sincronización automática hacia presupuestos por período (`budgets`) aplica exclusivamente a categorías de egreso (`type === 'expense'`); las categorías de ingreso no generan documentos de presupuesto y `saveBudget` rechaza categorías que no sean de egreso.
+- Al fijar una meta o mes en cero (`0`) en el plan, el sistema elimina limpiamente cualquier presupuesto directo existente en ese período (`deleteBudget`) en lugar de rechazarlo, y la matriz respeta los overrides en cero prioritariamente (soportando claves numéricas y string).
 - El módulo de Cumplimiento de Presupuestos en Análisis evalúa únicamente categorías de egreso y desduplica los registros por categoría.
+- `seedUserInitialData` en `firestoreSync.ts` valida la presencia previa de documentos antes de inicializar colecciones; jamás recrea categorías, períodos o presupuestos que el usuario haya eliminado deliberadamente. `mergeLocalStoreForUpload` no reinyecta categorías predeterminadas ya descartadas en el almacenamiento local.
+- Al eliminar una categoría (`deleteCategory`), se remueven también sus proyecciones anuales vinculadas para evitar claves huérfanas.
 
 ## Comandos
 

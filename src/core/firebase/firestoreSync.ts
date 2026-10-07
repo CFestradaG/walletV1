@@ -305,7 +305,11 @@ export async function seedUserInitialData(userId: string, initialStore: UserData
     const existing = await getDoc(userDocRef);
     const collections = ['settings', 'accounts', 'categories', 'periods', 'transactions', 'budgets'] as const;
     const existingDocs = await Promise.all(collections.map((name) => getDocs(collection(db, 'users', userId, name))));
-    const existingIds = existingDocs.map((snapshot) => new Set(snapshot.docs.map((item) => item.id)));
+    const hasExistingCategories = existingDocs[collections.indexOf('categories')].docs.length > 0;
+    const hasExistingPeriods = existingDocs[collections.indexOf('periods')].docs.length > 0;
+    const hasExistingSettings = existingDocs[collections.indexOf('settings')].docs.length > 0;
+    const hasExistingBudgets = existingDocs[collections.indexOf('budgets')].docs.length > 0;
+
     let batch = writeBatch(db);
     let pendingWrites = 0;
     const commitBatchIfFull = async () => {
@@ -314,25 +318,44 @@ export async function seedUserInitialData(userId: string, initialStore: UserData
       batch = writeBatch(db);
       pendingWrites = 0;
     };
+
     if (!existing.exists()) {
-      batch.set(userDocRef, sanitizeFirestoreValue({ ...initialStore.profile, id: userId }));
+      batch.set(userDocRef, sanitizeFirestoreValue({ ...initialStore.profile, id: userId, initialized: true }));
       pendingWrites += 1;
     }
-    const seedIfMissing = (name: typeof collections[number], id: string, data: InitialRecord) => {
-      if (!existingIds[collections.indexOf(name)].has(id)) {
-        batch.set(doc(db, 'users', userId, name, id), ownedRecord(data, userId));
+
+    // Only seed categories if the user has NONE in Firestore (brand new account initialization)
+    if (!hasExistingCategories) {
+      for (const item of initialStore.categories) {
+        batch.set(doc(db, 'users', userId, 'categories', item.id), ownedRecord(item, userId));
         pendingWrites += 1;
+        await commitBatchIfFull();
       }
-    };
-    const records: [typeof collections[number], string, InitialRecord][] = [
-      ['settings', 'default', initialStore.settings],
-      ...initialStore.categories.map((item): [typeof collections[number], string, InitialRecord] => ['categories', item.id, item]),
-      ...initialStore.periods.map((item): [typeof collections[number], string, InitialRecord] => ['periods', item.id, item]),
-      ...initialStore.budgets.map((item): [typeof collections[number], string, InitialRecord] => ['budgets', item.id, item]),
-    ];
-    for (const [name, id, data] of records) {
-      seedIfMissing(name, id, data);
+    }
+
+    // Only seed periods if the user has NONE in Firestore
+    if (!hasExistingPeriods) {
+      for (const item of initialStore.periods) {
+        batch.set(doc(db, 'users', userId, 'periods', item.id), ownedRecord(item, userId));
+        pendingWrites += 1;
+        await commitBatchIfFull();
+      }
+    }
+
+    // Only seed settings if default document is missing
+    if (!hasExistingSettings) {
+      batch.set(doc(db, 'users', userId, 'settings', 'default'), ownedRecord(initialStore.settings, userId));
+      pendingWrites += 1;
       await commitBatchIfFull();
+    }
+
+    // Only seed initial budgets on completely fresh accounts (never resurrect deleted budgets)
+    if (!hasExistingBudgets && !hasExistingCategories && !hasExistingPeriods && initialStore.budgets.length > 0) {
+      for (const item of initialStore.budgets) {
+        batch.set(doc(db, 'users', userId, 'budgets', item.id), ownedRecord(item, userId));
+        pendingWrites += 1;
+        await commitBatchIfFull();
+      }
     }
 
     if (pendingWrites > 0) await batch.commit();

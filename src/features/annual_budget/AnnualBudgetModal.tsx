@@ -74,6 +74,12 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
   );
 
   useEffect(() => {
+    if (isOpen && userId !== 'default_user') {
+      setPlan(loadProjectionsPlan(userId, categories, selectedYear));
+    }
+  }, [isOpen, userId, selectedYear, categories]);
+
+  useEffect(() => {
     if (!isOpen || userId === 'default_user') return;
     return subscribeAnnualProjections(
       userId,
@@ -173,10 +179,11 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
         for (let m = 0; m < 12; m++) {
           const period = findPeriodForMonth(periods, selectedYear, m);
           if (period) {
-            const targetAmount =
+            const overrideVal =
               proj.monthlyOverrides?.[m] !== undefined
-                ? proj.monthlyOverrides[m]!
-                : proj.monthlyAmount;
+                ? proj.monthlyOverrides[m]
+                : (proj.monthlyOverrides as any)?.[String(m)];
+            const targetAmount = overrideVal !== undefined ? overrideVal : proj.monthlyAmount;
 
             const existingBudget = budgets.find(
               (b) => b.periodId === period.id && b.categoryId === cat.id
@@ -1248,7 +1255,13 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                                         type="number"
                                         min="0"
                                         placeholder={formatGTQ(proj.monthlyAmount)}
-                                        value={proj.monthlyOverrides?.[mIdx] !== undefined ? proj.monthlyOverrides[mIdx] : ''}
+                                        value={
+                                          proj.monthlyOverrides?.[mIdx] !== undefined
+                                            ? proj.monthlyOverrides[mIdx]
+                                            : (proj.monthlyOverrides as any)?.[String(mIdx)] !== undefined
+                                            ? (proj.monthlyOverrides as any)[String(mIdx)]
+                                            : ''
+                                        }
                                         onChange={(e) =>
                                           handleUpdateMonthOverride(
                                             cat.id,
@@ -1385,7 +1398,13 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                                         type="number"
                                         min="0"
                                         placeholder={formatGTQ(proj.monthlyAmount)}
-                                        value={proj.monthlyOverrides?.[mIdx] !== undefined ? proj.monthlyOverrides[mIdx] : ''}
+                                        value={
+                                          proj.monthlyOverrides?.[mIdx] !== undefined
+                                            ? proj.monthlyOverrides[mIdx]
+                                            : (proj.monthlyOverrides as any)?.[String(mIdx)] !== undefined
+                                            ? (proj.monthlyOverrides as any)[String(mIdx)]
+                                            : ''
+                                        }
                                         onChange={(e) =>
                                           handleUpdateMonthOverride(
                                             cat.id,
