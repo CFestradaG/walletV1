@@ -88,8 +88,9 @@ import {
 } from '../security/securityService';
 import {
   AnnualProjectionsPlan,
+  loadAllSavedProjectionsPlans,
+  saveProjectionsPlan,
 } from '../../features/annual_budget/annualBudgetEngine';
-import { loadAllSavedProjectionsPlans } from '../../features/annual_budget/annualBudgetEngine';
 
 const STORAGE_KEY = 'wallet_app_v4_store';
 const SESSION_USER_KEY = 'wallet_app_v4_user_id';
@@ -838,13 +839,22 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
             setDb((prev) => {
               const current = prev.users[uid] || initialStore;
+              const incomeCatIds = new Set(current.categories.filter((c) => c.type === 'income').map((c) => c.id));
+              const validBudgets = reconciled.filter((b) => !incomeCatIds.has(b.categoryId));
+              const orphanIncomeBudgets = reconciled.filter((b) => incomeCatIds.has(b.categoryId));
+              if (orphanIncomeBudgets.length > 0) {
+                for (const ob of orphanIncomeBudgets) {
+                  offlineQueue.enqueue(uid, 'DELETE_BUDGET', { budgetId: ob.id });
+                }
+              }
+
               return {
                 ...prev,
                 users: {
                   ...prev.users,
                   [uid]: {
                     ...current,
-                    budgets: reconciled,
+                    budgets: validBudgets,
                   },
                 },
               };
@@ -865,6 +875,19 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
                 pinCredential: securityData.pinCredential || null,
               } as SyncedSecurityPreferences);
             }
+
+            // Sincronizar en tiempo real cualquier plan de proyecciones anuales (projections_{year})
+            const projectionDocs = snap.docs.filter((item) => item.id.startsWith('projections_'));
+            for (const pDoc of projectionDocs) {
+              const pData = pDoc.data();
+              if (pData.userId === uid && pData.year && pData.projections) {
+                saveProjectionsPlan(uid, {
+                  year: Number(pData.year),
+                  projections: pData.projections,
+                });
+              }
+            }
+
             const rawSettings = snap.docs.find((d) => d.id === 'default')?.data() as Partial<UserSettings> | undefined;
             const remoteSettings = rawSettings;
             if (remoteSettings) {
@@ -1876,7 +1899,20 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     distributeBySubperiod: boolean;
   }): { ok: boolean; error?: string } => {
     if (!currentUserId || !currentUserStore) return { ok: false, error: 'Usuario no autenticado.' };
+    const existing = input.id
+      ? currentUserStore.budgets.find((budget) => budget.id === input.id)
+      : currentUserStore.budgets.find(
+          (budget) =>
+            budget.periodId === input.periodId &&
+            budget.categoryId === input.categoryId &&
+            (budget.subcategoryId || undefined) === (input.subcategoryId || undefined)
+        );
+
     if (input.targetAmount <= 0 || Number.isNaN(input.targetAmount)) {
+      if (existing) {
+        deleteBudget(existing.id);
+        return { ok: true };
+      }
       return { ok: false, error: 'El monto objetivo debe ser mayor que cero.' };
     }
     if (!input.categoryId) {
@@ -1891,7 +1927,6 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
 
     const now = new Date().toISOString();
-    const existing = input.id ? currentUserStore.budgets.find((budget) => budget.id === input.id) : undefined;
     if (input.id && !existing) return { ok: false, error: 'El presupuesto no existe en esta cuenta.' };
     const budget: Budget = existing
       ? {

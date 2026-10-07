@@ -277,11 +277,16 @@ export function calculateCategoryMatrix(
         const matchingPeriod = findPeriodForMonth(periods, year, mIdx);
 
         // 1. PROYECCIÓN / PRESUPUESTO PARA EL MES mIdx:
-        // Prioridad 1: Si hay un Budget real configurado para este período y categoría
         let mProj = 0;
         let isDirect = false;
 
-        if (matchingPeriod) {
+        // Si el plan tiene un override explícito de 0 para este mes, respetarlo prioritariamente
+        if (projConfig?.monthlyOverrides?.[mIdx] === 0) {
+          mProj = 0;
+          isDirect = true;
+          hasDirectBudget = false;
+        } else if (matchingPeriod && cat.type === 'expense') {
+          // Prioridad 1: Solo categorías de egreso pueden tener presupuestos (budgets) por período
           matchedPeriodId = matchingPeriod.id;
           const directBudget = budgets.find(
             (b) => b.periodId === matchingPeriod.id && b.categoryId === cat.id

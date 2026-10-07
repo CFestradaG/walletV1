@@ -46,8 +46,17 @@ type ViewTab = 'matrix' | 'editor';
 type MatrixDisplayMode = 'comparison' | 'projected' | 'actual' | 'variance';
 
 export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, onClose }) => {
-  const { categories, transactions, periods, budgets, saveBudget, saveAnnualProjections, resolvedTheme, currentUser } =
-    useWallet();
+  const {
+    categories,
+    transactions,
+    periods,
+    budgets,
+    saveBudget,
+    deleteBudget,
+    saveAnnualProjections,
+    resolvedTheme,
+    currentUser,
+  } = useWallet();
   const isDark = resolvedTheme === 'dark';
 
   const [selectedYear, setSelectedYear] = useState<number>(() => new Date().getFullYear());
@@ -114,12 +123,19 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
       const proj = cloned.projections[cat.id] || { categoryId: cat.id, monthlyAmount: 0 };
       const overrides = { ...(proj.monthlyOverrides || {}) };
 
-      for (let m = 0; m < 12; m++) {
-        const p = findPeriodForMonth(periods, selectedYear, m);
-        if (p) {
-          const b = budgets.find((bg) => bg.periodId === p.id && bg.categoryId === cat.id);
-          if (b && b.targetAmount > 0) {
-            overrides[m] = b.targetAmount;
+      // Solo para categorías de egreso buscar presupuestos de período
+      if (cat.type === 'expense') {
+        for (let m = 0; m < 12; m++) {
+          // Si el plan ya tiene un override explícito (incluso 0), respetarlo siempre
+          if (proj.monthlyOverrides?.[m] !== undefined) {
+            continue;
+          }
+          const p = findPeriodForMonth(periods, selectedYear, m);
+          if (p) {
+            const b = budgets.find((bg) => bg.periodId === p.id && bg.categoryId === cat.id);
+            if (b && b.targetAmount > 0) {
+              overrides[m] = b.targetAmount;
+            }
           }
         }
       }
@@ -139,37 +155,50 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
     saveAnnualProjections(editingPlan);
     setPlan(editingPlan);
 
-    // Sincronizar automáticamente hacia los presupuestos reales (budgets) de cada período
-    categories.forEach((cat) => {
-      const proj = editingPlan.projections[cat.id];
-      if (!proj) return;
-
-      for (let m = 0; m < 12; m++) {
-        const period = findPeriodForMonth(periods, selectedYear, m);
-        if (period) {
-          const targetAmount =
-            proj.monthlyOverrides?.[m] !== undefined
-              ? proj.monthlyOverrides[m]!
-              : proj.monthlyAmount;
-
-          const existingBudget = budgets.find(
-            (b) => b.periodId === period.id && b.categoryId === cat.id
-          );
-
-          if (targetAmount > 0 || existingBudget) {
-            saveBudget({
-              id: existingBudget?.id,
-              periodId: period.id,
-              categoryId: cat.id,
-              targetAmount: targetAmount,
-              alertThreshold80: existingBudget?.alertThreshold80 ?? true,
-              alertThreshold100: existingBudget?.alertThreshold100 ?? true,
-              distributeBySubperiod: existingBudget?.distributeBySubperiod ?? true,
-            });
-          }
-        }
+    // 1. Limpiar cualquier presupuesto huérfano de categorías de ingreso (ej. Salario)
+    const incomeCatIds = new Set(categories.filter((c) => c.type === 'income').map((c) => c.id));
+    budgets.forEach((b) => {
+      if (incomeCatIds.has(b.categoryId)) {
+        deleteBudget(b.id);
       }
     });
+
+    // 2. Sincronizar hacia los presupuestos reales (budgets) ÚNICAMENTE para categorías de egreso
+    categories
+      .filter((cat) => cat.type === 'expense')
+      .forEach((cat) => {
+        const proj = editingPlan.projections[cat.id];
+        if (!proj) return;
+
+        for (let m = 0; m < 12; m++) {
+          const period = findPeriodForMonth(periods, selectedYear, m);
+          if (period) {
+            const targetAmount =
+              proj.monthlyOverrides?.[m] !== undefined
+                ? proj.monthlyOverrides[m]!
+                : proj.monthlyAmount;
+
+            const existingBudget = budgets.find(
+              (b) => b.periodId === period.id && b.categoryId === cat.id
+            );
+
+            if (targetAmount > 0) {
+              saveBudget({
+                id: existingBudget?.id,
+                periodId: period.id,
+                categoryId: cat.id,
+                targetAmount: targetAmount,
+                alertThreshold80: existingBudget?.alertThreshold80 ?? true,
+                alertThreshold100: existingBudget?.alertThreshold100 ?? true,
+                distributeBySubperiod: existingBudget?.distributeBySubperiod ?? true,
+              });
+            } else if (existingBudget) {
+              // Si el usuario puso 0 o eliminó el monto, eliminar el presupuesto directo en lugar de fallar
+              deleteBudget(existingBudget.id);
+            }
+          }
+        }
+      });
 
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 2500);
@@ -194,7 +223,7 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
         ...editingPlan.projections,
         [catId]: {
           ...prev,
-          monthlyAmount: amount,
+          monthlyAmount: Math.max(0, amount),
         },
       },
     });
@@ -206,7 +235,7 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
     if (val === null || isNaN(val)) {
       delete overrides[monthIdx];
     } else {
-      overrides[monthIdx] = val;
+      overrides[monthIdx] = Math.max(0, val);
     }
 
     setEditingPlan({
@@ -1217,8 +1246,9 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                                       </div>
                                       <input
                                         type="number"
+                                        min="0"
                                         placeholder={formatGTQ(proj.monthlyAmount)}
-                                        value={proj.monthlyOverrides?.[mIdx] ?? ''}
+                                        value={proj.monthlyOverrides?.[mIdx] !== undefined ? proj.monthlyOverrides[mIdx] : ''}
                                         onChange={(e) =>
                                           handleUpdateMonthOverride(
                                             cat.id,
@@ -1353,8 +1383,9 @@ export const AnnualBudgetModal: React.FC<AnnualBudgetModalProps> = ({ isOpen, on
                                       </div>
                                       <input
                                         type="number"
+                                        min="0"
                                         placeholder={formatGTQ(proj.monthlyAmount)}
-                                        value={proj.monthlyOverrides?.[mIdx] ?? ''}
+                                        value={proj.monthlyOverrides?.[mIdx] !== undefined ? proj.monthlyOverrides[mIdx] : ''}
                                         onChange={(e) =>
                                           handleUpdateMonthOverride(
                                             cat.id,

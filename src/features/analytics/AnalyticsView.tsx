@@ -141,12 +141,27 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     return Array.from(map.values()).filter((a) => a.spent > 0 || a.income > 0);
   }, [accounts, periodTransactions]);
 
-  // MODULE 5: Cumplimiento de Presupuestos
+  // MODULE 5: Cumplimiento de Presupuestos (Solo categorías de egreso, desduplicadas)
   const budgetPerformance = useMemo(() => {
     if (!activePeriod) return [];
-    const pBudgets = budgets.filter((b) => b.periodId === activePeriod.id);
+    // Filtrar solo presupuestos de egresos válidos para el período activo
+    const pBudgets = budgets.filter((b) => {
+      if (b.periodId !== activePeriod.id) return false;
+      const cat = categories.find((c) => c.id === b.categoryId);
+      return Boolean(cat && cat.type === 'expense' && (b.targetAmount ?? b.amount ?? 0) > 0);
+    });
 
-    return pBudgets.map((b) => {
+    // Desduplicar por (categoryId + subcategoryId) en caso de que existan registros repetidos
+    const uniqueMap = new Map<string, (typeof pBudgets)[0]>();
+    pBudgets.forEach((b) => {
+      const key = `${b.categoryId}_${b.subcategoryId || 'root'}`;
+      const existing = uniqueMap.get(key);
+      if (!existing || (b.updatedAt && (!existing.updatedAt || b.updatedAt > existing.updatedAt))) {
+        uniqueMap.set(key, b);
+      }
+    });
+
+    return Array.from(uniqueMap.values()).map((b) => {
       const spent = periodTransactions
         .filter(
           (t) =>
