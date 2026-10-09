@@ -77,7 +77,6 @@ export const MoreView: React.FC<MoreViewProps> = ({
     lastSyncTime,
     forceSyncNow,
     previewBalanceReconciliation,
-    applyBalanceReconciliation,
   } = useWallet();
 
   const isDark = resolvedTheme === 'dark';
@@ -140,25 +139,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
     setReconciliationNotice(
       pending === 0
         ? 'Diagnóstico completado. Los saldos coinciden con las transacciones registradas.'
-        : `Diagnóstico completado. ${pending} cuenta(s) requieren ajuste.`
-    );
-  };
-
-  const handleApplyReconciliation = () => {
-    const confirmed = window.confirm(
-      'Se actualizarán los saldos actuales de las cuentas marcadas para que coincidan con el recálculo desde el saldo inicial y las transacciones. ¿Deseas continuar?'
-    );
-    if (!confirmed) return;
-    const result = applyBalanceReconciliation();
-    if (!result.ok) {
-      setReconciliationNotice(result.error || 'No se pudo aplicar la reconciliación.');
-      return;
-    }
-    setReconciliationPreview(null);
-    setReconciliationNotice(
-      result.updatedCount === 0
-        ? 'No había cuentas pendientes de ajustar.'
-        : `Reconciliación aplicada en ${result.updatedCount} cuenta(s). Los cambios quedaron en cola de sincronización. Puedes revisar de nuevo para confirmar.`
+        : `Diagnóstico completado. ${pending} cuenta(s) difieren del recálculo histórico.`
     );
   };
 
@@ -643,7 +624,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
                         Diagnóstico de saldos
                       </span>
                       <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>
-                        Recalcula saldos desde el saldo inicial y las transacciones antes de corregir.
+                        Compara tus saldos actuales contra un recálculo histórico de referencia.
                       </span>
                     </div>
                   </div>
@@ -668,6 +649,9 @@ export const MoreView: React.FC<MoreViewProps> = ({
                     {mismatchedBalances.length > 0 ? (
                       <>
                         <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1">
+                          <div className={`p-2.5 rounded-xl border text-[11px] ${isDark ? 'bg-amber-500/10 border-amber-500/20 text-amber-300' : 'bg-amber-50 border-amber-200 text-amber-800'}`}>
+                            Tus saldos actuales no se modificarán. El recálculo no incluye ajustes manuales hechos directamente sobre cuentas, por eso puede diferir de la realidad.
+                          </div>
                           {mismatchedBalances.map((item) => (
                             <div
                               key={item.accountId}
@@ -683,18 +667,11 @@ export const MoreView: React.FC<MoreViewProps> = ({
                               </div>
                               <div className={`mt-1 grid grid-cols-2 gap-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                                 <span>Actual: {formatGTQ(item.currentBalance)}</span>
-                                <span>Esperado: {formatGTQ(item.expectedBalance)}</span>
+                                <span>Calculado: {formatGTQ(item.expectedBalance)}</span>
                               </div>
                             </div>
                           ))}
                         </div>
-                        <button
-                          type="button"
-                          onClick={handleApplyReconciliation}
-                          className="w-full px-3 py-2 rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[11px] font-bold hover:bg-amber-500/25 transition-colors"
-                        >
-                          Aplicar corrección a {mismatchedBalances.length} cuenta(s)
-                        </button>
                       </>
                     ) : (
                       <div className={`p-2.5 rounded-xl border text-[11px] ${isDark ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>
