@@ -27,6 +27,7 @@ import {
 } from '../../features/financial_periods/periodEngine';
 import {
   applyTransactionToAccounts,
+  AccountReconciliationResult,
   BudgetProgress,
   calculateBudgetProgress,
   calculatePeriodSummary,
@@ -34,7 +35,10 @@ import {
   getTransactionsForPeriod,
   PeriodFinancialSummary,
   PortfolioSummary,
+  recalculateAccountBalances,
+  reconcileAccountBalances,
   reverseTransactionOnAccounts,
+  saveTransactionToAccounts,
   TransactionValidationResult,
   validateTransactionInput,
 } from '../../features/transactions/financialEngine';
@@ -347,6 +351,8 @@ interface WalletContextValue {
   pendingOfflineCount: number;
   lastSyncTime: number | null;
   forceSyncNow: () => Promise<QueueProcessResult>;
+  previewBalanceReconciliation: () => AccountReconciliationResult[];
+  applyBalanceReconciliation: () => { ok: boolean; updatedCount: number; error?: string };
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -1862,8 +1868,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     };
 
     updateCurrentUserStore((store) => {
-      const reversedAccounts = reverseTransactionOnAccounts(existingTx, store.accounts);
-      const finalAccounts = applyTransactionToAccounts(updatedTx, reversedAccounts);
+      const finalAccounts = saveTransactionToAccounts(updatedTx, store.accounts, existingTx);
       if (auth.currentUser?.uid === currentUserId) {
         offlineQueue.enqueue(currentUserId, 'SAVE_TX_AND_ACCOUNTS', {
           transaction: updatedTx,
@@ -2130,6 +2135,53 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return { pendingCount: 0, lastError: null };
   };
 
+  const previewBalanceReconciliation = (): AccountReconciliationResult[] => {
+    if (!currentUserStore) return [];
+    return reconcileAccountBalances(currentUserStore.accounts, currentUserStore.transactions);
+  };
+
+  const applyBalanceReconciliation = (): { ok: boolean; updatedCount: number; error?: string } => {
+    if (!currentUserId || !currentUserStore) {
+      return { ok: false, updatedCount: 0, error: 'Usuario no autenticado.' };
+    }
+
+    const preview = reconcileAccountBalances(currentUserStore.accounts, currentUserStore.transactions);
+    const changedIds = new Set(preview.filter((item) => item.needsUpdate).map((item) => item.accountId));
+    if (changedIds.size === 0) return { ok: true, updatedCount: 0 };
+
+    const expectedAccounts = recalculateAccountBalances(currentUserStore.accounts, currentUserStore.transactions);
+    const expectedById = new Map(expectedAccounts.map((account) => [account.id, account]));
+    const now = new Date().toISOString();
+    const accountsToSync: Array<Account & { balanceAdjustment: number }> = [];
+    const updatedAccounts = currentUserStore.accounts.map((account) => {
+      if (!changedIds.has(account.id)) return account;
+      const expected = expectedById.get(account.id);
+      if (!expected) return account;
+      const currentBalance = Math.round(expected.currentBalance * 100) / 100;
+      const balanceAdjustment = Math.round((currentBalance - account.currentBalance) * 100) / 100;
+      const updatedAccount: Account & { balanceAdjustment: number } = {
+        ...account,
+        currentBalance,
+        balanceAdjustment,
+        updatedAt: now,
+      };
+      accountsToSync.push(updatedAccount);
+      return updatedAccount;
+    });
+
+    updateCurrentUserStore((store) => {
+      return { ...store, accounts: updatedAccounts };
+    });
+
+    if (auth.currentUser?.uid === currentUserId) {
+      for (const account of accountsToSync) {
+        offlineQueue.enqueue(currentUserId, 'SAVE_ACCOUNT', { account });
+      }
+    }
+
+    return { ok: true, updatedCount: accountsToSync.length };
+  };
+
   const saveSyncedSecurityPreferences = (preferences: SyncedSecurityPreferences) => {
     if (currentUserId && auth.currentUser?.uid === currentUserId) {
       offlineQueue.enqueue(currentUserId, 'SAVE_SECURITY_PREFERENCES', { preferences });
@@ -2192,6 +2244,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         pendingOfflineCount,
         lastSyncTime,
         forceSyncNow,
+        previewBalanceReconciliation,
+        applyBalanceReconciliation,
 
         accounts,
         activeAccounts,

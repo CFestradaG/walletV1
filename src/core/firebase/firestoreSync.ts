@@ -24,7 +24,7 @@ import { UserDataStore } from '../data/initialData';
 import { AnnualProjectionsPlan } from '../../features/annual_budget/annualBudgetEngine';
 import { SyncedSecurityPreferences } from '../security/securityService';
 import { auth, db, handleFirestoreError, OperationType } from './firebase';
-import { applyTransactionToAccounts, reverseTransactionOnAccounts, validateTransactionInput } from '../../features/transactions/financialEngine';
+import { reverseTransactionOnAccounts, saveTransactionToAccounts, validateTransactionInput } from '../../features/transactions/financialEngine';
 
 type InitialRecord = UserSettings | Account | Category | FinancialPeriod | Transaction | Budget;
 
@@ -206,8 +206,7 @@ export async function syncTransaction(userId: string, tx: Transaction): Promise<
 }
 
 /**
- * Atomically commits a transaction and all affected accounts in a single Firestore writeBatch.
- * Guarantees that neither accounts nor the transaction get out-of-sync on Firestore.
+ * Atomically commits a transaction and all affected accounts in a single Firestore transaction.
  */
 export async function syncTransactionWithAccounts(
   userId: string,
@@ -239,9 +238,7 @@ export async function syncTransactionWithAccounts(
       originAccountId: tx.originAccountId, destinationAccountId: tx.destinationAccountId, date: tx.date,
     }, currentAccounts, categories, previous);
     if (!validation.valid) throw new Error(validation.error || 'El movimiento no es válido.');
-    let accounts = previous ? reverseTransactionOnAccounts(previous, currentAccounts) : currentAccounts;
-    if (previous) accounts = reverseTransactionOnAccounts(previous, accounts);
-    accounts = applyTransactionToAccounts(tx, accounts);
+    const accounts = saveTransactionToAccounts(tx, currentAccounts, previous);
     firestoreTransaction.set(txRef, ownedRecord(tx, userId));
     for (const account of accounts) {
       firestoreTransaction.set(doc(db, 'users', userId, 'accounts', account.id), ownedRecord(account, userId));
@@ -255,7 +252,7 @@ export async function deleteTransactionFromDb(userId: string, txId: string): Pro
 }
 
 /**
- * Atomically deletes a transaction and updates the reverted account balances in a single writeBatch.
+ * Atomically deletes a transaction and updates the reverted account balances in a single Firestore transaction.
  */
 export async function deleteTransactionWithAccounts(
   userId: string,

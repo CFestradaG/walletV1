@@ -290,6 +290,64 @@ export function reverseTransactionOnAccounts(
   });
 }
 
+export function saveTransactionToAccounts(
+  tx: Transaction,
+  accounts: Account[],
+  previousTx?: Transaction
+): Account[] {
+  const baseAccounts = previousTx
+    ? reverseTransactionOnAccounts(previousTx, accounts)
+    : accounts;
+  return applyTransactionToAccounts(tx, baseAccounts);
+}
+
+export interface AccountReconciliationResult {
+  accountId: string;
+  currentBalance: number;
+  expectedBalance: number;
+  difference: number;
+  needsUpdate: boolean;
+}
+
+function transactionSortKey(tx: Transaction): string {
+  return `${tx.date}T${tx.time || '00:00'}|${tx.createdAt}|${tx.id}`;
+}
+
+export function recalculateAccountBalances(
+  accounts: Account[],
+  transactions: Transaction[]
+): Account[] {
+  const resetAccounts = accounts.map((account) => ({
+    ...account,
+    currentBalance: Math.round(account.initialBalance * 100) / 100,
+  }));
+
+  return [...transactions]
+    .sort((a, b) => transactionSortKey(a).localeCompare(transactionSortKey(b)))
+    .reduce((nextAccounts, tx) => applyTransactionToAccounts(tx, nextAccounts), resetAccounts);
+}
+
+export function reconcileAccountBalances(
+  accounts: Account[],
+  transactions: Transaction[]
+): AccountReconciliationResult[] {
+  const expectedAccounts = recalculateAccountBalances(accounts, transactions);
+  const expectedById = new Map(expectedAccounts.map((account) => [account.id, account.currentBalance]));
+
+  return accounts.map((account) => {
+    const expectedBalance = expectedById.get(account.id) ?? account.currentBalance;
+    const currentBalance = Math.round(account.currentBalance * 100) / 100;
+    const difference = Math.round((expectedBalance - currentBalance) * 100) / 100;
+    return {
+      accountId: account.id,
+      currentBalance,
+      expectedBalance,
+      difference,
+      needsUpdate: Math.abs(difference) >= 0.01,
+    };
+  });
+}
+
 export function getTransactionsForPeriod(
   transactions: Transaction[],
   period?: FinancialPeriod | null

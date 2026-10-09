@@ -15,6 +15,7 @@ import {
   Moon,
   Plus,
   RotateCcw,
+  Scale,
   Shield,
   ShieldCheck,
   Smartphone,
@@ -32,6 +33,8 @@ import { Category, CategoryType, ThemeMode } from '../../core/types/models';
 import { getSecurityConfig } from '../../core/security/securityService';
 import { usePWAInstall } from '../../core/pwa/usePWAInstall';
 import { AboutSecurityModal } from './AboutSecurityModal';
+import type { AccountReconciliationResult } from '../transactions/financialEngine';
+import { formatGTQ } from '../../core/utils/formatters';
 
 interface MoreViewProps {
   onOpenPeriodsModal: () => void;
@@ -59,6 +62,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
     updateSettings,
     toggleHideBalances,
     categories,
+    accounts,
     createCategory,
     deleteCategory,
     updateCategoryName,
@@ -72,6 +76,8 @@ export const MoreView: React.FC<MoreViewProps> = ({
     pendingOfflineCount,
     lastSyncTime,
     forceSyncNow,
+    previewBalanceReconciliation,
+    applyBalanceReconciliation,
   } = useWallet();
 
   const isDark = resolvedTheme === 'dark';
@@ -94,7 +100,19 @@ export const MoreView: React.FC<MoreViewProps> = ({
   const [accountResetNotice, setAccountResetNotice] = useState<string | null>(null);
   const [isCheckingSync, setIsCheckingSync] = useState(false);
   const [syncCheckNotice, setSyncCheckNotice] = useState<string | null>(null);
+  const [reconciliationPreview, setReconciliationPreview] = useState<AccountReconciliationResult[] | null>(null);
+  const [reconciliationNotice, setReconciliationNotice] = useState<string | null>(null);
   const [isAboutSecurityOpen, setIsAboutSecurityOpen] = useState(false);
+
+  const accountNameById = useMemo(
+    () => new Map(accounts.map((account) => [account.id, account.name])),
+    [accounts]
+  );
+
+  const mismatchedBalances = useMemo(
+    () => reconciliationPreview?.filter((item) => item.needsUpdate) ?? [],
+    [reconciliationPreview]
+  );
 
   const handleCheckSync = async () => {
     if (!isOnline || isCheckingSync || isSyncing) return;
@@ -113,6 +131,35 @@ export const MoreView: React.FC<MoreViewProps> = ({
     } finally {
       setIsCheckingSync(false);
     }
+  };
+
+  const handlePreviewReconciliation = () => {
+    const preview = previewBalanceReconciliation();
+    setReconciliationPreview(preview);
+    const pending = preview.filter((item) => item.needsUpdate).length;
+    setReconciliationNotice(
+      pending === 0
+        ? 'Diagnóstico completado. Los saldos coinciden con las transacciones registradas.'
+        : `Diagnóstico completado. ${pending} cuenta(s) requieren ajuste.`
+    );
+  };
+
+  const handleApplyReconciliation = () => {
+    const confirmed = window.confirm(
+      'Se actualizarán los saldos actuales de las cuentas marcadas para que coincidan con el recálculo desde el saldo inicial y las transacciones. ¿Deseas continuar?'
+    );
+    if (!confirmed) return;
+    const result = applyBalanceReconciliation();
+    if (!result.ok) {
+      setReconciliationNotice(result.error || 'No se pudo aplicar la reconciliación.');
+      return;
+    }
+    setReconciliationPreview(null);
+    setReconciliationNotice(
+      result.updatedCount === 0
+        ? 'No había cuentas pendientes de ajustar.'
+        : `Reconciliación aplicada en ${result.updatedCount} cuenta(s). Los cambios quedaron en cola de sincronización. Puedes revisar de nuevo para confirmar.`
+    );
   };
 
   const filteredCategories = useMemo(() => {
@@ -585,6 +632,77 @@ export const MoreView: React.FC<MoreViewProps> = ({
                   </button>
                 </div>
                 {syncCheckNotice && <p role="status" className={`mt-2 text-[11px] ${pendingOfflineCount > 0 ? 'text-amber-600 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}`}>{syncCheckNotice}</p>}
+              </div>
+
+              <div className={`mt-2 p-3 rounded-2xl border ${isDark ? 'bg-black/25 border-white/5' : 'bg-slate-50 border-slate-200'}`}>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-start gap-2.5 min-w-0">
+                    <Scale className="w-4 h-4 mt-0.5 text-sky-600 dark:text-sky-400 shrink-0" />
+                    <div className="text-[11px] min-w-0">
+                      <span className={`font-semibold block ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                        Diagnóstico de saldos
+                      </span>
+                      <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>
+                        Recalcula saldos desde el saldo inicial y las transacciones antes de corregir.
+                      </span>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handlePreviewReconciliation}
+                    className={`shrink-0 px-3 py-2 rounded-xl text-[11px] font-bold flex items-center gap-1.5 transition-colors ${isDark ? 'bg-sky-500/15 text-sky-300 hover:bg-sky-500/25' : 'bg-sky-100 text-sky-800 hover:bg-sky-200'}`}
+                  >
+                    <Scale className="w-3.5 h-3.5" />
+                    Revisar
+                  </button>
+                </div>
+
+                {reconciliationNotice && (
+                  <p role="status" className={`mt-2 text-[11px] ${mismatchedBalances.length > 0 ? 'text-amber-600 dark:text-amber-300' : 'text-emerald-700 dark:text-emerald-300'}`}>
+                    {reconciliationNotice}
+                  </p>
+                )}
+
+                {reconciliationPreview && (
+                  <div className="mt-3 space-y-2">
+                    {mismatchedBalances.length > 0 ? (
+                      <>
+                        <div className="max-h-52 overflow-y-auto space-y-1.5 pr-1">
+                          {mismatchedBalances.map((item) => (
+                            <div
+                              key={item.accountId}
+                              className={`p-2.5 rounded-xl border text-[11px] ${isDark ? 'bg-black/25 border-white/5' : 'bg-white border-slate-200'}`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className={`font-bold truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                                  {accountNameById.get(item.accountId) || 'Cuenta sin nombre'}
+                                </span>
+                                <span className={`font-mono font-bold ${item.difference < 0 ? 'text-rose-500' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                                  {formatGTQ(item.difference, { showSign: true })}
+                                </span>
+                              </div>
+                              <div className={`mt-1 grid grid-cols-2 gap-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                <span>Actual: {formatGTQ(item.currentBalance)}</span>
+                                <span>Esperado: {formatGTQ(item.expectedBalance)}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleApplyReconciliation}
+                          className="w-full px-3 py-2 rounded-xl bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 text-[11px] font-bold hover:bg-amber-500/25 transition-colors"
+                        >
+                          Aplicar corrección a {mismatchedBalances.length} cuenta(s)
+                        </button>
+                      </>
+                    ) : (
+                      <div className={`p-2.5 rounded-xl border text-[11px] ${isDark ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-800'}`}>
+                        No se detectaron diferencias entre saldos guardados y saldos recalculados.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
