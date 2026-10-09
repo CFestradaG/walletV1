@@ -140,6 +140,34 @@
         "updatedAt": { "type": "string", "maxLength": 60 }
       },
       "required": ["id", "userId", "periodId", "categoryId", "targetAmount", "currency"]
+    },
+    "FinancialHealthReport": {
+      "title": "FinancialHealthReport",
+      "description": "Monthly executive health diagnostic with weekly timeline breakdown and actionable guidance",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "schemaVersion": { "type": "number" },
+        "year": { "type": "number" },
+        "month": { "type": "number" },
+        "monthName": { "type": "string", "maxLength": 50 },
+        "score": { "type": "number" },
+        "level": { "type": "string", "enum": ["critical", "alert", "moderate", "solid", "excellent"] },
+        "badgeLabel": { "type": "string", "maxLength": 50 },
+        "totalIncome": { "type": "number" },
+        "totalExpenses": { "type": "number" },
+        "netSavings": { "type": "number" },
+        "savingsRatePct": { "type": "number" },
+        "debtToIncomeRatioPct": { "type": "number" },
+        "liquidityMonths": { "type": "number" },
+        "weeks": { "type": "array", "description": "4-week breakdown of metrics and burn rate" },
+        "recommendations": { "type": "array", "description": "Actionable prioritized financial recommendations" },
+        "executiveSummaryText": { "type": "string", "maxLength": 1500 },
+        "createdAt": { "type": "string", "maxLength": 60 },
+        "updatedAt": { "type": "string", "maxLength": 60 }
+      },
+      "required": ["id", "userId", "schemaVersion", "year", "month", "score", "level"]
     }
   },
   "firestore": {
@@ -170,6 +198,10 @@
     "/users/{userId}/budgets/{budgetId}": {
       "schema": { "$ref": "#/entities/Budget" },
       "description": "User budget targets per period and category"
+    },
+    "/users/{userId}/financial_reports/{reportId}": {
+      "schema": { "$ref": "#/entities/FinancialHealthReport" },
+      "description": "User executive monthly and 4-week health reports"
     }
   }
 }

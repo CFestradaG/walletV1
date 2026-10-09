@@ -25,6 +25,7 @@ import { TransactionModal } from './features/transactions/TransactionModal';
 import { TemplatesView } from './features/transactions/TemplatesView';
 import { PeriodsModal } from './features/financial_periods/PeriodsModal';
 import { AnnualBudgetModal } from './features/annual_budget/AnnualBudgetModal';
+import { FinancialHealthModal } from './features/analytics/FinancialHealthModal';
 import { SecurityLockScreen } from './core/security/SecurityLockScreen';
 import { SecuritySettingsModal } from './core/security/SecuritySettingsModal';
 import { PWAInstallModal } from './core/pwa/PWAInstallModal';
@@ -79,6 +80,7 @@ const WalletAppShell: React.FC = () => {
   // Periods & Unified Annual Budget Modals State
   const [isPeriodsModalOpen, setIsPeriodsModalOpen] = useState(false);
   const [isAnnualBudgetModalOpen, setIsAnnualBudgetModalOpen] = useState(false);
+  const [isHealthModalOpen, setIsHealthModalOpen] = useState(false);
 
   if (!isAuthenticated) {
     return <AuthScreen />;
@@ -314,6 +316,7 @@ const WalletAppShell: React.FC = () => {
             onOpenPeriodsModal={() => setIsPeriodsModalOpen(true)}
             onNavigateTab={setActiveTab}
             onOpenAnnualBudgetModal={() => setIsAnnualBudgetModalOpen(true)}
+            onOpenHealthReport={() => setIsHealthModalOpen(true)}
           />
         )}
 
@@ -351,6 +354,7 @@ const WalletAppShell: React.FC = () => {
             onOpenBudgetsModal={() => setIsAnnualBudgetModalOpen(true)}
             onOpenNewTransaction={() => handleOpenNewTransaction()}
             onOpenAnnualBudgetModal={() => setIsAnnualBudgetModalOpen(true)}
+            onOpenHealthReport={() => setIsHealthModalOpen(true)}
           />
         )}
 
@@ -436,6 +440,11 @@ const WalletAppShell: React.FC = () => {
       <AnnualBudgetModal
         isOpen={isAnnualBudgetModalOpen}
         onClose={() => setIsAnnualBudgetModalOpen(false)}
+      />
+
+      <FinancialHealthModal
+        isOpen={isHealthModalOpen}
+        onClose={() => setIsHealthModalOpen(false)}
       />
 
       <SecuritySettingsModal

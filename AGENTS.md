@@ -55,6 +55,7 @@ Modelos relevantes en `src/core/types/models.ts`:
 - Los movimientos son gastos, ingresos o transferencias, con fecha ISO y referencias opcionales a período/subperíodo.
 - `FinancialPeriod` contempla `referenceMonth` y `monthIndex` para asociar períodos con meses del panorama.
 - `Budget` se relaciona con un período y categoría, con metas y alertas configurables. Los planes proyectados anuales se guardan por usuario/año en `users/{uid}/settings/projections_{year}`; las metas reales por período permanecen en `budgets`.
+- `FinancialHealthReport` guarda diagnósticos ejecutivos en `users/{uid}/financial_reports/{reportId}` con desglose de 4 semanas, score (0-100), tasa de ahorro, DTI de tarjetas, cobertura líquida y recomendaciones accionables.
 - `TransactionTemplate` guarda categoría, subcategoría, monto, cuenta y nota; opcionalmente define fecha base y recurrencia semanal (7 días), quincenal (15 días) o mensual. Se guarda en `users/{uid}/templates`.
 - `UserSettings` incluye tema, ocultamiento de saldos y período activo.
 

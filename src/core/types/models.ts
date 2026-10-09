@@ -153,3 +153,62 @@ export interface UserSettings {
   hideBalances: boolean;
   activePeriodId?: string;
 }
+
+export type HealthScoreLevel = 'critical' | 'alert' | 'moderate' | 'solid' | 'excellent';
+
+export interface WeeklyHealthProgress {
+  weekIndex: number; // 1, 2, 3, 4
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  income: number;
+  expenses: number;
+  netSavings: number;
+  burnRateVsExpectedPct: number; // e.g. 95% = dentro del ritmo esperado
+  status: 'on_track' | 'warning' | 'critical';
+  highlight: string;
+}
+
+export interface MonthlyExecutiveReport {
+  id: string; // e.g. "report_2026_10"
+  userId: string;
+  schemaVersion: number; // e.g. 1
+  year: number;
+  month: number; // 1-12
+  monthName: string;
+  score: number; // 0 - 100
+  level: HealthScoreLevel;
+  badgeLabel: string; // e.g. "Sólida", "Excelente", "Alerta"
+  totalIncome: number;
+  totalExpenses: number;
+  netSavings: number;
+  savingsRatePct: number; // %
+  debtToIncomeRatioPct: number; // DTI %
+  liquidityMonths: number; // Meses de cobertura con efectivo disponible
+  weeks: WeeklyHealthProgress[];
+  recommendations: Array<{
+    id: string;
+    type: 'debt' | 'budget' | 'savings' | 'behavior';
+    priority: 'high' | 'medium' | 'low';
+    title: string;
+    detail: string;
+    actionLabel?: string;
+  }>;
+  executiveSummaryText: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AnnualExecutiveSummary {
+  year: number;
+  scoreAvg: number;
+  level: HealthScoreLevel;
+  badgeLabel: string;
+  totalAnnualIncome: number;
+  totalAnnualExpenses: number;
+  totalAnnualSavings: number;
+  annualSavingsRatePct: number;
+  bestMonthName: string;
+  toughestMonthName: string;
+  strategicRecommendations: string[];
+}
+

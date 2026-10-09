@@ -27,6 +27,7 @@ import {
   calculateCumulativeYearSummary,
   loadProjectionsPlan,
 } from '../annual_budget/annualBudgetEngine';
+import { FinancialHealthCard } from './FinancialHealthCard';
 
 interface DashboardViewProps {
   onOpenNewTransaction: () => void;
@@ -35,6 +36,7 @@ interface DashboardViewProps {
   onOpenBudgetsModal?: () => void;
   onNavigateTab: (tab: any) => void;
   onOpenAnnualBudgetModal?: () => void;
+  onOpenHealthReport?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -44,6 +46,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onOpenBudgetsModal,
   onNavigateTab,
   onOpenAnnualBudgetModal,
+  onOpenHealthReport,
 }) => {
   const {
     activePeriod,
@@ -247,6 +250,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         </div>
       </div>
+
+      {/* TARJETA EJECUTIVA DE SALUD FINANCIERA */}
+      <FinancialHealthCard onOpenFullReport={onOpenHealthReport} />
 
       {/* ACCESOS RÁPIDOS */}
       <div className="grid grid-cols-4 gap-2">

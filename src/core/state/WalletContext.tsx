@@ -5,6 +5,7 @@ import {
   Budget,
   Category,
   FinancialPeriod,
+  MonthlyExecutiveReport,
   SubdivisionMode,
   ThemeMode,
   Transaction,
@@ -74,6 +75,8 @@ import {
   syncTransactionWithAccounts,
   resetUserFinancialData,
   loadSecurityPreferences,
+  syncFinancialHealthReport,
+  subscribeFinancialHealthReports,
 } from '../firebase/firestoreSync';
 import {
   offlineQueue,
@@ -336,6 +339,9 @@ interface WalletContextValue {
   saveAnnualProjections: (plan: AnnualProjectionsPlan) => void;
   projectionsVersion: number;
 
+  financialReports: MonthlyExecutiveReport[];
+  saveFinancialReport: (report: MonthlyExecutiveReport) => Promise<void>;
+
   isOnline: boolean;
   isSyncing: boolean;
   pendingOfflineCount: number;
@@ -387,6 +393,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [pendingOfflineCount, setPendingOfflineCount] = useState<number>(0);
   const [lastSyncTime, setLastSyncTime] = useState<number | null>(null);
   const [projectionsVersion, setProjectionsVersion] = useState<number>(0);
+  const [financialReports, setFinancialReports] = useState<MonthlyExecutiveReport[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(() => {
     try {
       const saved = localStorage.getItem(SESSION_USER_KEY);
@@ -922,6 +929,16 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           (err) => reportReadError(err, 'la configuración', `users/${uid}/settings`)
         );
         unsubs.push(unsubSettings);
+
+        // Real-time listener for financial health reports
+        const unsubReports = subscribeFinancialHealthReports(
+          uid,
+          (reports) => {
+            setFinancialReports(reports);
+          },
+          (err) => console.error('Error al escuchar reportes de salud financiera:', err)
+        );
+        unsubs.push(unsubReports);
       } else {
         setRemoteTransactionsLoaded(false);
         setCurrentUserId(null);
@@ -2129,6 +2146,26 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     }
   };
 
+  const saveFinancialReport = async (report: MonthlyExecutiveReport): Promise<void> => {
+    setFinancialReports((prev) => {
+      const idx = prev.findIndex((r) => r.id === report.id);
+      if (idx >= 0) {
+        const copy = [...prev];
+        copy[idx] = report;
+        return copy;
+      }
+      return [report, ...prev];
+    });
+
+    if (currentUserId && auth.currentUser?.uid === currentUserId) {
+      try {
+        await syncFinancialHealthReport(currentUserId, report);
+      } catch (err) {
+        console.error('Error al guardar reporte de salud en Firestore:', err);
+      }
+    }
+  };
+
   return (
     <WalletContext.Provider
       value={{
@@ -2177,6 +2214,8 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         saveSyncedSecurityPreferences,
         saveAnnualProjections,
         projectionsVersion,
+        financialReports,
+        saveFinancialReport,
 
         periods,
         activePeriod,

@@ -14,6 +14,7 @@ import {
   Budget,
   Category,
   FinancialPeriod,
+  MonthlyExecutiveReport,
   Transaction,
   TransactionTemplate,
   UserProfile,
@@ -414,3 +415,45 @@ export async function resetUserFinancialData(userId: string, initialStore: UserD
 
   await seedUserInitialData(userId, initialStore);
 }
+
+export async function syncFinancialHealthReport(userId: string, report: MonthlyExecutiveReport): Promise<void> {
+  if (auth.currentUser?.uid !== userId) throw new Error('Usuario no autenticado.');
+  const path = `users/${userId}/financial_reports/${report.id}`;
+  try {
+    await setDoc(doc(db, 'users', userId, 'financial_reports', report.id), ownedRecord(report, userId), { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteFinancialHealthReportFromDb(userId: string, reportId: string): Promise<void> {
+  if (auth.currentUser?.uid !== userId) throw new Error('Usuario no autenticado.');
+  const path = `users/${userId}/financial_reports/${reportId}`;
+  try {
+    await deleteDoc(doc(db, 'users', userId, 'financial_reports', reportId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
+export function subscribeFinancialHealthReports(
+  userId: string,
+  onReports: (reports: MonthlyExecutiveReport[]) => void,
+  onError: (error: Error) => void
+): () => void {
+  const colRef = collection(db, 'users', userId, 'financial_reports');
+  return onSnapshot(
+    colRef,
+    (snapshot) => {
+      const reports = snapshot.docs.map((d) => ({
+        ...d.data(),
+        id: d.id,
+      })) as MonthlyExecutiveReport[];
+      onReports(reports);
+    },
+    (error) => {
+      onError(error);
+    }
+  );
+}
+

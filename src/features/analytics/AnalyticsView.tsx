@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Activity,
   ArrowDownRight,
   ArrowUpRight,
   BarChart3,
@@ -30,12 +31,14 @@ interface AnalyticsViewProps {
   onOpenBudgetsModal: () => void;
   onOpenNewTransaction: () => void;
   onOpenAnnualBudgetModal?: () => void;
+  onOpenHealthReport?: () => void;
 }
 
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   onOpenPeriodsModal,
   onOpenBudgetsModal,
   onOpenAnnualBudgetModal,
+  onOpenHealthReport,
 }) => {
   const {
     activePeriod,
@@ -279,6 +282,16 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
           </div>
 
           <div className="flex items-center gap-2">
+            {onOpenHealthReport && (
+              <button
+                type="button"
+                onClick={onOpenHealthReport}
+                className="px-3 py-1.5 rounded-xl bg-teal-500/20 text-teal-300 border border-teal-500/30 hover:bg-teal-500/30 text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                <Activity className="w-3.5 h-3.5" />
+                <span>Salud & Timeline</span>
+              </button>
+            )}
             {onOpenAnnualBudgetModal && (
               <button
                 type="button"

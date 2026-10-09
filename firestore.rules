@@ -114,6 +114,20 @@ service cloud.firestore {
           && request.resource.data.userId == userId;
         allow delete: if isOwner(userId) && isValidId(templateId);
       }
+
+      // Financial Health Reports: monthly and weekly summaries per user
+      match /financial_reports/{reportId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidId(reportId)
+          && request.resource.data.id == reportId
+          && request.resource.data.userId == userId
+          && request.resource.data.schemaVersion is number
+          && request.resource.data.score is number
+          && request.resource.data.score >= 0
+          && request.resource.data.score <= 100;
+        allow delete: if isOwner(userId) && isValidId(reportId);
+      }
     }
 
     function transactionAccountsExist(userId, data) {
