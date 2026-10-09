@@ -7,6 +7,8 @@ import {
   Transaction,
   WeeklyHealthProgress,
   AnnualExecutiveSummary,
+  AnnualWeekEntry,
+  WeeklyAiInference,
 } from '../../core/types/models';
 import { MONTH_NAMES_ES } from '../annual_budget/annualBudgetEngine';
 
@@ -276,12 +278,93 @@ export function calculateFinancialHealthReport(
 }
 
 /**
+ * Generates the deterministic 52 calendar weeks log for the given year,
+ * mapping each week to its date range, month of reference, and financial flow.
+ */
+export function calculate52WeeksYearLog(
+  year: number,
+  transactions: Transaction[]
+): AnnualWeekEntry[] {
+  const weeks: AnnualWeekEntry[] = [];
+  const nowStr = new Date().toISOString().slice(0, 10);
+
+  // Jan 1st of the year in UTC
+  const startDateOfYear = new Date(Date.UTC(year, 0, 1));
+  const isLeap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  const totalDays = isLeap ? 366 : 365;
+
+  for (let w = 1; w <= 52; w++) {
+    // Week start offset (0-indexed in days)
+    const dayOffsetStart = (w - 1) * 7;
+    // Week end offset (6 days later, or up to the last day of the year for week 52)
+    const dayOffsetEnd = w === 52 ? totalDays - 1 : Math.min(totalDays - 1, dayOffsetStart + 6);
+
+    const wStartDate = new Date(Date.UTC(year, 0, 1 + dayOffsetStart));
+    const wEndDate = new Date(Date.UTC(year, 0, 1 + dayOffsetEnd));
+    const wMidDate = new Date(Date.UTC(year, 0, 1 + Math.floor((dayOffsetStart + dayOffsetEnd) / 2)));
+
+    const startStr = wStartDate.toISOString().slice(0, 10);
+    const endStr = wEndDate.toISOString().slice(0, 10);
+
+    const monthIndex = wMidDate.getUTCMonth(); // 0 to 11
+    const monthName = MONTH_NAMES_ES[monthIndex] || `Mes ${monthIndex + 1}`;
+
+    const wTxs = transactions.filter((t) => t.date >= startStr && t.date <= endStr);
+    const income = wTxs.filter((t) => t.type === 'income').reduce((s, t) => s + t.amount, 0);
+    const expenses = wTxs
+      .filter((t) => t.type === 'expense' || (t.type === 'transfer' && Boolean(t.categoryId)))
+      .reduce((s, t) => s + t.amount, 0);
+    const netSavings = income - expenses;
+
+    // Weekly status
+    let status: AnnualWeekEntry['status'] = 'on_track';
+    let burnRatePct = 100;
+
+    if (startStr > nowStr) {
+      status = 'upcoming';
+      burnRatePct = 0;
+    } else {
+      // Estimated baseline: 25% of monthly baseline
+      if (expenses > 3500) {
+        status = 'critical';
+        burnRatePct = 140;
+      } else if (expenses > 2500) {
+        status = 'warning';
+        burnRatePct = 115;
+      } else {
+        status = 'on_track';
+        burnRatePct = expenses > 0 ? 90 : 0;
+      }
+    }
+
+    weeks.push({
+      weekNumber: w,
+      year,
+      monthIndex,
+      monthName,
+      startDate: startStr,
+      endDate: endStr,
+      income,
+      expenses,
+      netSavings,
+      status,
+      burnRateVsExpectedPct: burnRatePct,
+    });
+  }
+
+  return weeks;
+}
+
+/**
  * Calculates the executive consolidated summary for the entire year
  */
 export function calculateAnnualExecutiveSummary(
   reports: MonthlyExecutiveReport[],
-  year: number
+  year: number,
+  transactions?: Transaction[]
 ): AnnualExecutiveSummary {
+  const weeks52 = transactions ? calculate52WeeksYearLog(year, transactions) : undefined;
+
   if (reports.length === 0) {
     return {
       year,
@@ -295,6 +378,7 @@ export function calculateAnnualExecutiveSummary(
       bestMonthName: 'N/A',
       toughestMonthName: 'N/A',
       strategicRecommendations: ['Registra movimientos en períodos para desbloquear el resumen anual gerencial.'],
+      weeks52,
     };
   }
 
@@ -349,5 +433,267 @@ export function calculateAnnualExecutiveSummary(
     bestMonthName,
     toughestMonthName,
     strategicRecommendations,
+    weeks52,
+  };
+}
+
+export interface CreditCardTacticalTip {
+  type: 'strategy' | 'window' | 'due_reminder' | 'warning';
+  title: string;
+  message: string;
+  badge?: string;
+  recommendedCardName?: string;
+  daysToPayment?: number;
+}
+
+/**
+ * Generates an intelligent, subtle tactical tip for credit card usage
+ * based on cutoff dates, payment due dates, and today's day of month.
+ * Returns null if the user does NOT have any active credit cards.
+ */
+export function getCreditCardTacticalTip(
+  accounts: Account[],
+  currentDate: Date = new Date()
+): CreditCardTacticalTip | null {
+  const cards = accounts.filter(
+    (a) => a.status === 'active' && a.type === 'credit_card'
+  );
+
+  if (cards.length === 0) return null;
+
+  const today = currentDate.getDate();
+
+  // Helper to compute grace period & days until payment if purchased today
+  const getCardDetails = (card: Account) => {
+    const cutoff = card.cutoffDay ?? 15;
+    const paymentDue = card.paymentDueDay ?? 5;
+    const debt = Math.max(0, -(card.currentBalance ?? card.balance ?? 0));
+    const limit = card.creditLimit || 0;
+    const utilization = limit > 0 ? Math.round((debt / limit) * 100) : 0;
+
+    // Grace days between cutoff and payment due (typically ~20 days)
+    const graceDays = paymentDue > cutoff ? paymentDue - cutoff : 30 - cutoff + paymentDue;
+
+    let daysUntilPayment = 0;
+    let isPastCutoff = false;
+    let daysSinceCutoff = 0;
+    let daysToCutoff = 0;
+
+    if (today > cutoff) {
+      isPastCutoff = true;
+      daysSinceCutoff = today - cutoff;
+      daysUntilPayment = (30 - today) + cutoff + graceDays;
+    } else {
+      isPastCutoff = false;
+      daysToCutoff = cutoff - today;
+      daysUntilPayment = (cutoff - today) + graceDays;
+    }
+
+    // Days until next payment due date:
+    let daysToPayment = 0;
+    if (today <= paymentDue) {
+      daysToPayment = paymentDue - today;
+    } else {
+      daysToPayment = (30 - today) + paymentDue;
+    }
+
+    return {
+      card,
+      cutoff,
+      paymentDue,
+      debt,
+      limit,
+      utilization,
+      isPastCutoff,
+      daysSinceCutoff,
+      daysToCutoff,
+      daysUntilPayment,
+      daysToPayment,
+    };
+  };
+
+  const parsedCards = cards.map(getCardDetails);
+
+  // Check 1: Urgent payment reminder (if any card has debt > 0 and payment is within 4 days)
+  const dueUrgent = parsedCards.find((c) => c.debt > 0 && c.daysToPayment <= 4);
+  if (dueUrgent) {
+    const urgency = dueUrgent.daysToPayment === 0 ? 'hoy' : dueUrgent.daysToPayment === 1 ? 'mañana' : `en ${dueUrgent.daysToPayment} días`;
+    return {
+      type: 'due_reminder',
+      title: `Pago próximo: ${dueUrgent.card.name}`,
+      message: `Vence ${urgency} (día ${dueUrgent.paymentDue}). Saldo actual: Q${dueUrgent.debt.toLocaleString()}. Paga de contado para evitar cargos por financiamiento.`,
+      badge: `Vence ${urgency}`,
+      recommendedCardName: dueUrgent.card.name,
+      daysToPayment: dueUrgent.daysToPayment,
+    };
+  }
+
+  // Check 2: Multi-card strategy (2 or more cards)
+  if (parsedCards.length >= 2) {
+    const sortedByGrace = [...parsedCards].sort((a, b) => b.daysUntilPayment - a.daysUntilPayment);
+    const bestCard = sortedByGrace[0];
+    const secondCard = sortedByGrace[1];
+
+    if (bestCard.cutoff !== secondCard.cutoff) {
+      const [earlyCard, lateCard] = [...parsedCards].sort((a, b) => a.cutoff - b.cutoff);
+
+      if (today > earlyCard.cutoff && today <= lateCard.cutoff) {
+        return {
+          type: 'strategy',
+          title: `Estrategia: Usa ${earlyCard.card.name} ahora`,
+          message: `Utiliza ${earlyCard.card.name} antes del día ${lateCard.cutoff} (cortó el ${earlyCard.cutoff}, obtienes ~${bestCard.daysUntilPayment} días de plazo al 0% de interés) y pasa a ${lateCard.card.name} después del día ${lateCard.cutoff}.`,
+          badge: 'Estrategia activa',
+          recommendedCardName: earlyCard.card.name,
+          daysToPayment: bestCard.daysUntilPayment,
+        };
+      } else {
+        return {
+          type: 'strategy',
+          title: `Estrategia de corte: ${bestCard.card.name}`,
+          message: `Usa ${earlyCard.card.name} antes del día ${earlyCard.cutoff} y ${lateCard.card.name} después del día ${earlyCard.cutoff}. Hoy te conviene ${bestCard.card.name} para diferir el cobro al máximo plazo sin costo.`,
+          badge: 'Uso inteligente',
+          recommendedCardName: bestCard.card.name,
+          daysToPayment: bestCard.daysUntilPayment,
+        };
+      }
+    }
+  }
+
+  // Check 3: Single card (or cards with identical cutoff)
+  const single = parsedCards[0];
+  if (single.isPastCutoff && single.daysSinceCutoff <= 8) {
+    return {
+      type: 'window',
+      title: `Ventana óptima: ${single.card.name}`,
+      message: `Tu tarjeta recién cortó el día ${single.cutoff}. Es el momento ideal para compras mayores: tienes hasta ~${single.daysUntilPayment} días para liquidar al 0% de interés.`,
+      badge: 'Ventana ideal',
+      recommendedCardName: single.card.name,
+      daysToPayment: single.daysUntilPayment,
+    };
+  }
+
+  if (!single.isPastCutoff && single.daysToCutoff <= 3) {
+    const daysText = single.daysToCutoff === 1 ? 'mañana' : `en ${single.daysToCutoff} días`;
+    return {
+      type: 'window',
+      title: `Corte próximo en ${single.card.name}`,
+      message: `Corta ${daysText} (día ${single.cutoff}). Si planeas una compra no urgente, espera al día ${single.cutoff + 1} para diferir su pago un mes completo.`,
+      badge: 'Corte próximo',
+      recommendedCardName: single.card.name,
+    };
+  }
+
+  return {
+    type: 'strategy',
+    title: `Gestión de tarjeta: ${single.card.name}`,
+    message: `Corte el día ${single.cutoff} y pago el día ${single.paymentDue}. Las compras después del día ${single.cutoff} entran en el siguiente ciclo (~45 días de financiamiento).`,
+    badge: 'Financiamiento 0%',
+    recommendedCardName: single.card.name,
+    daysToPayment: single.daysUntilPayment,
+  };
+}
+
+/**
+ * Executes or falls back to an inferential weekly AI analysis.
+ * Strictly sends anonymous aggregated metrics with zero personal identifiable information.
+ */
+export async function requestWeeklyAiInference(params: {
+  weekData: WeeklyHealthProgress;
+  monthlyContext: {
+    netSavings: number;
+    savingsRatePct: number;
+    liquidityMonths: number;
+    score: number;
+    monthName: string;
+  };
+  cardTactics?: CreditCardTacticalTip | null;
+  signal?: AbortSignal;
+}): Promise<WeeklyAiInference> {
+  const { weekData, monthlyContext, cardTactics, signal } = params;
+  const nowIso = new Date().toISOString();
+
+  try {
+    const res = await fetch('/api/financial-inference', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        weekData: {
+          weekIndex: weekData.weekIndex,
+          startDate: weekData.startDate,
+          endDate: weekData.endDate,
+          income: weekData.income,
+          expenses: weekData.expenses,
+          netSavings: weekData.netSavings,
+          burnRateVsExpectedPct: weekData.burnRateVsExpectedPct,
+          status: weekData.status,
+          highlight: weekData.highlight,
+        },
+        monthlyContext: {
+          netSavings: monthlyContext.netSavings,
+          savingsRatePct: monthlyContext.savingsRatePct,
+          liquidityMonths: monthlyContext.liquidityMonths,
+          score: monthlyContext.score,
+          monthName: monthlyContext.monthName,
+        },
+        cardTactics: cardTactics
+          ? {
+              type: cardTactics.type,
+              title: cardTactics.title,
+              message: cardTactics.message,
+              recommendedCardName: cardTactics.recommendedCardName,
+            }
+          : null,
+      }),
+      signal,
+    });
+
+    if (res.ok) {
+      const json = await res.json();
+      if (json.ok && json.data) {
+        return {
+          weekIndex: weekData.weekIndex,
+          patterns: json.data.patterns,
+          actionableAdvice: json.data.actionableAdvice,
+          tone: json.data.tone || 'positive',
+          generatedAt: nowIso,
+        };
+      }
+    }
+  } catch (err) {
+    // Graceful offline fallback
+    console.warn('AI API fetch fell back to local inference heuristic:', err);
+  }
+
+  // High-fidelity local inferential fallback
+  let fallbackPatterns = 'Patrón de gasto estable y consumo distribuido dentro de los límites del presupuesto.';
+  let fallbackAdvice = 'Monitorea egresos flexibles y conserva el registro diario para blindar tu meta mensual.';
+  let fallbackTone: WeeklyAiInference['tone'] = 'positive';
+
+  if (weekData.burnRateVsExpectedPct > 125) {
+    fallbackPatterns = `Aceleración de egresos en la Semana ${weekData.weekIndex} (+${weekData.burnRateVsExpectedPct - 100}% sobre lo esperado), concentrando mayor presión en el flujo.`;
+    fallbackAdvice = 'Modera compras no planificadas durante los próximos días y posterga adquisiciones de ocio hacia el siguiente ciclo.';
+    fallbackTone = 'caution';
+  } else if (cardTactics?.type === 'due_reminder') {
+    fallbackPatterns = `Ciclo semanal con vencimiento cercano de tarjeta (${cardTactics.title}).`;
+    fallbackAdvice = `${cardTactics.message} Asegúrate de pagar de contado para blindar tu fondo de reserva.`;
+    fallbackTone = 'urgent';
+  } else if (weekData.netSavings > 0 && monthlyContext.savingsRatePct >= 15) {
+    fallbackPatterns = `Excelente ritmo de superávit semanal con saldo favorable de Q${weekData.netSavings.toLocaleString()} y disciplina operativa constante.`;
+    fallbackAdvice = 'Aprovecha este excedente para programar una transferencia directa a tu cuenta de ahorro o meta patrimonial.';
+    fallbackTone = 'optimistic';
+  } else if (cardTactics?.type === 'window' || cardTactics?.type === 'strategy') {
+    fallbackPatterns = `Comportamiento semanal regular con oportunidad táctica identificada en tarjetas de crédito.`;
+    fallbackAdvice = `${cardTactics.message}`;
+    fallbackTone = 'positive';
+  }
+
+  return {
+    weekIndex: weekData.weekIndex,
+    patterns: fallbackPatterns,
+    actionableAdvice: fallbackAdvice,
+    tone: fallbackTone,
+    generatedAt: nowIso,
   };
 }

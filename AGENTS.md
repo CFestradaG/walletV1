@@ -11,6 +11,7 @@ Wallet es una aplicación web de finanzas personales en español, orientada a qu
 | Interfaz | React 19, TypeScript 7, Vite 8, Tailwind CSS 4 |
 | Componentes y animación | Lucide React y Motion |
 | Datos y autenticación | Firebase Auth y Cloud Firestore mediante SDK web |
+| Servidor backend y proxy IA | Servidor Express en `server.ts` con Vite middlewares y ruta `/api/gemini/weekly-health-inference` usando `@google/genai` (Gemini 2.5 Flash) para análisis inferencial semanal sin exponer API keys ni datos de usuario |
 | PWA | `vite-plugin-pwa`/Workbox, actualización automática, manifest `standalone`, caché de recursos y caché de fuentes Google |
 | Backend adicional | Firebase Cloud Functions v2 callable en `functions/`, Node.js 22 y Firebase Admin |
 | Hosting | Firebase Hosting publica `dist/` y reescribe rutas a `index.html` |
@@ -22,8 +23,9 @@ La aplicación móvil Flutter ya no forma parte del repositorio. La experiencia 
 
 | Ruta | Responsabilidad |
 |---|---|
+| `server.ts` | Servidor backend Express con Vite middleware en desarrollo y endpoint proxy `/api/gemini/weekly-health-inference` para análisis inferencial con Google Gemini. |
 | `src/main.tsx`, `src/App.tsx`, `src/index.css` | Punto de entrada, shell/navegación, tema y estilos globales. |
-| `src/core/types/models.ts` | Tipos de cuentas, movimientos, plantillas, categorías, períodos, presupuestos, perfil y preferencias. |
+| `src/core/types/models.ts` | Tipos de cuentas, movimientos, plantillas, categorías, períodos, presupuestos, perfil, reporte de salud financiera y preferencias. |
 | `src/core/data/initialData.ts` | Tienda inicial, categorías y períodos predeterminados. |
 | `src/core/state/WalletContext.tsx` | Estado central, autenticación, persistencia local, listeners y operaciones de dominio. |
 | `src/core/sync/offlineQueue.ts` | Cola persistente en `localStorage`, procesamiento secuencial y reintentos/conectividad. |
@@ -39,9 +41,9 @@ La aplicación móvil Flutter ya no forma parte del repositorio. La experiencia 
 | `src/features/transactions/TemplatesView.tsx` | Gestión por usuario de plantillas y recordatorios periódicos de movimientos. |
 | `src/features/financial_periods/` | Gestión, validación y cálculo de períodos/subperíodos. |
 | `src/features/annual_budget/` | Presupuesto y Panorama Anual; matriz proyectado/real en vistas mensual, trimestral, semestral y anual, más exportación CSV. |
-| `src/features/analytics/` | Resúmenes, métricas, visualizaciones y exportación CSV. |
+| `src/features/analytics/` | Resúmenes, métricas, visualizaciones, exportación CSV, motor de diagnóstico de salud (`financialHealthEngine.ts`) con bitácora de 52 semanas y modal (`FinancialHealthModal.tsx`) con inferencia semanal IA y offline. |
 | `src/features/dashboard/` | Resumen del período, saldos, actividad, acumulado YTD y alertas presupuestarias. |
-| `src/features/settings/` | Vista Más y accesos a configuración, seguridad e instalación. |
+| `src/features/settings/` | Vista Más, accesos a configuración, seguridad, instalación y modal de seguridad, privacidad y confidencialidad (`AboutSecurityModal.tsx`). |
 | `functions/src/index.ts` | Callable Functions para operaciones de cuentas y movimientos y limpieza financiera. |
 | `public/` | Iconos PWA, favicon y Apple touch icon. |
 
@@ -55,9 +57,10 @@ Modelos relevantes en `src/core/types/models.ts`:
 - Los movimientos son gastos, ingresos o transferencias, con fecha ISO y referencias opcionales a período/subperíodo.
 - `FinancialPeriod` contempla `referenceMonth` y `monthIndex` para asociar períodos con meses del panorama.
 - `Budget` se relaciona con un período y categoría, con metas y alertas configurables. Los planes proyectados anuales se guardan por usuario/año en `users/{uid}/settings/projections_{year}`; las metas reales por período permanecen en `budgets`.
-- `FinancialHealthReport` guarda diagnósticos ejecutivos en `users/{uid}/financial_reports/{reportId}` con desglose de 4 semanas, score (0-100), tasa de ahorro, DTI de tarjetas, cobertura líquida y recomendaciones accionables.
+- `FinancialHealthReport` guarda diagnósticos ejecutivos en `users/{uid}/financial_reports/{reportId}` con desglose de 4 semanas, bitácora anual completa de 52 semanas (`annual52Weeks`), score (0-100), tasa de ahorro, DTI de tarjetas, cobertura líquida y recomendaciones accionables.
+- `WeeklyFinancialHealthInference` modela inferencias semanales generadas por IA o contingencia heurística (`weekKey`, resumen de inferencia, hallazgos clave, advertencias, recomendación y tono analítico), indexadas por `${year}-W${weekNum}`.
 - `TransactionTemplate` guarda categoría, subcategoría, monto, cuenta y nota; opcionalmente define fecha base y recurrencia semanal (7 días), quincenal (15 días) o mensual. Se guarda en `users/{uid}/templates`.
-- `UserSettings` incluye tema, ocultamiento de saldos y período activo.
+- `UserSettings` incluye tema, ocultamiento de saldos, período activo y preferencia de activación de IA semanal (`enableAiWeeklyAnalysis`).
 
 ## Comportamientos implementados
 
@@ -77,6 +80,14 @@ Modelos relevantes en `src/core/types/models.ts`:
 - Al reconciliar categorías y presupuestos locales se crean solo documentos cuyos IDs todavía no existen en Firestore; cada creación vuelve a comprobar la ausencia dentro de una transacción. Los documentos remotos existentes no se sobrescriben durante esta recuperación.
 - Las notificaciones de plantillas requieren permiso del navegador y la aplicación abierta; al abrir una, el formulario de transacción carga sus campos para confirmar o ajustar el movimiento. El siguiente ciclo se calcula desde la fecha base y avanza al guardar el movimiento.
 - Al eliminar una categoría (`deleteCategory`), se remueven también sus proyecciones anuales vinculadas para evitar claves huérfanas.
+- **Diagnóstico de Salud Financiera y Bitácora Anual de 52 Semanas:**
+  - El motor (`financialHealthEngine.ts`) calcula la bitácora integral de 52 semanas del año (cortes de 7 días agrupados por su mes de pertenencia) con balances semanales, burn rate y categorías predominantes, permitiendo seguimiento continuo sin la carga mental de revisiones diarias.
+  - **Inferencia Semanal con IA y Privacidad Estricta:**
+    - Para superar recomendaciones rígidas o repetitivas, el usuario puede activar y solicitar inferencias dinámicas generadas por IA (Gemini 2.5 Flash mediante el proxy de servidor en `/api/gemini/weekly-health-inference`).
+    - **Protección de Datos y Confidencialidad:** El payload enviado a la IA contiene únicamente agregados numéricos anónimos (totales de ingresos, gastos, burn rate, porcentajes y top 3 categorías genéricas). **Nunca** se envían nombres de usuario, correos, números de cuentas, notas personales ni detalles transaccionales identificables (PII).
+    - **Seguridad de Credenciales:** La clave de API de Gemini reside exclusivamente en el entorno del servidor (`GEMINI_API_KEY`); el cliente web nunca accede ni almacena credenciales de IA.
+    - **Contingencia Heurística Offline:** Si el usuario no tiene conexión a internet o el servicio de IA no responde, el sistema ejecuta de forma transparente un motor de inferencia heurístico local con reglas financieras deterministas, garantizando diagnósticos y recomendaciones inmediatas en cualquier circunstancia.
+    - **Control bajo demanda:** En el modal de salud financiera, cada tarjeta de semana de la bitácora incluye controles interactivos para solicitar o regenerar la inferencia semanal según la necesidad del usuario.
 
 ## Comandos
 

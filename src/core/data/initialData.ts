@@ -574,6 +574,7 @@ export function createActiveDemoUserStore(): UserDataStore {
       decimalPlaces: 2,
       themeMode: 'dark',
       hideBalances: false,
+      enableSmartDiagnostics: true,
     },
     accounts,
     categories,

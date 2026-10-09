@@ -18,6 +18,7 @@ import {
   Shield,
   ShieldCheck,
   Smartphone,
+  Sparkles,
   Sun,
   Target,
   Trash2,
@@ -30,6 +31,7 @@ import { useWallet } from '../../core/state/WalletContext';
 import { Category, CategoryType, ThemeMode } from '../../core/types/models';
 import { getSecurityConfig } from '../../core/security/securityService';
 import { usePWAInstall } from '../../core/pwa/usePWAInstall';
+import { AboutSecurityModal } from './AboutSecurityModal';
 
 interface MoreViewProps {
   onOpenPeriodsModal: () => void;
@@ -92,6 +94,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
   const [accountResetNotice, setAccountResetNotice] = useState<string | null>(null);
   const [isCheckingSync, setIsCheckingSync] = useState(false);
   const [syncCheckNotice, setSyncCheckNotice] = useState<string | null>(null);
+  const [isAboutSecurityOpen, setIsAboutSecurityOpen] = useState(false);
 
   const handleCheckSync = async () => {
     if (!isOnline || isCheckingSync || isSyncing) return;
@@ -480,6 +483,77 @@ export const MoreView: React.FC<MoreViewProps> = ({
                 </div>
               </button>
 
+              {/* Análisis Inferencial con IA (Semanal) */}
+              <div
+                className={`w-full p-3 rounded-2xl border flex items-center justify-between transition-colors ${
+                  isDark ? 'border-white/5 bg-white/2' : 'border-slate-200 bg-slate-50/50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-purple-500/15 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className={`font-bold text-xs block ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      Análisis Inferencial con IA (Semanal)
+                    </span>
+                    <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {settings.enableAiWeeklyAnalysis !== false
+                        ? 'Recomendaciones dinámicas sobre métricas anónimas'
+                        : 'Pausado: solo diagnósticos matemáticos'}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    updateSettings({
+                      enableAiWeeklyAnalysis: settings.enableAiWeeklyAnalysis === false,
+                    })
+                  }
+                  className={`text-[10px] font-bold px-3 py-1.5 rounded-xl border transition-all cursor-pointer ${
+                    settings.enableAiWeeklyAnalysis !== false
+                      ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300 border-purple-500/30'
+                      : isDark
+                      ? 'bg-slate-800 text-slate-400 border-white/10'
+                      : 'bg-slate-200 text-slate-600 border-slate-300'
+                  }`}
+                >
+                  {settings.enableAiWeeklyAnalysis !== false ? 'Activo' : 'Pausado'}
+                </button>
+              </div>
+
+              {/* Acerca de la Seguridad & Confidencialidad */}
+              <button
+                type="button"
+                onClick={() => setIsAboutSecurityOpen(true)}
+                className={`w-full p-3 rounded-2xl border flex items-center justify-between text-left transition-colors cursor-pointer ${
+                  isDark
+                    ? 'border-white/5 hover:bg-white/5'
+                    : 'border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className={`font-bold text-xs block ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      Seguridad, Privacidad & Confidencialidad
+                    </span>
+                    <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      Cómo se protegen tus datos y cómo se generan los análisis
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+                    Acerca de
+                  </span>
+                  <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
+                </div>
+              </button>
+
               {/* Estado Offline Firestore */}
               <div className={`p-3 rounded-2xl border flex items-center gap-2.5 ${
                 isDark ? 'bg-black/25 border-white/5' : 'bg-slate-50 border-slate-200'
@@ -558,6 +632,30 @@ export const MoreView: React.FC<MoreViewProps> = ({
               checked={settings.hideBalances}
               onChange={(e) =>
                 updateSettings({ hideBalances: e.target.checked })
+              }
+              className="rounded text-emerald-500 focus:ring-emerald-500 cursor-pointer"
+            />
+          </label>
+
+          <label className={`flex items-center justify-between p-2.5 rounded-2xl border cursor-pointer ${
+            isDark ? 'bg-black/20 border-white/5' : 'bg-slate-50 border-slate-200'
+          }`}>
+            <div className="flex items-center gap-2.5">
+              <Sparkles className="w-4 h-4 text-amber-500" />
+              <div>
+                <span className={`font-bold block ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  Diagnósticos Financieros Inteligentes
+                </span>
+                <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  Calcular score de salud, ritmo semanal y consejos de tarjetas
+                </span>
+              </div>
+            </div>
+            <input
+              type="checkbox"
+              checked={settings.enableSmartDiagnostics !== false}
+              onChange={(e) =>
+                updateSettings({ enableSmartDiagnostics: e.target.checked })
               }
               className="rounded text-emerald-500 focus:ring-emerald-500 cursor-pointer"
             />
@@ -945,6 +1043,12 @@ export const MoreView: React.FC<MoreViewProps> = ({
           </form>
         </div>
       )}
+
+      {/* MODAL: ACERCA DE LA SEGURIDAD & CONFIDENCIALIDAD */}
+      <AboutSecurityModal
+        isOpen={isAboutSecurityOpen}
+        onClose={() => setIsAboutSecurityOpen(false)}
+      />
     </div>
   );
 };

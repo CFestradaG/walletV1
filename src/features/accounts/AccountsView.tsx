@@ -21,6 +21,7 @@ import {
 import { useWallet } from '../../core/state/WalletContext';
 import { Account, AccountType, Transaction } from '../../core/types/models';
 import { formatGTQ } from '../../core/utils/formatters';
+import { getCreditCardTacticalTip } from '../analytics/financialHealthEngine';
 
 interface AccountsViewProps {
   onPayCreditCard: (cardId: string) => void;
@@ -79,6 +80,11 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
   const totalCreditDebt = creditAccounts
     .filter((a) => a.status === 'active')
     .reduce((sum, a) => sum + Math.max(0, -(a.currentBalance ?? a.balance ?? 0)), 0);
+
+  // Subtle tactical credit card advice
+  const creditCardTip = useMemo(() => {
+    return getCreditCardTacticalTip(accounts);
+  }, [accounts]);
 
   const startCreate = () => {
     setEditingAccount(null);
@@ -355,6 +361,55 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
           </div>
         ) : (
           <div className="space-y-2.5">
+            {creditCardTip && (
+              <div
+                className={`p-3 rounded-2xl border text-xs flex items-center gap-2.5 transition-all ${
+                  creditCardTip.type === 'due_reminder'
+                    ? isDark
+                      ? 'bg-amber-500/10 border-amber-500/25 text-amber-200'
+                      : 'bg-amber-50/90 border-amber-200 text-amber-900'
+                    : isDark
+                    ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-200'
+                    : 'bg-indigo-50/90 border-indigo-200 text-indigo-950'
+                }`}
+              >
+                <div
+                  className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${
+                    creditCardTip.type === 'due_reminder'
+                      ? 'bg-amber-500/20 text-amber-400'
+                      : 'bg-indigo-500/20 text-indigo-400'
+                  }`}
+                >
+                  <CreditCard className="w-3.5 h-3.5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <span className="font-bold text-[11px] block">
+                      {creditCardTip.title}
+                    </span>
+                    {creditCardTip.badge && (
+                      <span
+                        className={`text-[9px] px-1.5 py-0.2 rounded-md font-semibold font-mono ${
+                          creditCardTip.type === 'due_reminder'
+                            ? 'bg-amber-500/20 text-amber-300'
+                            : 'bg-indigo-500/20 text-indigo-300'
+                        }`}
+                      >
+                        {creditCardTip.badge}
+                      </span>
+                    )}
+                  </div>
+                  <p
+                    className={`text-[10.5px] leading-snug line-clamp-2 mt-0.5 ${
+                      isDark ? 'text-slate-300' : 'text-slate-700'
+                    }`}
+                  >
+                    {creditCardTip.message}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {creditAccounts.map((card) => {
               const debt = Math.max(0, -(card.currentBalance ?? card.balance ?? 0));
               const limit = card.creditLimit || 0;

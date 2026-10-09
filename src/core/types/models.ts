@@ -152,9 +152,19 @@ export interface UserSettings {
   themeMode: ThemeMode;
   hideBalances: boolean;
   activePeriodId?: string;
+  enableSmartDiagnostics?: boolean; // Default true: generate health scores and tactical tips
+  enableAiWeeklyAnalysis?: boolean; // Default true: permite análisis inferencial dinámico con IA (Gemini) sobre métricas agregadas
 }
 
 export type HealthScoreLevel = 'critical' | 'alert' | 'moderate' | 'solid' | 'excellent';
+
+export interface WeeklyAiInference {
+  weekIndex: number;
+  patterns: string; // Patrones conductuales inferidos
+  actionableAdvice: string; // Consejo táctico fresco no repetitivo
+  tone: 'positive' | 'caution' | 'optimistic' | 'urgent';
+  generatedAt: string;
+}
 
 export interface WeeklyHealthProgress {
   weekIndex: number; // 1, 2, 3, 4
@@ -166,6 +176,7 @@ export interface WeeklyHealthProgress {
   burnRateVsExpectedPct: number; // e.g. 95% = dentro del ritmo esperado
   status: 'on_track' | 'warning' | 'critical';
   highlight: string;
+  aiInference?: WeeklyAiInference;
 }
 
 export interface MonthlyExecutiveReport {
@@ -185,6 +196,7 @@ export interface MonthlyExecutiveReport {
   debtToIncomeRatioPct: number; // DTI %
   liquidityMonths: number; // Meses de cobertura con efectivo disponible
   weeks: WeeklyHealthProgress[];
+  aiWeeklyInference?: WeeklyAiInference;
   recommendations: Array<{
     id: string;
     type: 'debt' | 'budget' | 'savings' | 'behavior';
@@ -196,6 +208,21 @@ export interface MonthlyExecutiveReport {
   executiveSummaryText: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AnnualWeekEntry {
+  weekNumber: number; // 1 to 52
+  year: number;
+  monthIndex: number; // 0 to 11
+  monthName: string; // "Enero", "Febrero", etc.
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  income: number;
+  expenses: number;
+  netSavings: number;
+  status: 'on_track' | 'warning' | 'critical' | 'upcoming';
+  burnRateVsExpectedPct: number;
+  aiInference?: WeeklyAiInference;
 }
 
 export interface AnnualExecutiveSummary {
@@ -210,5 +237,6 @@ export interface AnnualExecutiveSummary {
   bestMonthName: string;
   toughestMonthName: string;
   strategicRecommendations: string[];
+  weeks52?: AnnualWeekEntry[];
 }
 

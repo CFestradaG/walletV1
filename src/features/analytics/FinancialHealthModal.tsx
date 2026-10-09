@@ -24,6 +24,8 @@ import { useWallet } from '../../core/state/WalletContext';
 import {
   calculateAnnualExecutiveSummary,
   calculateFinancialHealthReport,
+  getCreditCardTacticalTip,
+  requestWeeklyAiInference,
 } from './financialHealthEngine';
 import { MonthlyExecutiveReport } from '../../core/types/models';
 import { formatGTQ, formatShortDateES } from '../../core/utils/formatters';
@@ -52,6 +54,7 @@ export const FinancialHealthModal: React.FC<FinancialHealthModalProps> = ({
     financialReports,
     saveFinancialReport,
     activePeriod,
+    settings,
   } = useWallet();
 
   const isDark = resolvedTheme === 'dark';
@@ -66,6 +69,21 @@ export const FinancialHealthModal: React.FC<FinancialHealthModalProps> = ({
   const [selectedMonth, setSelectedMonth] = useState<number>(currentMonth);
   const [activeTab, setActiveTab] = useState<'timeline' | 'annual'>('timeline');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [show52Weeks, setShow52Weeks] = useState(false);
+  const [isAiGenerating, setIsAiGenerating] = useState(false);
+
+  const defaultWeekIdx = useMemo(() => {
+    if (selectedMonth === now.getMonth() + 1 && currentYear === now.getFullYear()) {
+      const d = now.getDate();
+      if (d <= 7) return 1;
+      if (d <= 14) return 2;
+      if (d <= 21) return 3;
+      return 4;
+    }
+    return 1;
+  }, [selectedMonth, currentYear]);
+
+  const [activeWeekIndex, setActiveWeekIndex] = useState<number>(defaultWeekIdx);
 
   const reportId = `report_${currentYear}_${String(selectedMonth).padStart(2, '0')}`;
 
@@ -109,8 +127,13 @@ export const FinancialHealthModal: React.FC<FinancialHealthModalProps> = ({
   }, [financialReports, currentYear, currentUser?.id, accounts, categories, transactions, periods]);
 
   const annualSummary = useMemo(() => {
-    return calculateAnnualExecutiveSummary(annualMonthlyReports, currentYear);
-  }, [annualMonthlyReports, currentYear]);
+    return calculateAnnualExecutiveSummary(annualMonthlyReports, currentYear, transactions);
+  }, [annualMonthlyReports, currentYear, transactions]);
+
+  // Subtle tactical credit card advice
+  const creditCardTip = useMemo(() => {
+    return getCreditCardTacticalTip(accounts);
+  }, [accounts]);
 
   const handleRefreshCurrent = async () => {
     setIsRefreshing(true);
@@ -124,9 +147,56 @@ export const FinancialHealthModal: React.FC<FinancialHealthModalProps> = ({
         transactions,
         periods
       );
+      // Preserve any existing AI inferences in the updated calculation
+      if (currentReport.aiWeeklyInference) {
+        fresh.aiWeeklyInference = currentReport.aiWeeklyInference;
+      }
+      fresh.weeks = fresh.weeks.map((w) => {
+        const prevW = currentReport.weeks.find((pw) => pw.weekIndex === w.weekIndex);
+        return prevW?.aiInference ? { ...w, aiInference: prevW.aiInference } : w;
+      });
       await saveFinancialReport(fresh);
     } finally {
       setTimeout(() => setIsRefreshing(false), 400);
+    }
+  };
+
+  const handleGenerateAiWeeklyInference = async (targetWeekIdx: number) => {
+    if (isAiGenerating) return;
+    setIsAiGenerating(true);
+    try {
+      const weekData =
+        currentReport.weeks.find((w) => w.weekIndex === targetWeekIdx) ||
+        currentReport.weeks[0];
+
+      const aiResult = await requestWeeklyAiInference({
+        weekData,
+        monthlyContext: {
+          netSavings: currentReport.netSavings,
+          savingsRatePct: currentReport.savingsRatePct,
+          liquidityMonths: currentReport.liquidityMonths,
+          score: currentReport.score,
+          monthName: currentReport.monthName,
+        },
+        cardTactics: creditCardTip,
+      });
+
+      const updatedWeeks = currentReport.weeks.map((w) =>
+        w.weekIndex === targetWeekIdx ? { ...w, aiInference: aiResult } : w
+      );
+
+      const updatedReport: MonthlyExecutiveReport = {
+        ...currentReport,
+        weeks: updatedWeeks,
+        aiWeeklyInference: aiResult,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await saveFinancialReport(updatedReport);
+    } catch (err) {
+      console.error('Error al generar inferencia semanal con IA:', err);
+    } finally {
+      setIsAiGenerating(false);
     }
   };
 
@@ -351,69 +421,252 @@ export const FinancialHealthModal: React.FC<FinancialHealthModalProps> = ({
                 </div>
 
                 <div className="space-y-2.5">
-                  {currentReport.weeks.map((week) => (
-                    <div
-                      key={week.weekIndex}
-                      className={`p-3.5 rounded-2xl border transition-all ${
-                        week.status === 'critical'
-                          ? isDark
-                            ? 'bg-rose-500/10 border-rose-500/25'
-                            : 'bg-rose-50/70 border-rose-200'
-                          : week.status === 'warning'
-                          ? isDark
-                            ? 'bg-amber-500/10 border-amber-500/25'
-                            : 'bg-amber-50/70 border-amber-200'
-                          : isDark
-                          ? 'bg-[#121826] border-white/5 hover:border-white/10'
-                          : 'bg-white border-slate-200 hover:border-slate-300'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between mb-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold ${
-                            week.status === 'critical'
-                              ? 'bg-rose-500/20 text-rose-400'
-                              : week.status === 'warning'
-                              ? 'bg-amber-500/20 text-amber-400'
-                              : 'bg-emerald-500/20 text-emerald-400'
-                          }`}>
-                            S{week.weekIndex}
-                          </span>
-                          <div>
-                            <span className="font-bold text-xs">
-                              Semana {week.weekIndex}
+                  {currentReport.weeks.map((week) => {
+                    const isSelected = week.weekIndex === activeWeekIndex;
+                    return (
+                      <div
+                        key={week.weekIndex}
+                        onClick={() => setActiveWeekIndex(week.weekIndex)}
+                        className={`p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'ring-2 ring-purple-500/50 border-purple-500/60 shadow-md'
+                            : ''
+                        } ${
+                          week.status === 'critical'
+                            ? isDark
+                              ? 'bg-rose-500/10 border-rose-500/25'
+                              : 'bg-rose-50/70 border-rose-200'
+                            : week.status === 'warning'
+                            ? isDark
+                              ? 'bg-amber-500/10 border-amber-500/25'
+                              : 'bg-amber-50/70 border-amber-200'
+                            : isDark
+                            ? 'bg-[#121826] border-white/5 hover:border-white/10'
+                            : 'bg-white border-slate-200 hover:border-slate-300'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold ${
+                              week.status === 'critical'
+                                ? 'bg-rose-500/20 text-rose-400'
+                                : week.status === 'warning'
+                                ? 'bg-amber-500/20 text-amber-400'
+                                : 'bg-emerald-500/20 text-emerald-400'
+                            }`}>
+                              S{week.weekIndex}
                             </span>
-                            <span className={`text-[10px] ml-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                              ({formatShortDateES(week.startDate)} - {formatShortDateES(week.endDate)})
+                            <div>
+                              <span className="font-bold text-xs">
+                                Semana {week.weekIndex}
+                              </span>
+                              <span className={`text-[10px] ml-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                                ({formatShortDateES(week.startDate)} - {formatShortDateES(week.endDate)})
+                              </span>
+                            </div>
+                            {week.aiInference && (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 flex items-center gap-1">
+                                <Sparkles className="w-2.5 h-2.5" /> IA
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-3 text-xs">
+                            <span className={`text-[11px] font-mono ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                              Egresos: <strong className="text-rose-500">{formatGTQ(week.expenses)}</strong>
+                            </span>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
+                              week.status === 'critical'
+                                ? 'bg-rose-500/20 border-rose-500/30 text-rose-300'
+                                : week.status === 'warning'
+                                ? 'bg-amber-500/20 border-amber-500/30 text-amber-300'
+                                : 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
+                            }`}>
+                              {week.burnRateVsExpectedPct}% ritmo
                             </span>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-3 text-xs">
-                          <span className={`text-[11px] font-mono ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                            Egresos: <strong className="text-rose-500">{formatGTQ(week.expenses)}</strong>
-                          </span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
-                            week.status === 'critical'
-                              ? 'bg-rose-500/20 border-rose-500/30 text-rose-300'
-                              : week.status === 'warning'
-                              ? 'bg-amber-500/20 border-amber-500/30 text-amber-300'
-                              : 'bg-emerald-500/20 border-emerald-500/30 text-emerald-300'
-                          }`}>
-                            {week.burnRateVsExpectedPct}% ritmo
+                        <p className={`text-[11px] pl-8 leading-relaxed ${
+                          isDark ? 'text-slate-300' : 'text-slate-600'
+                        }`}>
+                          {week.highlight}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* BLOQUE DE ANÁLISIS INFERENCIAL CON IA GENERATIVA (GEMINI) */}
+              {(() => {
+                const selectedWeekData = currentReport.weeks.find((w) => w.weekIndex === activeWeekIndex) || currentReport.weeks[0];
+                const activeInference = selectedWeekData?.aiInference || (currentReport.aiWeeklyInference?.weekIndex === activeWeekIndex ? currentReport.aiWeeklyInference : undefined);
+
+                return settings?.enableAiWeeklyAnalysis !== false ? (
+                  <div
+                    className={`p-4 sm:p-5 rounded-3xl border transition-all ${
+                      isDark
+                        ? 'bg-gradient-to-br from-purple-950/20 via-[#121826] to-[#0E131F] border-purple-500/30'
+                        : 'bg-gradient-to-br from-purple-50/70 via-white to-indigo-50/40 border-purple-200 shadow-xs'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center border border-purple-500/30">
+                          <Sparkles className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-xs sm:text-sm">
+                              Análisis Inferencial con IA (Semana {activeWeekIndex})
+                            </span>
+                            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30">
+                              Gemini
+                            </span>
+                          </div>
+                          <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                            Patrones y recomendaciones dinámicas sobre métricas anónimas
                           </span>
                         </div>
                       </div>
 
-                      <p className={`text-[11px] pl-8 leading-relaxed ${
-                        isDark ? 'text-slate-300' : 'text-slate-600'
-                      }`}>
-                        {week.highlight}
-                      </p>
+                      <button
+                        type="button"
+                        disabled={isAiGenerating}
+                        onClick={() => handleGenerateAiWeeklyInference(activeWeekIndex)}
+                        className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs cursor-pointer disabled:opacity-50"
+                      >
+                        {isAiGenerating ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Infiriendo...</span>
+                          </>
+                        ) : activeInference ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            <span>Actualizar S{activeWeekIndex}</span>
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>Analizar Semana S{activeWeekIndex}</span>
+                          </>
+                        )}
+                      </button>
                     </div>
-                  ))}
+
+                    {activeInference ? (
+                      <div className="space-y-2.5 pt-1">
+                        <div className={`p-3 rounded-2xl border ${
+                          isDark ? 'bg-black/30 border-white/5' : 'bg-white/80 border-purple-100'
+                        }`}>
+                          <div className="flex items-center justify-between gap-2 mb-1">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
+                              Patrón Conductual Inferido
+                            </span>
+                            <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full ${
+                              activeInference.tone === 'caution' || activeInference.tone === 'urgent'
+                                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+                                : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                            }`}>
+                              {activeInference.tone === 'caution'
+                                ? '⚠️ Precaución'
+                                : activeInference.tone === 'urgent'
+                                ? '🚨 Acción Inmediata'
+                                : '✨ Ritmo Positivo'}
+                            </span>
+                          </div>
+                          <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                            {activeInference.patterns}
+                          </p>
+                        </div>
+
+                        <div className={`p-3 rounded-2xl border ${
+                          isDark ? 'bg-black/30 border-white/5' : 'bg-white/80 border-purple-100'
+                        }`}>
+                          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-400 block mb-1">
+                            Recomendación Táctica Fresca
+                          </span>
+                          <p className={`text-xs leading-relaxed ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                            {activeInference.actionableAdvice}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1">
+                          <span>🔒 Análisis 100% anonimizado (sin nombres ni datos bancarios)</span>
+                          <span>{formatShortDateES(activeInference.generatedAt.slice(0, 10))}</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={`p-3.5 rounded-2xl border text-center ${
+                        isDark ? 'bg-black/20 border-white/5 text-slate-300' : 'bg-white/70 border-purple-100 text-slate-600'
+                      }`}>
+                        <p className="text-xs leading-relaxed">
+                          Selecciona cualquier semana arriba y presiona <strong>Analizar Semana S{activeWeekIndex}</strong> para obtener una inferencia no repetitiva y recomendaciones dinámicas basadas en los patrones de gasto de ese período.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className={`p-3 rounded-2xl border flex items-center justify-between text-xs ${
+                    isDark ? 'bg-black/20 border-white/5 text-slate-400' : 'bg-slate-50 border-slate-200 text-slate-600'
+                  }`}>
+                    <span>Los análisis inferenciales con IA están en pausa según tus preferencias de privacidad.</span>
+                    <span className="text-[10px] text-purple-400 font-semibold">Configurable en Más</span>
+                  </div>
+                );
+              })()}
+
+              {/* CONSEJO TÁCTICO DE TARJETAS (Solo si tiene tarjetas activas) */}
+              {creditCardTip && (
+                <div
+                  className={`p-4 rounded-3xl border text-xs flex items-start gap-3 transition-all ${
+                    creditCardTip.type === 'due_reminder'
+                      ? isDark
+                        ? 'bg-amber-500/10 border-amber-500/25 text-amber-200'
+                        : 'bg-amber-50/90 border-amber-200 text-amber-900'
+                      : isDark
+                      ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-200'
+                      : 'bg-indigo-50/90 border-indigo-200 text-indigo-950'
+                  }`}
+                >
+                  <div
+                    className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${
+                      creditCardTip.type === 'due_reminder'
+                        ? 'bg-amber-500/20 text-amber-400'
+                        : 'bg-indigo-500/20 text-indigo-400'
+                    }`}
+                  >
+                    <CreditCard className="w-4 h-4" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+                      <span className="font-bold text-xs">
+                        {creditCardTip.title}
+                      </span>
+                      {creditCardTip.badge && (
+                        <span
+                          className={`text-[9px] px-2 py-0.5 rounded-full font-semibold font-mono ${
+                            creditCardTip.type === 'due_reminder'
+                              ? 'bg-amber-500/20 text-amber-300'
+                              : 'bg-indigo-500/20 text-indigo-300'
+                          }`}
+                        >
+                          {creditCardTip.badge}
+                        </span>
+                      )}
+                    </div>
+                    <p
+                      className={`text-xs leading-relaxed ${
+                        isDark ? 'text-slate-300' : 'text-slate-700'
+                      }`}
+                    >
+                      {creditCardTip.message}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* RECOMENDACIONES PUNTUALES ACCIONABLES */}
               <div>
@@ -586,6 +839,84 @@ export const FinancialHealthModal: React.FC<FinancialHealthModalProps> = ({
                 </div>
               </div>
 
+              {/* BITÁCORA ANUAL DE LAS 52 SEMANAS */}
+              {annualSummary.weeks52 && annualSummary.weeks52.length > 0 && (
+                <div className={`p-4 rounded-3xl border ${
+                  isDark ? 'bg-black/20 border-white/5' : 'bg-slate-50 border-slate-200'
+                }`}>
+                  <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                    <div>
+                      <span className={`text-xs font-bold uppercase tracking-wider block ${
+                        isDark ? 'text-slate-300' : 'text-slate-700'
+                      }`}>
+                        Bitácora Semanal Anual (52 Semanas)
+                      </span>
+                      <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                        Corte financiero fijo de 7 días asociado a su mes correspondiente
+                      </span>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setShow52Weeks(!show52Weeks)}
+                      className={`text-xs font-semibold px-2.5 py-1 rounded-xl border transition-colors cursor-pointer ${
+                        isDark ? 'bg-white/5 border-white/10 hover:bg-white/10 text-slate-300' : 'bg-white border-slate-200 hover:bg-slate-100 text-slate-700'
+                      }`}
+                    >
+                      {show52Weeks ? 'Ocultar bitácora' : `Ver las 52 semanas (${annualSummary.weeks52.length})`}
+                    </button>
+                  </div>
+
+                  {show52Weeks && (
+                    <div className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
+                      {annualSummary.weeks52.map((week) => (
+                        <div
+                          key={week.weekNumber}
+                          className={`p-2 rounded-xl border flex items-center justify-between text-[11px] ${
+                            week.status === 'critical'
+                              ? isDark ? 'bg-rose-500/10 border-rose-500/20' : 'bg-rose-50 border-rose-200'
+                              : week.status === 'warning'
+                              ? isDark ? 'bg-amber-500/10 border-amber-500/20' : 'bg-amber-50 border-amber-200'
+                              : week.status === 'upcoming'
+                              ? isDark ? 'bg-white/5 border-white/5 opacity-50' : 'bg-white border-slate-200 opacity-60'
+                              : isDark ? 'bg-white/5 border-white/5' : 'bg-white border-slate-200 shadow-2xs'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span className="font-mono font-bold text-slate-400 text-[10px] w-8">
+                              S{week.weekNumber}
+                            </span>
+                            <div>
+                              <span className="font-semibold block">{week.monthName}</span>
+                              <span className="text-[9px] text-slate-400">
+                                {formatShortDateES(week.startDate)} - {formatShortDateES(week.endDate)}
+                              </span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 text-right">
+                            <div>
+                              <span className="text-[9px] text-slate-400 block">Egresos:</span>
+                              <span className="font-mono font-semibold text-rose-500 dark:text-rose-400">
+                                {formatGTQ(week.expenses)}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-[9px] text-slate-400 block">Balance:</span>
+                              <span className={`font-mono font-bold ${
+                                week.netSavings >= 0 ? 'text-emerald-500 dark:text-emerald-400' : 'text-rose-500'
+                              }`}>
+                                {formatGTQ(week.netSavings)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* RECOMENDACIONES ESTRATÉGICAS ANUALES */}
               <div className={`p-4 rounded-2xl border ${
                 isDark ? 'bg-white/5 border-white/5' : 'bg-slate-50 border-slate-200'
@@ -611,7 +942,7 @@ export const FinancialHealthModal: React.FC<FinancialHealthModalProps> = ({
         }`}>
           <div className="flex items-center gap-2 text-xs text-slate-400">
             <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-            <span>Datos procesados de forma confidencial y respaldados en Firestore.</span>
+            <span>Datos procesados con confidencialidad y respaldados con cifrado en tu base de datos.</span>
           </div>
 
           <button

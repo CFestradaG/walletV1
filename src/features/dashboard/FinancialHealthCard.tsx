@@ -14,7 +14,10 @@ import {
   TrendingUp,
 } from 'lucide-react';
 import { useWallet } from '../../core/state/WalletContext';
-import { calculateFinancialHealthReport } from '../analytics/financialHealthEngine';
+import {
+  calculateFinancialHealthReport,
+  getCreditCardTacticalTip,
+} from '../analytics/financialHealthEngine';
 import { MonthlyExecutiveReport } from '../../core/types/models';
 import { formatGTQ } from '../../core/utils/formatters';
 
@@ -35,11 +38,15 @@ export const FinancialHealthCard: React.FC<FinancialHealthCardProps> = ({
     financialReports,
     saveFinancialReport,
     activePeriod,
+    settings,
   } = useWallet();
 
   const isDark = resolvedTheme === 'dark';
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
+  const [manualApprovalGranted, setManualApprovalGranted] = useState(false);
+
+  const isDiagnosticsEnabled = settings.enableSmartDiagnostics !== false || manualApprovalGranted;
 
   const now = new Date();
   const currentYear = activePeriod ? Number(activePeriod.startDate.slice(0, 4)) : now.getFullYear();
@@ -124,6 +131,43 @@ export const FinancialHealthCard: React.FC<FinancialHealthCardProps> = ({
   }, [currentReport.level, isDark]);
 
   const topRecommendation = currentReport.recommendations[0];
+
+  // Subtle tactical credit card advice (only when active cards exist)
+  const creditCardTip = useMemo(() => {
+    return getCreditCardTacticalTip(accounts);
+  }, [accounts]);
+
+  if (!isDiagnosticsEnabled) {
+    return (
+      <div
+        className={`p-4 rounded-3xl border transition-all flex items-center justify-between gap-3 ${
+          isDark
+            ? 'bg-[#121826] border-white/10'
+            : 'bg-white border-slate-200 shadow-xs'
+        }`}
+      >
+        <div className="flex items-center gap-2.5">
+          <div className="w-8 h-8 rounded-xl bg-amber-500/15 text-amber-500 dark:text-amber-400 flex items-center justify-center shrink-0">
+            <Sparkles className="w-4 h-4" />
+          </div>
+          <div>
+            <span className="font-bold text-xs block">Diagnósticos en Pausa</span>
+            <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              Cálculo automático desactivado por preferencia.
+            </span>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setManualApprovalGranted(true)}
+          className="px-3 py-1.5 rounded-xl bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25 hover:bg-emerald-500/25 text-xs font-bold shrink-0 cursor-pointer transition-colors"
+        >
+          Aprobar & Generar
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -296,6 +340,56 @@ export const FinancialHealthCard: React.FC<FinancialHealthCardProps> = ({
                 isDark ? 'text-slate-300' : 'text-slate-700'
               }`}>
                 {topRecommendation.detail}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* CONSEJO TÁCTICO DE TARJETAS (Sutil: solo visible si el usuario tiene tarjetas de crédito) */}
+        {creditCardTip && (
+          <div
+            className={`mt-2.5 p-2.5 rounded-2xl border text-xs flex items-center gap-2.5 transition-all ${
+              creditCardTip.type === 'due_reminder'
+                ? isDark
+                  ? 'bg-amber-500/10 border-amber-500/25 text-amber-200'
+                  : 'bg-amber-50/90 border-amber-200 text-amber-900'
+                : isDark
+                ? 'bg-indigo-500/10 border-indigo-500/20 text-indigo-200'
+                : 'bg-indigo-50/90 border-indigo-200 text-indigo-950'
+            }`}
+          >
+            <div
+              className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 ${
+                creditCardTip.type === 'due_reminder'
+                  ? 'bg-amber-500/20 text-amber-400'
+                  : 'bg-indigo-500/20 text-indigo-400'
+              }`}
+            >
+              <CreditCard className="w-3.5 h-3.5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="font-bold text-[11px] block">
+                  {creditCardTip.title}
+                </span>
+                {creditCardTip.badge && (
+                  <span
+                    className={`text-[9px] px-1.5 py-0.5 rounded-md font-semibold font-mono ${
+                      creditCardTip.type === 'due_reminder'
+                        ? 'bg-amber-500/20 text-amber-300'
+                        : 'bg-indigo-500/20 text-indigo-300'
+                    }`}
+                  >
+                    {creditCardTip.badge}
+                  </span>
+                )}
+              </div>
+              <p
+                className={`text-[10.5px] leading-snug line-clamp-2 mt-0.5 ${
+                  isDark ? 'text-slate-300' : 'text-slate-700'
+                }`}
+              >
+                {creditCardTip.message}
               </p>
             </div>
           </div>
