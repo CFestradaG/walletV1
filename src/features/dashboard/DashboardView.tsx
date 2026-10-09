@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   AlertTriangle,
   ArrowDownLeft,
@@ -21,10 +21,13 @@ import {
 } from 'lucide-react';
 import { useWallet } from '../../core/state/WalletContext';
 import { PeriodSelectorBar } from '../../core/widgets/PeriodSelectorBar';
+import { DrilldownTarget, DrilldownTransactionsModal } from '../../core/widgets/DrilldownTransactionsModal';
 import { Transaction } from '../../core/types/models';
 import { formatGTQ, formatShortDateES } from '../../core/utils/formatters';
 import {
   calculateCumulativeYearSummary,
+  CategoryAlert,
+  findPeriodForMonth,
   loadProjectionsPlan,
 } from '../annual_budget/annualBudgetEngine';
 import { FinancialHealthCard } from './FinancialHealthCard';
@@ -134,6 +137,43 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       (a) => a.isOverBudget || a.isNearLimit
     );
   }, [cumulativeSummary]);
+
+  // Drilldown modal state
+  const [drilldownTarget, setDrilldownTarget] = useState<DrilldownTarget | null>(null);
+  const [isDrilldownOpen, setIsDrilldownOpen] = useState(false);
+
+  const handleOpenAlertDrilldown = (alert: CategoryAlert) => {
+    const matchingPeriod = findPeriodForMonth(periods, currentYear, currentMonthIndex);
+    const matchingTransactions = transactions.filter((t) => {
+      const isMatch =
+        (t.type === 'expense' || (t.type === 'transfer' && Boolean(t.categoryId))) &&
+        t.categoryId === alert.category.id;
+      if (!isMatch) return false;
+      if (matchingPeriod && matchingPeriod.startDate && matchingPeriod.endDate) {
+        const matchesPeriodId = t.periodId && t.periodId === matchingPeriod.id;
+        const matchesDateRange =
+          matchingPeriod.startDate <= t.date && t.date <= matchingPeriod.endDate;
+        return matchesPeriodId || matchesDateRange;
+      }
+      const monthStr = String(currentMonthIndex + 1).padStart(2, '0');
+      return t.date.startsWith(`${currentYear}-${monthStr}`);
+    });
+
+    setDrilldownTarget({
+      title: alert.category.name,
+      subtitle: `${cumulativeSummary.currentMonthName} ${currentYear}`,
+      icon: alert.category.icon || '📦',
+      color: alert.category.color || (alert.isOverBudget ? '#EF4444' : '#F59E0B'),
+      totalAmount: alert.actual,
+      budgetAmount: alert.projected,
+      pct: alert.pct,
+      isOverBudget: alert.isOverBudget,
+      isNearLimit: alert.isNearLimit,
+      transactions: matchingTransactions,
+      emptyMessage: `No se encontraron gastos registrados para ${alert.category.name} en ${cumulativeSummary.currentMonthName}.`,
+    });
+    setIsDrilldownOpen(true);
+  };
 
   // 4. Transacciones recientes
   const recentTransactions = useMemo(() => {
@@ -545,16 +585,18 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
               {activeAlerts.map((alert) => (
                 <div
                   key={alert.category.id}
-                  className={`p-3 rounded-2xl border space-y-1.5 transition-all ${
+                  onClick={() => handleOpenAlertDrilldown(alert)}
+                  className={`p-3 rounded-2xl border space-y-1.5 transition-all cursor-pointer group select-none ${
                     isDark
-                      ? 'bg-black/20 border-white/5'
-                      : 'bg-white border-slate-200 shadow-2xs'
+                      ? 'bg-black/20 border-white/5 hover:border-emerald-500/40 hover:bg-white/[0.04]'
+                      : 'bg-white border-slate-200 hover:border-emerald-500/40 hover:bg-slate-50/80 shadow-2xs'
                   }`}
+                  title={`Ver transacciones de ${alert.category.name}`}
                 >
                   <div className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-2">
                       <span className="text-base">{alert.category.icon || '📦'}</span>
-                      <span className={`font-semibold ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      <span className={`font-semibold group-hover:text-emerald-500 transition-colors ${isDark ? 'text-white' : 'text-slate-900'}`}>
                         {alert.category.name}
                       </span>
                     </div>
@@ -586,6 +628,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
                       }`}
                       style={{ width: `${Math.min(100, alert.pct)}%` }}
                     />
+                  </div>
+
+                  <div className="flex items-center justify-end pt-0.5">
+                    <span className={`text-[10px] flex items-center gap-1 opacity-70 group-hover:opacity-100 group-hover:text-emerald-500 transition-all ${
+                      isDark ? 'text-slate-400' : 'text-slate-500'
+                    }`}>
+                      <span>Ver transacciones</span>
+                      <ArrowRight className="w-2.5 h-2.5" />
+                    </span>
                   </div>
                 </div>
               ))}
@@ -680,6 +731,15 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* DRILLDOWN TRANSACTIONS MODAL */}
+      <DrilldownTransactionsModal
+        isOpen={isDrilldownOpen}
+        onClose={() => setIsDrilldownOpen(false)}
+        target={drilldownTarget}
+        onSelectTransaction={onEditTransaction}
+        onNavigateToTransactions={() => onNavigateTab('transacciones')}
+      />
     </div>
   );
 };

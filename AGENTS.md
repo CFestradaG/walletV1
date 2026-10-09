@@ -34,7 +34,7 @@ La aplicación móvil Flutter ya no forma parte del repositorio. La experiencia 
 | `src/core/security/` | PIN local, biometría WebAuthn, configuración, pantalla de bloqueo y hook de autobloqueo. |
 | `src/core/pwa/` | Detección de instalación/modo standalone y modal de instrucciones PWA. |
 | `src/core/utils/formatters.ts` | Formato de importes/fechas y evaluación aritmética. |
-| `src/core/widgets/` | Selectores reutilizables de cuentas y períodos. |
+| `src/core/widgets/` | Selectores reutilizables de cuentas, períodos y modal de desglose de transacciones (`DrilldownTransactionsModal.tsx`). |
 | `src/features/auth/` | Registro, acceso, Google y recuperación de contraseña. |
 | `src/features/accounts/` | Cuentas y tarjetas: visualización, edición, archivo y gestión de saldos. |
 | `src/features/transactions/` | Lista, modal y filtros de movimientos; `financialEngine.ts` valida movimientos y calcula saldos/resúmenes. |
@@ -80,6 +80,9 @@ Modelos relevantes en `src/core/types/models.ts`:
 - Al reconciliar categorías y presupuestos locales se crean solo documentos cuyos IDs todavía no existen en Firestore; cada creación vuelve a comprobar la ausencia dentro de una transacción. Los documentos remotos existentes no se sobrescriben durante esta recuperación.
 - Las notificaciones de plantillas requieren permiso del navegador y la aplicación abierta; al abrir una, el formulario de transacción carga sus campos para confirmar o ajustar el movimiento. El siguiente ciclo se calcula desde la fecha base y avanza al guardar el movimiento.
 - Al eliminar una categoría (`deleteCategory`), se remueven también sus proyecciones anuales vinculadas para evitar claves huérfanas.
+- **Desglose Dinámico de Transacciones (Drill-down in-situ):**
+  - Al interactuar con cualquier tarjeta o barra de presupuesto (en la sección de Estado de Presupuesto del Inicio y en Cumplimiento de Presupuestos de Análisis) o con los segmentos de Distribución por Categorías, Subcategorías de mayor gasto y Actividad por Cuenta, el modal emergente `DrilldownTransactionsModal` muestra al instante el conjunto exacto de transacciones que componen y suman dicho total en el período analizado.
+  - La ventana emergente muestra comparativa contra el presupuesto (porcentaje, disponible o sobregiro), contador de movimientos, buscador interno de texto y permite tocar cualquier registro para abrir directamente su edición sin perder el contexto de la pantalla activa.
 - **Diagnóstico de Salud Financiera y Bitácora Anual de 52 Semanas:**
   - El motor (`financialHealthEngine.ts`) calcula la bitácora integral de 52 semanas del año (cortes de 7 días agrupados por su mes de pertenencia) con balances semanales, burn rate y categorías predominantes, permitiendo seguimiento continuo sin la carga mental de revisiones diarias.
   - **Inferencia Semanal con IA y Privacidad Estricta:**

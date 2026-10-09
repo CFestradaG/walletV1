@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   Activity,
   ArrowDownRight,
+  ArrowRight,
   ArrowUpRight,
   BarChart3,
   Download,
@@ -15,6 +16,8 @@ import {
 } from 'lucide-react';
 import { useWallet } from '../../core/state/WalletContext';
 import { PeriodSelectorBar } from '../../core/widgets/PeriodSelectorBar';
+import { DrilldownTarget, DrilldownTransactionsModal } from '../../core/widgets/DrilldownTransactionsModal';
+import { Transaction } from '../../core/types/models';
 import { formatGTQ } from '../../core/utils/formatters';
 import { subscribeAnnualProjections } from '../../core/firebase/firestoreSync';
 import {
@@ -32,6 +35,8 @@ interface AnalyticsViewProps {
   onOpenNewTransaction: () => void;
   onOpenAnnualBudgetModal?: () => void;
   onOpenHealthReport?: () => void;
+  onEditTransaction?: (tx: Transaction) => void;
+  onNavigateTab?: (tab: any) => void;
 }
 
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
@@ -39,6 +44,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   onOpenBudgetsModal,
   onOpenAnnualBudgetModal,
   onOpenHealthReport,
+  onEditTransaction,
+  onNavigateTab,
 }) => {
   const {
     activePeriod,
@@ -55,6 +62,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
   const isDark = resolvedTheme === 'dark';
   const [selectedSubperiodId, setSelectedSubperiodId] = useState('');
+  const [drilldownTarget, setDrilldownTarget] = useState<DrilldownTarget | null>(null);
+  const [isDrilldownOpen, setIsDrilldownOpen] = useState(false);
+
   const annualYear = activePeriod ? Number(activePeriod.startDate.slice(0, 4)) : new Date().getFullYear();
   const annualUserId = currentUser?.id || 'default_user';
   const [annualPlan, setAnnualPlan] = useState<AnnualProjectionsPlan>(() =>
@@ -138,7 +148,10 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
   // MODULE 3: Top Subcategorías
   const topSubcategories = useMemo(() => {
-    const map = new Map<string, { catName: string; subName: string; amount: number; color: string }>();
+    const map = new Map<
+      string,
+      { subId: string; categoryId?: string; catName: string; subName: string; amount: number; color: string }
+    >();
     for (const t of periodTransactions) {
       if ((t.type === 'expense' || t.type === 'transfer') && t.subcategoryId) {
         const cat = categories.find((c) => c.id === t.categoryId);
@@ -146,6 +159,8 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         const key = t.subcategoryId;
         if (!map.has(key)) {
           map.set(key, {
+            subId: key,
+            categoryId: t.categoryId,
             catName: cat?.name || 'Categoría',
             subName: sub?.name || 'Subcategoría',
             amount: 0,
@@ -163,9 +178,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
   // MODULE 4: Gastos por Cuenta
   const accountUsage = useMemo(() => {
-    const map = new Map<string, { name: string; type: string; spent: number; income: number }>();
+    const map = new Map<string, { id: string; name: string; type: string; spent: number; income: number }>();
     for (const a of accounts) {
-      map.set(a.id, { name: a.name, type: a.type, spent: 0, income: 0 });
+      map.set(a.id, { id: a.id, name: a.name, type: a.type, spent: 0, income: 0 });
     }
 
     for (const t of periodTransactions) {
@@ -209,6 +224,143 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       }];
     }).sort((a, b) => b.pct - a.pct);
   }, [activePeriod, annualPlan, annualYear, budgets, categories, periods, transactions]);
+
+  // Handlers para abrir el modal de desglose (Drill-down)
+  const handleOpenCategoryDrilldown = (item: {
+    id: string;
+    name: string;
+    color: string;
+    amount: number;
+    pct: number;
+  }) => {
+    const cat = categories.find((c) => c.id === item.id);
+    const matchingTxs = periodTransactions.filter(
+      (t) =>
+        (t.type === 'expense' || (t.type === 'transfer' && Boolean(t.categoryId))) &&
+        t.categoryId === item.id
+    );
+
+    setDrilldownTarget({
+      title: item.name,
+      subtitle: activePeriod ? activePeriod.name : 'Período analizado',
+      icon: cat?.icon || '📦',
+      color: item.color,
+      totalAmount: item.amount,
+      pct: item.pct,
+      transactions: matchingTxs,
+      emptyMessage: `No se encontraron gastos para ${item.name} en este período.`,
+    });
+    setIsDrilldownOpen(true);
+  };
+
+  const handleOpenSubcategoryDrilldown = (sub: {
+    subId: string;
+    categoryId?: string;
+    catName: string;
+    subName: string;
+    amount: number;
+    color: string;
+  }) => {
+    const cat = categories.find((c) => c.id === sub.categoryId);
+    const matchingTxs = periodTransactions.filter(
+      (t) =>
+        (t.type === 'expense' || (t.type === 'transfer' && Boolean(t.categoryId))) &&
+        t.subcategoryId === sub.subId
+    );
+
+    setDrilldownTarget({
+      title: sub.subName,
+      subtitle: `${sub.catName} • ${activePeriod?.name || 'Período analizado'}`,
+      icon: cat?.icon || '🏷️',
+      color: sub.color,
+      totalAmount: sub.amount,
+      transactions: matchingTxs,
+      emptyMessage: `No se encontraron gastos para ${sub.subName} en este período.`,
+    });
+    setIsDrilldownOpen(true);
+  };
+
+  const handleOpenBudgetDrilldown = (b: {
+    id: string;
+    name: string;
+    color: string;
+    budget: number;
+    spent: number;
+    pct: number;
+    isOver: boolean;
+  }) => {
+    const cat = categories.find((c) => c.id === b.id);
+    const matrixMonth = Array.from({ length: 12 }, (_, index) => index).find((index) =>
+      findPeriodForMonth(periods, annualYear, index)?.id === activePeriod?.id
+    );
+    const monthIndex =
+      matrixMonth ??
+      activePeriod?.monthIndex ??
+      (activePeriod?.referenceMonth
+        ? activePeriod.referenceMonth - 1
+        : activePeriod
+        ? Number(activePeriod.startDate.slice(5, 7)) - 1
+        : new Date().getMonth());
+    const matchingPeriod = findPeriodForMonth(periods, annualYear, monthIndex);
+
+    const matchingTxs = transactions.filter((t) => {
+      const isMatch =
+        (t.type === 'expense' || (t.type === 'transfer' && Boolean(t.categoryId))) &&
+        t.categoryId === b.id;
+      if (!isMatch) return false;
+      if (matchingPeriod && matchingPeriod.startDate && matchingPeriod.endDate) {
+        return (
+          (t.periodId && t.periodId === matchingPeriod.id) ||
+          (matchingPeriod.startDate <= t.date && t.date <= matchingPeriod.endDate)
+        );
+      }
+      const monthStr = String(monthIndex + 1).padStart(2, '0');
+      return t.date.startsWith(`${annualYear}-${monthStr}`);
+    });
+
+    setDrilldownTarget({
+      title: b.name,
+      subtitle: `Presupuesto en ${activePeriod?.name || `Mes ${monthIndex + 1}`}`,
+      icon: cat?.icon || '🎯',
+      color: b.color,
+      totalAmount: b.spent,
+      budgetAmount: b.budget,
+      pct: b.pct,
+      isOverBudget: b.isOver,
+      isNearLimit: b.pct >= 80 && b.pct <= 100,
+      transactions: matchingTxs,
+      emptyMessage: `No se encontraron gastos registrados para ${b.name} en este presupuesto.`,
+    });
+    setIsDrilldownOpen(true);
+  };
+
+  const handleOpenAccountDrilldown = (acc: {
+    id: string;
+    name: string;
+    type: string;
+    spent: number;
+    income: number;
+  }) => {
+    const accountObj = accounts.find((a) => a.id === acc.id);
+    const matchingTxs = periodTransactions.filter((t) => t.accountId === acc.id);
+    setDrilldownTarget({
+      title: acc.name,
+      subtitle: `Actividad en ${activePeriod?.name || 'Período analizado'}`,
+      icon:
+        accountObj?.type === 'credit_card'
+          ? '💳'
+          : accountObj?.type === 'bank'
+          ? '🏦'
+          : accountObj?.type === 'cash'
+          ? '💵'
+          : '💰',
+      color: accountObj?.color || '#38BDF8',
+      totalAmount: acc.spent + acc.income,
+      transactions: matchingTxs,
+      emptyMessage: `No hay transacciones registradas para ${acc.name} en este período.`,
+    });
+    setIsDrilldownOpen(true);
+  };
 
   // Export CSV summary
   const exportSummaryCSV = () => {
@@ -403,20 +555,32 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         ) : (
           <div className="space-y-3">
             {categoryBreakdown.map((item) => (
-              <div key={item.id} className="space-y-1">
+              <div
+                key={item.id}
+                onClick={() => handleOpenCategoryDrilldown(item)}
+                className={`space-y-1 p-2 rounded-2xl transition-all cursor-pointer group select-none ${
+                  isDark ? 'hover:bg-white/5 active:bg-white/10' : 'hover:bg-slate-50 active:bg-slate-100'
+                }`}
+                title={`Ver transacciones de ${item.name}`}
+              >
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2">
                     <span
-                      className="w-2.5 h-2.5 rounded-full"
+                      className="w-2.5 h-2.5 rounded-full shrink-0 group-hover:scale-125 transition-transform"
                       style={{ backgroundColor: item.color }}
                     />
-                    <span className={`font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{item.name}</span>
+                    <span className={`font-medium group-hover:text-emerald-500 transition-colors ${
+                      isDark ? 'text-slate-200' : 'text-slate-800'
+                    }`}>
+                      {item.name}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2 font-mono">
                     <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{item.pct}%</span>
                     <span className={`font-bold ${isDark ? 'text-slate-200' : 'text-slate-900'}`}>
                       {formatGTQ(item.amount)}
                     </span>
+                    <ArrowRight className="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                 </div>
 
@@ -447,17 +611,28 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             {topSubcategories.map((sub, idx) => (
               <div
                 key={idx}
-                className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all ${
-                  isDark ? 'bg-black/20 border-white/5' : 'bg-white border-slate-200 shadow-xs'
+                onClick={() => handleOpenSubcategoryDrilldown(sub)}
+                className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-all cursor-pointer group select-none ${
+                  isDark
+                    ? 'bg-black/20 border-white/5 hover:border-emerald-500/40 hover:bg-white/5'
+                    : 'bg-white border-slate-200 hover:border-emerald-500/40 hover:bg-slate-50 shadow-xs'
                 }`}
+                title={`Ver transacciones de ${sub.subName}`}
               >
                 <div>
-                  <span className={`font-bold block ${isDark ? 'text-white' : 'text-slate-900'}`}>{sub.subName}</span>
+                  <span className={`font-bold block group-hover:text-emerald-500 transition-colors ${
+                    isDark ? 'text-white' : 'text-slate-900'
+                  }`}>
+                    {sub.subName}
+                  </span>
                   <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{sub.catName}</span>
                 </div>
-                <span className="font-mono font-bold text-rose-500">
-                  {formatGTQ(sub.amount)}
-                </span>
+                <div className="flex items-center gap-2 font-mono">
+                  <span className="font-bold text-rose-500">
+                    {formatGTQ(sub.amount)}
+                  </span>
+                  <ArrowRight className="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
               </div>
             ))}
           </div>
@@ -489,12 +664,26 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
           <div className="space-y-3">
             {budgetPerformance.map((b) => (
-              <div key={b.id} className="space-y-1">
+              <div
+                key={b.id}
+                onClick={() => handleOpenBudgetDrilldown(b)}
+                className={`space-y-1 p-2 rounded-2xl transition-all cursor-pointer group select-none ${
+                  isDark ? 'hover:bg-white/5 active:bg-white/10' : 'hover:bg-slate-50 active:bg-slate-100'
+                }`}
+                title={`Ver transacciones de ${b.name}`}
+              >
                 <div className="flex items-center justify-between text-xs">
-                  <span className={`font-medium ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>{b.name}</span>
-                  <span className={`font-mono text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                    {formatGTQ(b.spent)} de {formatGTQ(b.budget)} ({b.pct}%)
+                  <span className={`font-medium group-hover:text-emerald-500 transition-colors ${
+                    isDark ? 'text-slate-200' : 'text-slate-800'
+                  }`}>
+                    {b.name}
                   </span>
+                  <div className="flex items-center gap-1.5 font-mono">
+                    <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {formatGTQ(b.spent)} de {formatGTQ(b.budget)} ({b.pct}%)
+                    </span>
+                    <ArrowRight className="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
                 </div>
                 <div className={`w-full h-2 rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-slate-100'}`}>
                   <div
@@ -528,9 +717,20 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
 
           <div className={`divide-y ${isDark ? 'divide-white/5' : 'divide-slate-100'}`}>
             {accountUsage.map((acc, i) => (
-              <div key={i} className="py-2.5 flex items-center justify-between text-xs">
+              <div
+                key={i}
+                onClick={() => handleOpenAccountDrilldown(acc)}
+                className={`py-2.5 px-2 rounded-xl flex items-center justify-between text-xs transition-colors cursor-pointer group ${
+                  isDark ? 'hover:bg-white/5' : 'hover:bg-slate-50'
+                }`}
+                title={`Ver transacciones de ${acc.name}`}
+              >
                 <div>
-                  <span className={`font-bold block ${isDark ? 'text-white' : 'text-slate-900'}`}>{acc.name}</span>
+                  <span className={`font-bold block group-hover:text-sky-400 transition-colors ${
+                    isDark ? 'text-white' : 'text-slate-900'
+                  }`}>
+                    {acc.name}
+                  </span>
                   <span className={`text-[10px] capitalize ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                     {acc.type === 'credit_card'
                       ? 'Tarjeta de Crédito'
@@ -542,23 +742,35 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
                   </span>
                 </div>
 
-                <div className="text-right font-mono text-[11px]">
-                  {acc.income > 0 && (
-                    <span className={`block font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
-                      +{formatGTQ(acc.income)}
-                    </span>
-                  )}
-                  {acc.spent > 0 && (
-                    <span className={`block font-semibold ${isDark ? 'text-rose-400' : 'text-rose-600'}`}>
-                      -{formatGTQ(acc.spent)}
-                    </span>
-                  )}
+                <div className="text-right font-mono text-[11px] flex items-center gap-2">
+                  <div>
+                    {acc.income > 0 && (
+                      <span className={`block font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
+                        +{formatGTQ(acc.income)}
+                      </span>
+                    )}
+                    {acc.spent > 0 && (
+                      <span className={`block font-semibold ${isDark ? 'text-rose-400' : 'text-rose-600'}`}>
+                        -{formatGTQ(acc.spent)}
+                      </span>
+                    )}
+                  </div>
+                  <ArrowRight className="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                 </div>
               </div>
             ))}
           </div>
         </div>
       )}
+
+      {/* DRILLDOWN TRANSACTIONS MODAL */}
+      <DrilldownTransactionsModal
+        isOpen={isDrilldownOpen}
+        onClose={() => setIsDrilldownOpen(false)}
+        target={drilldownTarget}
+        onSelectTransaction={onEditTransaction}
+        onNavigateToTransactions={onNavigateTab ? () => onNavigateTab('transacciones') : undefined}
+      />
     </div>
   );
 };

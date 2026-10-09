@@ -355,6 +355,8 @@ const WalletAppShell: React.FC = () => {
             onOpenNewTransaction={() => handleOpenNewTransaction()}
             onOpenAnnualBudgetModal={() => setIsAnnualBudgetModalOpen(true)}
             onOpenHealthReport={() => setIsHealthModalOpen(true)}
+            onEditTransaction={handleEditTransaction}
+            onNavigateTab={setActiveTab}
           />
         )}
 
