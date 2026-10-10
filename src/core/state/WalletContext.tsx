@@ -1084,6 +1084,10 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     } catch (err) {
       console.warn('Sign out error:', err);
     }
+    // Remove local store to prevent privacy leaks
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('wallet_app_v4_store');
+    }
     setCurrentUserId(null);
   };
 

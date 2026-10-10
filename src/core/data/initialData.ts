@@ -287,8 +287,8 @@ export function createActiveDemoUserStore(): UserDataStore {
 
   const profile: UserProfile = {
     id: userId,
-    name: 'Francisco Estrada',
-    email: 'francisco@estrada.gt',
+    name: 'Usuario Demo',
+    email: 'demo@wallet.gt',
     provider: 'email',
     createdAt: '2026-12-01T08:00:00.000Z',
   };

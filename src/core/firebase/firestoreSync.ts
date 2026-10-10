@@ -388,7 +388,7 @@ export async function seedUserInitialData(userId: string, initialStore: UserData
 /** Borra los datos financieros del usuario y vuelve a crear el conjunto inicial. */
 export async function resetUserFinancialData(userId: string, initialStore: UserDataStore): Promise<void> {
   if (auth.currentUser?.uid !== userId) throw new Error('Usuario no autenticado.');
-  const collectionNames = ['settings', 'categories', 'periods', 'budgets'] as const;
+  const collectionNames = ['settings', 'categories', 'periods', 'budgets', 'accounts', 'transactions', 'templates', 'financial_reports'] as const;
   const snapshots = await Promise.all(
     collectionNames.map((name) => getDocs(collection(db, 'users', userId, name)))
   );

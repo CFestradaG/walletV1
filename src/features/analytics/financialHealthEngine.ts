@@ -628,7 +628,6 @@ export async function requestWeeklyAiInference(params: {
           netSavings: weekData.netSavings,
           burnRateVsExpectedPct: weekData.burnRateVsExpectedPct,
           status: weekData.status,
-          highlight: weekData.highlight,
         },
         monthlyContext: {
           netSavings: monthlyContext.netSavings,
@@ -640,9 +639,6 @@ export async function requestWeeklyAiInference(params: {
         cardTactics: cardTactics
           ? {
               type: cardTactics.type,
-              title: cardTactics.title,
-              message: cardTactics.message,
-              recommendedCardName: cardTactics.recommendedCardName,
             }
           : null,
       }),

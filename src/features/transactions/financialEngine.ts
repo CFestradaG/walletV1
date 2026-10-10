@@ -45,6 +45,8 @@ export function calculatePortfolioSummary(accounts: Account[]): PortfolioSummary
       activeCreditCardsCount++;
       if (acc.currentBalance < 0) {
         rawDebtBalance += acc.currentBalance;
+      } else {
+        availableMoney += acc.currentBalance;
       }
     } else {
       activeLiquidAccountsCount++;
@@ -378,8 +380,7 @@ export function calculatePeriodSummary(
       totalTransfers += tx.amount;
       if (tx.isCreditCardPayment) {
         totalCardPayments += tx.amount;
-      }
-      if (tx.categoryId) {
+      } else if (tx.categoryId) {
         totalExpense += tx.amount;
       }
     }

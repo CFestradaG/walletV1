@@ -204,9 +204,11 @@ class OfflineQueueManager {
             break;
           }
 
-          // Keep failed changes in the persistent queue so they are never silently lost.
+          // For permanent errors, remove from the queue to prevent blocking (INT-03)
+          console.error('Permanent error encountered, discarding mutation from queue to unblock.', item);
+          queue.shift();
           saveQueueToStorage(userId, queue);
-          break;
+          continue;
         }
       }
     } finally {

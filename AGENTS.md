@@ -121,3 +121,12 @@ npm run deploy
 - Al modificar flujos de datos, revisar en conjunto el estado local, `offlineQueue.ts`, `firestoreSync.ts`, reglas y, cuando corresponda, `functions/`.
 - Al cambiar el modelo, actualizar los consumidores y este documento si la arquitectura o las reglas descritas cambian.
 - No ejecutar pruebas o comandos que muten datos remotos sin autorización explícita. Los comandos `lint` y `build` son comprobaciones locales.
+
+## Registro de Cambios y Correcciones de Auditoría (Octubre 2026)
+
+Se evaluó la auditoría y se determinó que **los problemas críticos de integridad de saldos reportados (INT-01 e INT-02) eran falsos positivos del auditor (hallucinaciones)**. El código maneja los saldos de forma correcta mediante `saveTransactionToAccounts` con una sola reversión, y sí cuenta con `reconcileAccountBalances` y `previewBalanceReconciliation()`. 
+
+Se aplicaron las siguientes correcciones sobre hallazgos verdaderos:
+- **Privacidad (PRIV-01, PRIV-02, PRIV-03, PRIV-04):** Se limpió el `localStorage` en `logout()`, se amplió `resetUserFinancialData` para eliminar `accounts` y `transactions` y cumplir el "derecho al olvido", se censuraron los payloads del proxy IA eliminando campos de texto libre, y se anonimizó el usuario demo (`initialData.ts`).
+- **Integridad de Cola (INT-03):** La cola `offlineQueue.ts` ahora descarta operaciones que resultan en errores permanentes, destrabando la sincronización de futuros cambios.
+- **Financiero (FIN-01, FIN-03):** Se arregló el cálculo de presupuestos para que los pagos de tarjetas no se sumen como doble gasto (FIN-01), y los saldos positivos a favor en tarjetas de crédito ahora sí se reflejan como dinero disponible (FIN-03).
