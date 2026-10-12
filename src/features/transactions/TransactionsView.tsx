@@ -15,6 +15,7 @@ import { useWallet } from '../../core/state/WalletContext';
 import { PeriodSelectorBar } from '../../core/widgets/PeriodSelectorBar';
 import { Transaction, TransactionType } from '../../core/types/models';
 import { formatGTQ, formatShortDateES } from '../../core/utils/formatters';
+import { AccountStatementModal } from './AccountStatementModal';
 
 interface TransactionsViewProps {
   onOpenNewTransaction: () => void;
@@ -50,6 +51,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   const [sortOrder, setSortOrder] = useState<'date_desc' | 'date_asc' | 'amount_desc'>('date_desc');
   const [isFilterPanelOpen, setIsFilterPanelOpen] = useState(false);
   const [filterSubperiodId, setFilterSubperiodId] = useState('');
+  const [isAccountStatementOpen, setIsAccountStatementOpen] = useState(false);
 
   useEffect(() => {
     setFilterSubperiodId('');
@@ -194,15 +196,30 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          onClick={onOpenNewTransaction}
-          title="Nueva transacción"
-          aria-label="Nueva transacción"
-          className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-slate-950 flex items-center justify-center hover:scale-105 active:scale-95 transition-all cursor-pointer shadow-xs border border-emerald-400/30 group"
-        >
-          <Plus className="w-4 h-4 stroke-[2.75] transition-transform duration-200 group-hover:rotate-90" />
-        </button>
+          <button
+            type="button"
+            onClick={() => setIsAccountStatementOpen(true)}
+            title="Exportar o imprimir estado de cuenta"
+            aria-label="Exportar o imprimir estado de cuenta"
+            className={`h-9 px-2.5 rounded-xl border flex items-center gap-1.5 text-xs font-semibold transition-all cursor-pointer shadow-xs active:scale-95 ${
+              isDark
+                ? 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white'
+                : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-slate-900'
+            }`}
+          >
+            <ReceiptText className="w-4 h-4 text-emerald-500" />
+            <span className="hidden sm:inline">Estado de Cuenta</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={onOpenNewTransaction}
+            title="Nueva transacción"
+            aria-label="Nueva transacción"
+            className="w-9 h-9 rounded-xl bg-gradient-to-tr from-emerald-500 to-teal-400 text-slate-950 flex items-center justify-center hover:scale-105 active:scale-95 transition-all cursor-pointer shadow-xs border border-emerald-400/30 group"
+          >
+            <Plus className="w-4 h-4 stroke-[2.75] transition-transform duration-200 group-hover:rotate-90" />
+          </button>
         </div>
       </div>
 
@@ -542,6 +559,12 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           })}
         </div>
       )}
+
+      {/* ESTADO DE CUENTA MODAL */}
+      <AccountStatementModal
+        isOpen={isAccountStatementOpen}
+        onClose={() => setIsAccountStatementOpen(false)}
+      />
     </div>
   );
 };

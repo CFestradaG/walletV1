@@ -5,13 +5,20 @@ import {
   ArrowRight,
   ArrowRightLeft,
   ArrowUpRight,
+  Banknote,
+  Calendar,
   CheckCircle2,
+  Clock,
+  CreditCard,
+  Landmark,
+  PiggyBank,
   ReceiptText,
   Search,
+  Wallet,
   X,
 } from 'lucide-react';
 import { useWallet } from '../state/WalletContext';
-import { Transaction } from '../types/models';
+import { AccountType, Transaction } from '../types/models';
 import { formatGTQ, formatShortDateES } from '../utils/formatters';
 
 export interface DrilldownTarget {
@@ -26,6 +33,24 @@ export interface DrilldownTarget {
   isNearLimit?: boolean;
   transactions: Transaction[];
   emptyMessage?: string;
+  // Account-specific details
+  accountId?: string;
+  accountType?: AccountType;
+  creditCardInfo?: {
+    debt: number;
+    creditLimit: number;
+    availableCredit: number;
+    utilization: number;
+    cutoffDay?: number;
+    paymentDueDay?: number;
+  };
+  liquidAccountInfo?: {
+    currentBalance: number;
+  };
+  // Period filter tabs support
+  allTransactions?: Transaction[];
+  periodTransactions?: Transaction[];
+  periodName?: string;
 }
 
 interface DrilldownTransactionsModalProps {
@@ -46,13 +71,15 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
   const { categories, accounts, resolvedTheme } = useWallet();
   const isDark = resolvedTheme === 'dark';
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterScope, setFilterScope] = useState<'period' | 'all'>('period');
 
-  // Reset search when modal opens/changes target
+  // Reset search and tab scope when modal opens/changes target
   useEffect(() => {
     if (isOpen) {
       setSearchTerm('');
+      setFilterScope('period');
     }
-  }, [isOpen, target?.title]);
+  }, [isOpen, target?.title, target?.accountId]);
 
   // Handle ESC key to close
   useEffect(() => {
@@ -68,10 +95,23 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
 
   const accentColor = target?.color || '#10B981';
 
+  const hasPeriodTabs = Boolean(target?.periodTransactions && target?.allTransactions);
+
+  // Determine current active transaction list according to selected tab
+  const activeTransactionsList = useMemo(() => {
+    if (!target) return [];
+    if (hasPeriodTabs) {
+      return filterScope === 'period'
+        ? (target.periodTransactions || [])
+        : (target.allTransactions || []);
+    }
+    return target.transactions;
+  }, [target, hasPeriodTabs, filterScope]);
+
   // Sort and filter transactions
   const sortedAndFilteredTransactions = useMemo(() => {
     if (!target) return [];
-    let list = [...target.transactions].sort((a, b) => {
+    let list = [...activeTransactionsList].sort((a, b) => {
       const dateCmp = b.date.localeCompare(a.date);
       if (dateCmp !== 0) return dateCmp;
       return (b.createdAt || '').localeCompare(a.createdAt || '');
@@ -83,11 +123,16 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
         const cat = categories.find((c) => c.id === tx.categoryId);
         const sub = cat?.subcategories.find((s) => s.id === tx.subcategoryId);
         const acc = accounts.find((a) => a.id === tx.accountId);
+        const originAcc = accounts.find((a) => a.id === tx.originAccountId);
+        const destAcc = accounts.find((a) => a.id === tx.destinationAccountId);
+
         return (
           (tx.note && tx.note.toLowerCase().includes(query)) ||
           (cat && cat.name.toLowerCase().includes(query)) ||
           (sub && sub.name.toLowerCase().includes(query)) ||
           (acc && acc.name.toLowerCase().includes(query)) ||
+          (originAcc && originAcc.name.toLowerCase().includes(query)) ||
+          (destAcc && destAcc.name.toLowerCase().includes(query)) ||
           tx.date.includes(query) ||
           tx.amount.toString().includes(query)
         );
@@ -95,7 +140,7 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
     }
 
     return list;
-  }, [target, searchTerm, categories, accounts]);
+  }, [target, activeTransactionsList, searchTerm, categories, accounts]);
 
   if (!isOpen || !target) return null;
 
@@ -107,6 +152,16 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
   const isOver = target.isOverBudget ?? (actual > budget && budget > 0);
   const isNear = target.isNearLimit ?? (pct >= 80 && pct <= 100);
 
+  // Helper icon for account
+  const renderAccountIcon = () => {
+    if (target.accountType === 'credit_card') return <CreditCard className="w-5 h-5" />;
+    if (target.accountType === 'bank') return <Landmark className="w-5 h-5" />;
+    if (target.accountType === 'savings') return <PiggyBank className="w-5 h-5" />;
+    if (target.accountType === 'cash') return <Banknote className="w-5 h-5" />;
+    if (target.icon && target.icon.length > 2) return <Wallet className="w-5 h-5" />;
+    return <span>{target.icon || '🏷️'}</span>;
+  };
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-xs transition-opacity animate-in fade-in duration-200"
@@ -116,7 +171,7 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
       aria-labelledby="drilldown-modal-title"
     >
       <div
-        className={`w-full max-w-lg max-h-[90vh] flex flex-col rounded-t-3xl sm:rounded-3xl border shadow-2xl overflow-hidden transition-all duration-300 animate-in slide-in-from-bottom-4 sm:zoom-in-95 ${
+        className={`w-full max-w-lg max-h-[92vh] flex flex-col rounded-t-3xl sm:rounded-3xl border shadow-2xl overflow-hidden transition-all duration-300 animate-in slide-in-from-bottom-4 sm:zoom-in-95 ${
           isDark
             ? 'bg-[#131927] border-white/10 text-white'
             : 'bg-white border-slate-200 text-slate-900'
@@ -140,15 +195,34 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
               style={{
                 backgroundColor: `${accentColor}18`,
                 borderColor: `${accentColor}35`,
+                color: accentColor,
               }}
             >
-              <span>{target.icon || '🏷️'}</span>
+              {renderAccountIcon()}
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <h2 id="drilldown-modal-title" className="font-display font-bold text-base truncate">
                   {target.title}
                 </h2>
+                {target.accountType && (
+                  <span
+                    className="text-[10px] px-2 py-0.5 rounded-full font-semibold border capitalize shrink-0"
+                    style={{
+                      backgroundColor: `${accentColor}15`,
+                      borderColor: `${accentColor}30`,
+                      color: accentColor,
+                    }}
+                  >
+                    {target.accountType === 'credit_card'
+                      ? 'Tarjeta de Crédito'
+                      : target.accountType === 'bank'
+                      ? 'Banco'
+                      : target.accountType === 'cash'
+                      ? 'Efectivo'
+                      : 'Ahorro'}
+                  </span>
+                )}
               </div>
               {target.subtitle && (
                 <p className={`text-xs truncate ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -172,111 +246,258 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
           </button>
         </div>
 
-        {/* SUMMARY CARD */}
+        {/* SUMMARY / STATS CARD */}
         <div className="p-4 shrink-0 space-y-3">
-          <div
-            className={`p-3.5 rounded-2xl border transition-all ${
-              isDark ? 'bg-black/25 border-white/5' : 'bg-slate-50 border-slate-200/80 shadow-2xs'
-            }`}
-          >
-            <div className="flex items-center justify-between gap-2">
-              <div>
-                <span className={`text-[10px] uppercase font-bold tracking-wider block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  {hasBudget ? 'Gasto Ejecutado' : 'Total del Rubro'}
-                </span>
-                <span className="font-mono text-lg sm:text-xl font-bold block" style={{ color: accentColor }}>
-                  {formatGTQ(actual)}
-                </span>
-              </div>
-
-              {hasBudget ? (
-                <div className="text-right">
+          {target.creditCardInfo ? (
+            /* CREDIT CARD SUMMARY */
+            <div
+              className={`p-3.5 rounded-2xl border transition-all space-y-2.5 ${
+                isDark ? 'bg-black/25 border-white/5' : 'bg-slate-50 border-slate-200/80 shadow-2xs'
+              }`}
+            >
+              <div className="grid grid-cols-3 gap-2 text-center sm:text-left">
+                <div>
                   <span className={`text-[10px] uppercase font-bold tracking-wider block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Presupuesto
+                    Deuda Actual
                   </span>
-                  <span className={`font-mono text-sm sm:text-base font-semibold block ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
-                    {formatGTQ(budget)}
+                  <span className="font-mono text-base sm:text-lg font-extrabold text-rose-500 block">
+                    {formatGTQ(target.creditCardInfo.debt)}
                   </span>
                 </div>
-              ) : (
+                <div>
+                  <span className={`text-[10px] uppercase font-bold tracking-wider block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Disponible
+                  </span>
+                  <span className="font-mono text-base sm:text-lg font-bold text-emerald-500 block">
+                    {formatGTQ(target.creditCardInfo.availableCredit)}
+                  </span>
+                </div>
                 <div className="text-right">
                   <span className={`text-[10px] uppercase font-bold tracking-wider block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Movimientos
+                    Límite Total
                   </span>
-                  <span className={`font-mono text-sm font-semibold block ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                    {target.transactions.length} registro{target.transactions.length !== 1 ? 's' : ''}
+                  <span className={`font-mono text-sm sm:text-base font-semibold block ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                    {formatGTQ(target.creditCardInfo.creditLimit)}
+                  </span>
+                </div>
+              </div>
+
+              {/* Utilization progress bar */}
+              <div className="pt-1.5 space-y-1">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>Utilización de línea:</span>
+                  <span className={`font-mono font-bold ${
+                    target.creditCardInfo.utilization > 80
+                      ? 'text-rose-500'
+                      : target.creditCardInfo.utilization > 50
+                      ? 'text-amber-500'
+                      : 'text-sky-500'
+                  }`}>
+                    {target.creditCardInfo.utilization}%
+                  </span>
+                </div>
+                <div className={`w-full h-2 rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-slate-200'}`}>
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      target.creditCardInfo.utilization > 80
+                        ? 'bg-rose-500'
+                        : target.creditCardInfo.utilization > 50
+                        ? 'bg-amber-400'
+                        : 'bg-sky-500'
+                    }`}
+                    style={{ width: `${Math.min(100, target.creditCardInfo.utilization)}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Dates */}
+              {(target.creditCardInfo.cutoffDay || target.creditCardInfo.paymentDueDay) && (
+                <div className={`pt-2 border-t flex items-center justify-between text-[10.5px] border-dashed ${
+                  isDark ? 'border-white/10 text-slate-400' : 'border-slate-200 text-slate-500'
+                }`}>
+                  <span className="flex items-center gap-1 font-medium">
+                    <Calendar className="w-3 h-3 text-amber-500" />
+                    <span>Corte: Día {target.creditCardInfo.cutoffDay || 15}</span>
+                  </span>
+                  <span className="flex items-center gap-1 font-medium">
+                    <Clock className="w-3 h-3 text-sky-500" />
+                    <span>Pago: Día {target.creditCardInfo.paymentDueDay || 5}</span>
                   </span>
                 </div>
               )}
             </div>
-
-            {/* Budget comparison indicator */}
-            {hasBudget && (
-              <div className="mt-2.5 pt-2.5 border-t space-y-2 border-dashed border-white/10 dark:border-white/10 border-slate-200">
-                <div className="flex items-center justify-between text-xs">
-                  <div className="flex items-center gap-1.5">
-                    {isOver ? (
-                      <span className="flex items-center gap-1 text-[11px] font-bold text-rose-500">
-                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                        <span>Sobregiro de {formatGTQ(Math.abs(diff))}</span>
-                      </span>
-                    ) : isNear ? (
-                      <span className="flex items-center gap-1 text-[11px] font-bold text-amber-500">
-                        <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                        <span>Cerca del límite (restan {formatGTQ(diff)})</span>
-                      </span>
-                    ) : (
-                      <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-500">
-                        <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
-                        <span>Disponible: {formatGTQ(diff)}</span>
-                      </span>
-                    )}
-                  </div>
-                  <span
-                    className={`font-mono text-[11px] font-bold px-2 py-0.5 rounded-full border ${
-                      isOver
-                        ? 'bg-rose-500/15 text-rose-500 border-rose-500/30'
-                        : isNear
-                        ? 'bg-amber-500/15 text-amber-500 border-amber-500/30'
-                        : 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30'
-                    }`}
-                  >
-                    {pct}% del presupuesto
+          ) : target.liquidAccountInfo ? (
+            /* LIQUID ACCOUNT SUMMARY */
+            <div
+              className={`p-3.5 rounded-2xl border transition-all ${
+                isDark ? 'bg-black/25 border-white/5' : 'bg-slate-50 border-slate-200/80 shadow-2xs'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <span className={`text-[10px] uppercase font-bold tracking-wider block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Saldo Disponible Actual
+                  </span>
+                  <span className="font-mono text-xl sm:text-2xl font-extrabold block" style={{ color: accentColor }}>
+                    {formatGTQ(target.liquidAccountInfo.currentBalance)}
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className={`text-[10px] uppercase font-bold tracking-wider block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Movimientos en vista
+                  </span>
+                  <span className={`font-mono text-sm sm:text-base font-semibold block ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                    {activeTransactionsList.length} registro{activeTransactionsList.length !== 1 ? 's' : ''}
+                  </span>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* GENERAL / CATEGORY SUMMARY */
+            <div
+              className={`p-3.5 rounded-2xl border transition-all ${
+                isDark ? 'bg-black/25 border-white/5' : 'bg-slate-50 border-slate-200/80 shadow-2xs'
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <span className={`text-[10px] uppercase font-bold tracking-wider block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    {hasBudget ? 'Gasto Ejecutado' : 'Total del Rubro'}
+                  </span>
+                  <span className="font-mono text-lg sm:text-xl font-bold block" style={{ color: accentColor }}>
+                    {formatGTQ(actual)}
                   </span>
                 </div>
 
-                <div className={`w-full h-2 rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-slate-200'}`}>
-                  <div
-                    className={`h-full rounded-full transition-all duration-300 ${
-                      isOver ? 'bg-rose-500' : isNear ? 'bg-amber-400' : 'bg-emerald-500'
-                    }`}
-                    style={{ width: `${Math.min(100, pct)}%` }}
-                  />
+                {hasBudget ? (
+                  <div className="text-right">
+                    <span className={`text-[10px] uppercase font-bold tracking-wider block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      Presupuesto
+                    </span>
+                    <span className={`font-mono text-sm sm:text-base font-semibold block ${isDark ? 'text-slate-200' : 'text-slate-700'}`}>
+                      {formatGTQ(budget)}
+                    </span>
+                  </div>
+                ) : (
+                  <div className="text-right">
+                    <span className={`text-[10px] uppercase font-bold tracking-wider block ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      Movimientos
+                    </span>
+                    <span className={`font-mono text-sm font-semibold block ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                      {activeTransactionsList.length} registro{activeTransactionsList.length !== 1 ? 's' : ''}
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Budget comparison indicator */}
+              {hasBudget && (
+                <div className="mt-2.5 pt-2.5 border-t space-y-2 border-dashed border-white/10 dark:border-white/10 border-slate-200">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-1.5">
+                      {isOver ? (
+                        <span className="flex items-center gap-1 text-[11px] font-bold text-rose-500">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          <span>Sobregiro de {formatGTQ(Math.abs(diff))}</span>
+                        </span>
+                      ) : isNear ? (
+                        <span className="flex items-center gap-1 text-[11px] font-bold text-amber-500">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          <span>Cerca del límite (restan {formatGTQ(diff)})</span>
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-1 text-[11px] font-semibold text-emerald-500">
+                          <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                          <span>Disponible: {formatGTQ(diff)}</span>
+                        </span>
+                      )}
+                    </div>
+                    <span
+                      className={`font-mono text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+                        isOver
+                          ? 'bg-rose-500/15 text-rose-500 border-rose-500/30'
+                          : isNear
+                          ? 'bg-amber-500/15 text-amber-500 border-amber-500/30'
+                          : 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30'
+                      }`}
+                    >
+                      {pct}% del presupuesto
+                    </span>
+                  </div>
+
+                  <div className={`w-full h-2 rounded-full overflow-hidden ${isDark ? 'bg-white/10' : 'bg-slate-200'}`}>
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        isOver ? 'bg-rose-500' : isNear ? 'bg-amber-400' : 'bg-emerald-500'
+                      }`}
+                      style={{ width: `${Math.min(100, pct)}%` }}
+                    />
+                  </div>
                 </div>
-              </div>
-            )}
+              )}
 
-            {!hasBudget && target.pct !== undefined && target.pct > 0 && (
-              <div className="mt-2 pt-2 border-t border-dashed border-white/10 dark:border-white/10 border-slate-200 flex items-center justify-between text-xs">
-                <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  Participación en el gasto total:
-                </span>
-                <span className="font-mono font-bold text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
-                  {target.pct}%
-                </span>
-              </div>
-            )}
-          </div>
+              {!hasBudget && target.pct !== undefined && target.pct > 0 && (
+                <div className="mt-2 pt-2 border-t border-dashed border-white/10 dark:border-white/10 border-slate-200 flex items-center justify-between text-xs">
+                  <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Participación en el gasto total:
+                  </span>
+                  <span className="font-mono font-bold text-xs px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-500 border border-emerald-500/30">
+                    {target.pct}%
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
 
-          {/* Optional search if there are more than 4 items */}
-          {target.transactions.length > 4 && (
+          {/* PERIOD VS ALL HISTORY TABS (WHEN AVAILABLE) */}
+          {hasPeriodTabs && (
+            <div className={`p-1 rounded-xl border flex items-center gap-1 text-xs transition-colors ${
+              isDark ? 'bg-black/30 border-white/5' : 'bg-slate-100 border-slate-200'
+            }`}>
+              <button
+                type="button"
+                onClick={() => setFilterScope('period')}
+                className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer text-center text-[11px] ${
+                  filterScope === 'period'
+                    ? isDark
+                      ? 'bg-white/15 text-white shadow-xs'
+                      : 'bg-white text-slate-900 shadow-xs'
+                    : isDark
+                    ? 'text-slate-400 hover:text-white'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <span>{target.periodName || 'Período actual'}</span>
+                <span className="ml-1 opacity-75 font-mono">({target.periodTransactions?.length || 0})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setFilterScope('all')}
+                className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer text-center text-[11px] ${
+                  filterScope === 'all'
+                    ? isDark
+                      ? 'bg-white/15 text-white shadow-xs'
+                      : 'bg-white text-slate-900 shadow-xs'
+                    : isDark
+                    ? 'text-slate-400 hover:text-white'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <span>Todo el historial</span>
+                <span className="ml-1 opacity-75 font-mono">({target.allTransactions?.length || 0})</span>
+              </button>
+            </div>
+          )}
+
+          {/* SEARCH INPUT */}
+          {activeTransactionsList.length > 3 && (
             <div className="relative">
               <Search className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por nota, cuenta o fecha..."
+                placeholder="Buscar por nota, categoría, fecha o cuenta..."
                 className={`w-full pl-9 pr-3 py-1.5 rounded-xl border text-xs focus:outline-hidden transition-colors ${
                   isDark
                     ? 'bg-black/20 border-white/10 text-white placeholder:text-slate-500 focus:border-emerald-500/50'
@@ -301,7 +522,7 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
         <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-1.5 min-h-[140px]">
           <div className="flex items-center justify-between pb-1 px-1">
             <span className={`text-[11px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              Detalle de transacciones ({sortedAndFilteredTransactions.length})
+              Movimientos ({sortedAndFilteredTransactions.length})
             </span>
             {onSelectTransaction && sortedAndFilteredTransactions.length > 0 && (
               <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
@@ -318,7 +539,9 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
               <p className="font-medium">
                 {searchTerm
                   ? 'No se encontraron transacciones que coincidan con la búsqueda.'
-                  : target.emptyMessage || 'No hay transacciones registradas para este rubro en este período.'}
+                  : filterScope === 'period' && hasPeriodTabs
+                  ? `No hay movimientos en ${target.periodName || 'el período actual'}. Puedes ver 'Todo el historial' arriba.`
+                  : target.emptyMessage || 'No hay transacciones registradas para este rubro.'}
               </p>
             </div>
           ) : (
@@ -329,9 +552,28 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
                 const cat = categories.find((c) => c.id === tx.categoryId);
                 const sub = cat?.subcategories.find((s) => s.id === tx.subcategoryId);
                 const acc = accounts.find((a) => a.id === tx.accountId);
+                const originAcc = accounts.find((a) => a.id === tx.originAccountId);
+                const destAcc = accounts.find((a) => a.id === tx.destinationAccountId);
 
                 const isTransfer = tx.type === 'transfer';
                 const isIncome = tx.type === 'income';
+
+                // Determine whether this transaction acts as inflow or outflow for target account
+                let isAccountInflow = isIncome;
+                let counterpartyDescription: string | null = null;
+
+                if (isTransfer) {
+                  if (target.accountId && tx.destinationAccountId === target.accountId) {
+                    isAccountInflow = true;
+                    counterpartyDescription = `Desde: ${originAcc?.name || 'Otra cuenta'}`;
+                  } else if (target.accountId && tx.originAccountId === target.accountId) {
+                    isAccountInflow = false;
+                    counterpartyDescription = `Hacia: ${destAcc?.name || 'Otra cuenta'}`;
+                  } else {
+                    // Default transfer perspective
+                    counterpartyDescription = `${originAcc?.name || 'Cuenta'} → ${destAcc?.name || 'Cuenta'}`;
+                  }
+                }
 
                 return (
                   <div
@@ -349,14 +591,14 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
                     <div className="flex items-center gap-3 min-w-0 pr-2">
                       <div
                         className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
-                          isIncome
+                          isAccountInflow
                             ? 'bg-emerald-500/15 text-emerald-500'
                             : isTransfer
                             ? 'bg-sky-500/15 text-sky-500'
                             : 'bg-rose-500/15 text-rose-500'
                         }`}
                       >
-                        {isIncome ? (
+                        {isAccountInflow ? (
                           <ArrowDownLeft className="w-4 h-4" />
                         ) : isTransfer ? (
                           <ArrowRightLeft className="w-4 h-4" />
@@ -370,7 +612,7 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
                           <span className={`font-semibold text-xs truncate max-w-[200px] sm:max-w-[260px] ${
                             isDark ? 'text-white' : 'text-slate-900'
                           }`}>
-                            {tx.note || sub?.name || cat?.name || 'Gasto'}
+                            {tx.note || (isTransfer ? (tx.isCreditCardPayment ? 'Pago de tarjeta' : 'Transferencia') : sub?.name || cat?.name || 'Movimiento')}
                           </span>
                           {sub && sub.name !== target.title && (
                             <span className={`text-[10px] px-1.5 py-0.2 rounded font-medium ${
@@ -379,27 +621,44 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
                               {sub.name}
                             </span>
                           )}
+                          {isTransfer && tx.isCreditCardPayment && (
+                            <span className="text-[9px] px-1.5 py-0.2 rounded font-bold bg-sky-500/15 text-sky-500 border border-sky-500/25">
+                              Pago Tarjeta
+                            </span>
+                          )}
                         </div>
 
                         <div className={`text-[10px] flex items-center gap-1.5 mt-0.5 truncate ${
                           isDark ? 'text-slate-400' : 'text-slate-500'
                         }`}>
                           <span className="font-medium">{formatShortDateES(tx.date, true)}</span>
-                          {acc && (
+                          {counterpartyDescription ? (
+                            <>
+                              <span>•</span>
+                              <span className="truncate text-sky-600 dark:text-sky-400 font-medium">
+                                {counterpartyDescription}
+                              </span>
+                            </>
+                          ) : acc && !target.accountId ? (
                             <>
                               <span>•</span>
                               <span className="truncate">{acc.name}</span>
                             </>
-                          )}
+                          ) : cat ? (
+                            <>
+                              <span>•</span>
+                              <span className="truncate">{cat.name}</span>
+                            </>
+                          ) : null}
                         </div>
                       </div>
                     </div>
 
                     <div className="text-right shrink-0">
                       <span className={`font-mono text-xs sm:text-sm font-bold block ${
-                        isIncome ? 'text-emerald-500' : 'text-rose-500'
+                        isAccountInflow ? 'text-emerald-500' : 'text-rose-500'
                       }`}>
-                        {isIncome ? '+' : '-'}{formatGTQ(tx.amount)}
+                        {isAccountInflow ? '+' : '-'}{formatGTQ(tx.amount)}
                       </span>
                     </div>
                   </div>
@@ -422,12 +681,12 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
               }}
               className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
             >
-              <span>Ver en historial</span>
+              <span>Ver en historial completo</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </button>
           ) : (
             <span className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              Total: <strong className={isDark ? 'text-white' : 'text-slate-800'}>{formatGTQ(actual)}</strong>
+              Registros en vista: <strong className={isDark ? 'text-white' : 'text-slate-800'}>{sortedAndFilteredTransactions.length}</strong>
             </span>
           )}
 

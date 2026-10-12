@@ -37,7 +37,7 @@ La aplicación móvil Flutter ya no forma parte del repositorio. La experiencia 
 | `src/core/widgets/` | Selectores reutilizables de cuentas, períodos y modal de desglose de transacciones (`DrilldownTransactionsModal.tsx`). |
 | `src/features/auth/` | Registro, acceso, Google y recuperación de contraseña. |
 | `src/features/accounts/` | Cuentas y tarjetas: visualización, edición, archivo y gestión de saldos. |
-| `src/features/transactions/` | Lista, modal y filtros de movimientos; `financialEngine.ts` valida movimientos y calcula saldos/resúmenes. |
+| `src/features/transactions/` | Lista, modal y filtros de movimientos; `financialEngine.ts` valida movimientos y calcula saldos/resúmenes; `accountStatementEngine.ts` y `AccountStatementModal.tsx` generan y exportan Estados de Cuenta oficiales (CSV e Impresión/PDF). |
 | `src/features/transactions/TemplatesView.tsx` | Gestión por usuario de plantillas y recordatorios periódicos de movimientos. |
 | `src/features/financial_periods/` | Gestión, validación y cálculo de períodos/subperíodos. |
 | `src/features/annual_budget/` | Presupuesto y Panorama Anual; matriz proyectado/real en vistas mensual, trimestral, semestral y anual, más exportación CSV. |
@@ -81,8 +81,15 @@ Modelos relevantes en `src/core/types/models.ts`:
 - Las notificaciones de plantillas requieren permiso del navegador y la aplicación abierta; al abrir una, el formulario de transacción carga sus campos para confirmar o ajustar el movimiento. El siguiente ciclo se calcula desde la fecha base y avanza al guardar el movimiento.
 - Al eliminar una categoría (`deleteCategory`), se remueven también sus proyecciones anuales vinculadas para evitar claves huérfanas.
 - **Desglose Dinámico de Transacciones (Drill-down in-situ):**
-  - Al interactuar con cualquier tarjeta o barra de presupuesto (en la sección de Estado de Presupuesto del Inicio y en Cumplimiento de Presupuestos de Análisis) o con los segmentos de Distribución por Categorías, Subcategorías de mayor gasto y Actividad por Cuenta, el modal emergente `DrilldownTransactionsModal` muestra al instante el conjunto exacto de transacciones que componen y suman dicho total en el período analizado.
-  - La ventana emergente muestra comparativa contra el presupuesto (porcentaje, disponible o sobregiro), contador de movimientos, buscador interno de texto y permite tocar cualquier registro para abrir directamente su edición sin perder el contexto de la pantalla activa.
+  - Al interactuar con cualquier tarjeta o barra de presupuesto (en la sección de Estado de Presupuesto del Inicio y en Cumplimiento de Presupuestos de Análisis), con los segmentos de Distribución por Categorías, Subcategorías de mayor gasto y Actividad por Cuenta, o con cualquier tarjeta de cuenta líquida o tarjeta de crédito en **Cuentas**, el modal emergente `DrilldownTransactionsModal` muestra al instante el conjunto exacto de transacciones que componen y afectan dicho rubro.
+  - Para cuentas y tarjetas, el modal incluye pestañas de alcance ("Período actual" vs. "Todo el historial"), desglose de transferencias como entradas o salidas según la cuenta consultada, estado de saldo/deuda/límites, buscador en tiempo real y permite tocar cualquier registro para abrir directamente su edición sin perder el contexto de la pantalla activa.
+- **Estado de Cuenta Oficial (Exportación CSV e Impresión / PDF):**
+  - El motor `accountStatementEngine.ts` genera estados de cuenta bancarios por período fiscal y subperíodo:
+    - Resumen financiero del período (ingresos totales, gastos, balance neto y conteo de movimientos en GTQ).
+    - Resumen consolidado por cuenta: cálculo de saldo inicial exacto previo al período, ingresos/entradas, egresos/salidas, transferencias y saldo final del período, además de límites y deuda en tarjetas de crédito.
+    - Detalle cronológico de movimientos del período con fecha, concepto, categoría, cuenta, débitos (-), créditos (+) y monto neto.
+  - El modal `AccountStatementModal.tsx` proporciona una vista previa ejecutiva con membrete, selectores de período y filtros de cuenta con buscador interactivo, accesible desde Análisis, Transacciones y Cuentas.
+  - Soporta exportación a CSV estructurado multisección (con BOM UTF-8 para apertura directa en Microsoft Excel) y función de impresión / guardar como PDF con reglas `@media print` para generar estados de cuenta impecables.
 - **Diagnóstico de Salud Financiera y Bitácora Anual de 52 Semanas:**
   - El motor (`financialHealthEngine.ts`) calcula la bitácora integral de 52 semanas del año (cortes de 7 días agrupados por su mes de pertenencia) con balances semanales, burn rate y categorías predominantes, permitiendo seguimiento continuo sin la carga mental de revisiones diarias.
   - **Inferencia Semanal con IA y Privacidad Estricta:**

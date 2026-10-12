@@ -335,6 +335,7 @@ const WalletAppShell: React.FC = () => {
               })
             }
             onEditTransaction={handleEditTransaction}
+            onNavigateTab={setActiveTab}
           />
         )}
 

@@ -9,6 +9,7 @@ import {
   FileSpreadsheet,
   Landmark,
   PieChart,
+  ReceiptText,
   SlidersHorizontal,
   Target,
   TrendingUp,
@@ -17,6 +18,7 @@ import {
 import { useWallet } from '../../core/state/WalletContext';
 import { PeriodSelectorBar } from '../../core/widgets/PeriodSelectorBar';
 import { DrilldownTarget, DrilldownTransactionsModal } from '../../core/widgets/DrilldownTransactionsModal';
+import { AccountStatementModal } from '../transactions/AccountStatementModal';
 import { Transaction } from '../../core/types/models';
 import { formatGTQ } from '../../core/utils/formatters';
 import { subscribeAnnualProjections } from '../../core/firebase/firestoreSync';
@@ -64,6 +66,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const [selectedSubperiodId, setSelectedSubperiodId] = useState('');
   const [drilldownTarget, setDrilldownTarget] = useState<DrilldownTarget | null>(null);
   const [isDrilldownOpen, setIsDrilldownOpen] = useState(false);
+  const [isAccountStatementModalOpen, setIsAccountStatementModalOpen] = useState(false);
 
   const annualYear = activePeriod ? Number(activePeriod.startDate.slice(0, 4)) : new Date().getFullYear();
   const annualUserId = currentUser?.id || 'default_user';
@@ -342,23 +345,74 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     income: number;
   }) => {
     const accountObj = accounts.find((a) => a.id === acc.id);
-    const matchingTxs = periodTransactions.filter((t) => t.accountId === acc.id);
-    setDrilldownTarget({
-      title: acc.name,
-      subtitle: `Actividad en ${activePeriod?.name || 'Período analizado'}`,
-      icon:
-        accountObj?.type === 'credit_card'
-          ? '💳'
-          : accountObj?.type === 'bank'
-          ? '🏦'
-          : accountObj?.type === 'cash'
-          ? '💵'
-          : '💰',
-      color: accountObj?.color || '#38BDF8',
-      totalAmount: acc.spent + acc.income,
-      transactions: matchingTxs,
-      emptyMessage: `No hay transacciones registradas para ${acc.name} en este período.`,
-    });
+    const allAccountTxs = transactions.filter(
+      (t) =>
+        t.accountId === acc.id ||
+        t.originAccountId === acc.id ||
+        t.destinationAccountId === acc.id
+    );
+    const periodAccountTxs = periodTransactions.filter(
+      (t) =>
+        t.accountId === acc.id ||
+        t.originAccountId === acc.id ||
+        t.destinationAccountId === acc.id
+    );
+
+    const currentBal = accountObj ? (accountObj.currentBalance ?? accountObj.balance ?? 0) : 0;
+
+    if (accountObj?.type === 'credit_card') {
+      const debt = Math.max(0, -currentBal);
+      const limit = accountObj.creditLimit || 0;
+      const available = Math.max(0, limit - debt);
+      const utilization = limit > 0 ? Math.min(100, Math.round((debt / limit) * 100)) : 0;
+
+      setDrilldownTarget({
+        title: acc.name,
+        subtitle: `Actividad en ${activePeriod?.name || 'Período analizado'}`,
+        icon: '💳',
+        color: accountObj.color || '#F43F5E',
+        totalAmount: debt,
+        transactions: periodAccountTxs,
+        accountId: acc.id,
+        accountType: 'credit_card',
+        creditCardInfo: {
+          debt,
+          creditLimit: limit,
+          availableCredit: available,
+          utilization,
+          cutoffDay: accountObj.cutoffDay,
+          paymentDueDay: accountObj.paymentDueDay,
+        },
+        allTransactions: allAccountTxs,
+        periodTransactions: periodAccountTxs,
+        periodName: activePeriod?.name || 'Período actual',
+        emptyMessage: `No hay transacciones registradas para ${acc.name}.`,
+      });
+    } else {
+      setDrilldownTarget({
+        title: acc.name,
+        subtitle: `Actividad en ${activePeriod?.name || 'Período analizado'}`,
+        icon:
+          accountObj?.type === 'bank'
+            ? '🏦'
+            : accountObj?.type === 'cash'
+            ? '💵'
+            : '💰',
+        color: accountObj?.color || '#38BDF8',
+        totalAmount: currentBal,
+        transactions: periodAccountTxs,
+        accountId: acc.id,
+        accountType: accountObj?.type,
+        liquidAccountInfo: {
+          currentBalance: currentBal,
+        },
+        allTransactions: allAccountTxs,
+        periodTransactions: periodAccountTxs,
+        periodName: activePeriod?.name || 'Período actual',
+        emptyMessage: `No hay transacciones registradas para ${acc.name}.`,
+      });
+    }
+
     setIsDrilldownOpen(true);
   };
 
@@ -456,15 +510,16 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
             )}
             <button
               type="button"
-              onClick={exportSummaryCSV}
-              className={`px-3 py-1.5 rounded-xl border text-xs font-medium flex items-center gap-1.5 cursor-pointer transition-colors ${
+              onClick={() => setIsAccountStatementModalOpen(true)}
+              className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs active:scale-95 ${
                 isDark
-                  ? 'border-white/10 bg-white/5 hover:bg-white/10 text-slate-300'
-                  : 'border-slate-200 bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  ? 'border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300'
+                  : 'border-emerald-500/30 bg-emerald-50 hover:bg-emerald-100 text-emerald-800'
               }`}
+              title="Ver e imprimir estado de cuenta oficial o exportar a CSV"
             >
-              <Download className="w-3.5 h-3.5" />
-              <span>Exportar CSV</span>
+              <ReceiptText className="w-3.5 h-3.5 text-emerald-500" />
+              <span>Estado de Cuenta</span>
             </button>
           </div>
         </div>
@@ -770,6 +825,12 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         target={drilldownTarget}
         onSelectTransaction={onEditTransaction}
         onNavigateToTransactions={onNavigateTab ? () => onNavigateTab('transacciones') : undefined}
+      />
+
+      {/* ESTADO DE CUENTA MODAL */}
+      <AccountStatementModal
+        isOpen={isAccountStatementModalOpen}
+        onClose={() => setIsAccountStatementModalOpen(false)}
       />
     </div>
   );

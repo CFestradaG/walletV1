@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import {
   Archive,
   ArchiveRestore,
+  ArrowRight,
   ArrowRightLeft,
   Banknote,
   Calendar,
@@ -14,6 +15,7 @@ import {
   Landmark,
   PiggyBank,
   Plus,
+  ReceiptText,
   Trash2,
   Wallet,
   X,
@@ -22,19 +24,26 @@ import { useWallet } from '../../core/state/WalletContext';
 import { Account, AccountType, Transaction } from '../../core/types/models';
 import { formatGTQ } from '../../core/utils/formatters';
 import { getCreditCardTacticalTip } from '../analytics/financialHealthEngine';
+import { DrilldownTarget, DrilldownTransactionsModal } from '../../core/widgets/DrilldownTransactionsModal';
+import { AccountStatementModal } from '../transactions/AccountStatementModal';
 
 interface AccountsViewProps {
   onPayCreditCard: (cardId: string) => void;
   onNewTransactionForAccount: (accId: string) => void;
   onEditTransaction: (tx: Transaction) => void;
+  onNavigateTab?: (tab: any) => void;
 }
 
 export const AccountsView: React.FC<AccountsViewProps> = ({
   onPayCreditCard,
   onNewTransactionForAccount,
+  onEditTransaction,
+  onNavigateTab,
 }) => {
   const {
     accounts,
+    transactions,
+    activePeriod,
     createAccount,
     updateAccount,
     deleteAccount,
@@ -50,6 +59,83 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
   // Modals state
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
+
+  // Drilldown modal state
+  const [drilldownTarget, setDrilldownTarget] = useState<DrilldownTarget | null>(null);
+  const [isDrilldownOpen, setIsDrilldownOpen] = useState(false);
+  const [isStatementOpen, setIsStatementOpen] = useState(false);
+  const [statementAccountId, setStatementAccountId] = useState<string>('all');
+
+  const handleOpenAccountDrilldown = (account: Account) => {
+    // 1. All historical transactions affecting this account (income, expense, transfer origin or destination)
+    const allAccountTxs = transactions.filter(
+      (t) =>
+        t.accountId === account.id ||
+        t.originAccountId === account.id ||
+        t.destinationAccountId === account.id
+    );
+
+    // 2. Transactions in the current active period
+    const periodAccountTxs = activePeriod
+      ? allAccountTxs.filter(
+          (t) =>
+            t.periodId === activePeriod.id ||
+            (t.date >= activePeriod.startDate && t.date <= activePeriod.endDate)
+        )
+      : allAccountTxs;
+
+    const currentBal = account.currentBalance ?? account.balance ?? 0;
+
+    if (account.type === 'credit_card') {
+      const debt = Math.max(0, -currentBal);
+      const limit = account.creditLimit || 0;
+      const available = Math.max(0, limit - debt);
+      const utilization = limit > 0 ? Math.min(100, Math.round((debt / limit) * 100)) : 0;
+
+      setDrilldownTarget({
+        title: account.name,
+        subtitle: activePeriod ? `Período: ${activePeriod.name}` : undefined,
+        icon: account.icon || 'CreditCard',
+        color: account.color || '#F43F5E',
+        totalAmount: debt,
+        transactions: periodAccountTxs,
+        accountId: account.id,
+        accountType: 'credit_card',
+        creditCardInfo: {
+          debt,
+          creditLimit: limit,
+          availableCredit: available,
+          utilization,
+          cutoffDay: account.cutoffDay,
+          paymentDueDay: account.paymentDueDay,
+        },
+        allTransactions: allAccountTxs,
+        periodTransactions: periodAccountTxs,
+        periodName: activePeriod?.name || 'Período actual',
+        emptyMessage: `No se encontraron transacciones para ${account.name}.`,
+      });
+    } else {
+      setDrilldownTarget({
+        title: account.name,
+        subtitle: activePeriod ? `Período: ${activePeriod.name}` : undefined,
+        icon: account.icon || 'Wallet',
+        color: account.color || '#10B981',
+        totalAmount: currentBal,
+        transactions: periodAccountTxs,
+        accountId: account.id,
+        accountType: account.type,
+        liquidAccountInfo: {
+          currentBalance: currentBal,
+        },
+        allTransactions: allAccountTxs,
+        periodTransactions: periodAccountTxs,
+        periodName: activePeriod?.name || 'Período actual',
+        emptyMessage: `No se encontraron transacciones para ${account.name}.`,
+      });
+    }
+
+    setIsDrilldownOpen(true);
+  };
 
   // Form State
   const [name, setName] = useState('');
@@ -212,6 +298,22 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
             </button>
             <button
               type="button"
+              onClick={() => {
+                setStatementAccountId('all');
+                setIsStatementOpen(true);
+              }}
+              className={`px-3 py-1.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all shadow-xs active:scale-95 ${
+                isDark
+                  ? 'border-white/10 bg-white/5 hover:bg-white/10 text-slate-300'
+                  : 'border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700'
+              }`}
+              title="Exportar o imprimir estado de cuenta oficial"
+            >
+              <ReceiptText className="w-3.5 h-3.5 text-emerald-500" />
+              <span className="hidden sm:inline">Estado de Cuenta</span>
+            </button>
+            <button
+              type="button"
               onClick={startCreate}
               className="px-3 py-1.5 rounded-xl bg-[#10B981] hover:bg-[#059669] text-[#002113] font-display text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
             >
@@ -271,19 +373,21 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
               return (
                 <div
                   key={acc.id}
-                  className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between ${
+                  onClick={() => handleOpenAccountDrilldown(acc)}
+                  className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between cursor-pointer group select-none ${
                     isArchived
                       ? isDark
-                        ? 'opacity-60 bg-black/10 border-white/5'
-                        : 'opacity-60 bg-slate-100 border-slate-200'
+                        ? 'opacity-60 bg-black/10 border-white/5 hover:border-white/20'
+                        : 'opacity-60 bg-slate-100 border-slate-200 hover:border-slate-300'
                       : isDark
-                      ? 'bg-[#131927] border-white/10'
-                      : 'bg-white border-slate-200 shadow-xs'
+                      ? 'bg-[#131927] border-white/10 hover:border-emerald-500/40 hover:bg-white/[0.04]'
+                      : 'bg-white border-slate-200 hover:border-emerald-500/40 hover:bg-slate-50/80 shadow-xs'
                   }`}
+                  title={`Ver movimientos de ${acc.name}`}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
                     <div
-                      className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0"
+                      className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
                       style={{ backgroundColor: `${acc.color || '#10B981'}20` }}
                     >
                       <Icon
@@ -291,26 +395,39 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                         style={{ color: acc.color || '#10B981' }}
                       />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="font-bold text-xs">{acc.name}</span>
+                        <span className={`font-bold text-xs truncate group-hover:text-emerald-500 transition-colors ${
+                          isDark ? 'text-white' : 'text-slate-900'
+                        }`}>
+                          {acc.name}
+                        </span>
                         {isArchived && (
-                          <span className="text-[9px] px-1 rounded bg-slate-500/20 text-slate-400 font-mono">
+                          <span className="text-[9px] px-1 rounded bg-slate-500/20 text-slate-400 font-mono shrink-0">
                             Archivada
                           </span>
                         )}
                       </div>
-                      <span className={`text-[10px] capitalize ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                        {acc.type === 'cash'
-                          ? 'Efectivo'
-                          : acc.type === 'bank'
-                          ? 'Banco'
-                          : 'Ahorro'}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <span className={`text-[10px] capitalize ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                          {acc.type === 'cash'
+                            ? 'Efectivo'
+                            : acc.type === 'bank'
+                            ? 'Banco'
+                            : 'Ahorro'}
+                        </span>
+                        <span className="text-[10px] text-slate-400">•</span>
+                        <span className={`text-[10px] opacity-75 group-hover:opacity-100 flex items-center gap-0.5 font-medium transition-all ${
+                          isDark ? 'text-emerald-400' : 'text-emerald-600'
+                        }`}>
+                          <span>Ver registros</span>
+                          <ArrowRight className="w-2.5 h-2.5" />
+                        </span>
+                      </div>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 shrink-0">
                     <div className="text-right">
                       <span className="font-mono text-xs font-bold block">
                         {hideBalances
@@ -322,7 +439,10 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                     <div className="flex items-center gap-1">
                       <button
                         type="button"
-                        onClick={() => onNewTransactionForAccount(acc.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onNewTransactionForAccount(acc.id);
+                        }}
                         title="Nueva transacción con esta cuenta"
                         className="p-1.5 rounded-lg text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/10 cursor-pointer"
                       >
@@ -330,7 +450,10 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => startEdit(acc)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startEdit(acc);
+                        }}
                         aria-label="Editar cuenta"
                         className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
                           isDark ? 'text-slate-400 hover:text-white hover:bg-white/10' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
@@ -420,20 +543,22 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
               return (
                 <div
                   key={card.id}
-                  className={`p-4 rounded-2xl border transition-all ${
+                  onClick={() => handleOpenAccountDrilldown(card)}
+                  className={`p-4 rounded-2xl border transition-all cursor-pointer group select-none ${
                     isArchived
                       ? isDark
-                        ? 'opacity-60 bg-black/10 border-white/5'
-                        : 'opacity-60 bg-slate-100 border-slate-200'
+                        ? 'opacity-60 bg-black/10 border-white/5 hover:border-white/20'
+                        : 'opacity-60 bg-slate-100 border-slate-200 hover:border-slate-300'
                       : isDark
-                      ? 'bg-[#131927] border-white/10'
-                      : 'bg-white border-slate-200 shadow-xs'
+                      ? 'bg-[#131927] border-white/10 hover:border-rose-500/40 hover:bg-white/[0.04]'
+                      : 'bg-white border-slate-200 hover:border-rose-500/40 hover:bg-slate-50/80 shadow-xs'
                   }`}
+                  title={`Ver movimientos de ${card.name}`}
                 >
                   <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
                       <div
-                        className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0"
+                        className="w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-transform group-hover:scale-105"
                         style={{
                           backgroundColor: `${card.color || '#F43F5E'}25`,
                           color: card.color || '#F43F5E',
@@ -441,25 +566,41 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                       >
                         <CreditCard className="w-4 h-4" />
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-xs">{card.name}</span>
+                          <span className={`font-bold text-xs truncate group-hover:text-rose-500 transition-colors ${
+                            isDark ? 'text-white' : 'text-slate-900'
+                          }`}>
+                            {card.name}
+                          </span>
                           {isArchived && (
-                            <span className="text-[9px] px-1 rounded bg-slate-500/20 text-slate-400 font-mono">
+                            <span className="text-[9px] px-1 rounded bg-slate-500/20 text-slate-400 font-mono shrink-0">
                               Archivada
                             </span>
                           )}
                         </div>
-                        <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                          Límite: {formatGTQ(limit)}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                            Límite: {formatGTQ(limit)}
+                          </span>
+                          <span className="text-[10px] text-slate-400">•</span>
+                          <span className={`text-[10px] opacity-75 group-hover:opacity-100 flex items-center gap-0.5 font-medium transition-all ${
+                            isDark ? 'text-rose-400' : 'text-rose-600'
+                          }`}>
+                            <span>Ver registros</span>
+                            <ArrowRight className="w-2.5 h-2.5" />
+                          </span>
+                        </div>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
-                        onClick={() => onPayCreditCard(card.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onPayCreditCard(card.id);
+                        }}
                         className="px-2.5 py-1 rounded-lg bg-sky-500/15 text-sky-700 dark:text-sky-300 hover:bg-sky-500/25 border border-sky-500/30 text-[11px] font-bold flex items-center gap-1 cursor-pointer"
                       >
                         <ArrowRightLeft className="w-3 h-3" />
@@ -467,7 +608,10 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
                       </button>
                       <button
                         type="button"
-                        onClick={() => startEdit(card)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          startEdit(card);
+                        }}
                         aria-label="Editar tarjeta"
                         className={`p-1.5 rounded-lg cursor-pointer transition-colors ${
                           isDark ? 'text-slate-400 hover:text-white hover:bg-white/10' : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100'
@@ -782,6 +926,22 @@ export const AccountsView: React.FC<AccountsViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* DRILLDOWN TRANSACTIONS MODAL */}
+      <DrilldownTransactionsModal
+        isOpen={isDrilldownOpen}
+        onClose={() => setIsDrilldownOpen(false)}
+        target={drilldownTarget}
+        onSelectTransaction={onEditTransaction}
+        onNavigateToTransactions={onNavigateTab ? () => onNavigateTab('transacciones') : undefined}
+      />
+
+      {/* ESTADO DE CUENTA MODAL */}
+      <AccountStatementModal
+        isOpen={isStatementOpen}
+        onClose={() => setIsStatementOpen(false)}
+        initialAccountId={statementAccountId}
+      />
     </div>
   );
 };
