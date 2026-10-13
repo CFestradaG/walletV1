@@ -82,11 +82,12 @@ Modelos relevantes en `src/core/types/models.ts`:
 - Al eliminar una categoría (`deleteCategory`), se remueven también sus proyecciones anuales vinculadas para evitar claves huérfanas.
 - **Desglose Dinámico de Transacciones (Drill-down in-situ):**
   - Al interactuar con cualquier tarjeta o barra de presupuesto (en la sección de Estado de Presupuesto del Inicio y en Cumplimiento de Presupuestos de Análisis), con los segmentos de Distribución por Categorías, Subcategorías de mayor gasto y Actividad por Cuenta, o con cualquier tarjeta de cuenta líquida o tarjeta de crédito en **Cuentas**, el modal emergente `DrilldownTransactionsModal` muestra al instante el conjunto exacto de transacciones que componen y afectan dicho rubro.
+  - Para categorías, el modal incorpora pestañas de **«Movimientos»** y **«Distribución de Subcategorías»** con un gráfico de dona SVG interactivo en tiempo real, porcentajes, montos en GTQ, barra de proporción relativa y filtrado directo in-situ al tocar cualquier porción o subcategoría.
   - Para cuentas y tarjetas, el modal incluye pestañas de alcance ("Período actual" vs. "Todo el historial"), desglose de transferencias como entradas o salidas según la cuenta consultada, estado de saldo/deuda/límites, buscador en tiempo real y permite tocar cualquier registro para abrir directamente su edición sin perder el contexto de la pantalla activa.
 - **Estado de Cuenta Oficial (Exportación CSV e Impresión / PDF):**
   - El motor `accountStatementEngine.ts` genera estados de cuenta bancarios por período fiscal y subperíodo:
-    - Resumen financiero del período (ingresos totales, gastos, balance neto y conteo de movimientos en GTQ).
-    - Resumen consolidado por cuenta: cálculo de saldo inicial exacto previo al período, ingresos/entradas, egresos/salidas, transferencias y saldo final del período, además de límites y deuda en tarjetas de crédito.
+    - Resumen financiero del período (ingresos totales, gastos, balance neto sin duplicar transferencias y conteo de movimientos en GTQ).
+    - Resumen consolidado por cuenta anclado al **Saldo Actual real (en vivo en Wallet)**, calculando con exactitud matemática el saldo inicial del período, entradas (+), salidas (-), flujo neto del período y saldo al corte final, además de deuda, límite y crédito disponible real en tarjetas de crédito.
     - Detalle cronológico de movimientos del período con fecha, concepto, categoría, cuenta, débitos (-), créditos (+) y monto neto.
   - El modal `AccountStatementModal.tsx` proporciona una vista previa ejecutiva con membrete, selectores de período y filtros de cuenta con buscador interactivo, accesible desde Análisis, Transacciones y Cuentas.
   - Soporta exportación a CSV estructurado multisección (con BOM UTF-8 para apertura directa en Microsoft Excel) y función de impresión / guardar como PDF con reglas `@media print` para generar estados de cuenta impecables.

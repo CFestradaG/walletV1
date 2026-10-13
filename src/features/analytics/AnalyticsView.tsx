@@ -250,6 +250,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       color: item.color,
       totalAmount: item.amount,
       pct: item.pct,
+      categoryId: item.id,
       transactions: matchingTxs,
       emptyMessage: `No se encontraron gastos para ${item.name} en este período.`,
     });
@@ -329,6 +330,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
       totalAmount: b.spent,
       budgetAmount: b.budget,
       pct: b.pct,
+      categoryId: b.id,
       isOverBudget: b.isOver,
       isNearLimit: b.pct >= 80 && b.pct <= 100,
       transactions: matchingTxs,

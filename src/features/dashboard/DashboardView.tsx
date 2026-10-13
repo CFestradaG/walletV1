@@ -167,6 +167,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
       totalAmount: alert.actual,
       budgetAmount: alert.projected,
       pct: alert.pct,
+      categoryId: alert.category.id,
       isOverBudget: alert.isOverBudget,
       isNearLimit: alert.isNearLimit,
       transactions: matchingTransactions,

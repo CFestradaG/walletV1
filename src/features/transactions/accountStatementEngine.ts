@@ -4,18 +4,20 @@ import { recalculateAccountBalances } from './financialEngine';
 
 export interface AccountStatementItem {
   account: Account;
-  startingBalance: number;
-  totalIncome: number;
-  totalExpense: number;
-  totalTransfersIn: number;
-  totalTransfersOut: number;
-  netMovement: number;
-  endingBalance: number;
+  currentBalance: number; // Saldo actual real en vivo de la cuenta (en Cuentas)
+  startingBalance: number; // Saldo al inicio del período
+  totalIncome: number; // Ingresos del período
+  totalExpense: number; // Gastos del período
+  totalTransfersIn: number; // Transferencias recibidas (+)
+  totalTransfersOut: number; // Transferencias enviadas (-)
+  netMovement: number; // Variación neta en la cuenta durante el período
+  endingBalance: number; // Saldo al corte final del período
   transactionCount: number;
   // Tarjetas de crédito
   creditLimit?: number;
-  availableCredit?: number;
-  debt?: number;
+  availableCredit?: number; // Crédito disponible actual
+  debt?: number; // Deuda actual de la tarjeta
+  paymentsReceived?: number; // Total pagos recibidos en el período
 }
 
 export interface StatementTransactionRow {
@@ -50,6 +52,7 @@ export interface PeriodAccountStatementData {
 
 /**
  * Construye los datos completos del estado de cuenta de un período.
+ * Anclado al saldo actual real de cada cuenta y cuadrado matemáticamente.
  */
 export function buildAccountStatementData(params: {
   period: FinancialPeriod;
@@ -81,7 +84,7 @@ export function buildAccountStatementData(params: {
   const now = new Date();
   const generatedAt = `${formatDateSlash(now.toISOString().slice(0, 10))} ${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
 
-  // 1. Filtrar transacciones del período
+  // 1. Filtrar transacciones del período según rango de fechas estricto o vínculo directo
   const periodTxs = transactions.filter((t) => {
     if (subperiod) {
       if (t.subperiodId === subperiod.id) return true;
@@ -106,15 +109,7 @@ export function buildAccountStatementData(params: {
     accMap.set(acc.id, acc);
   }
 
-  // 2. Calcular saldos iniciales exactos al inicio del rango (transacciones anteriores a startDate)
-  const priorTxs = transactions.filter((t) => t.date < startDate);
-  const accountsAtStart = recalculateAccountBalances(accounts, priorTxs);
-  const startBalanceMap = new Map<string, number>();
-  for (const a of accountsAtStart) {
-    startBalanceMap.set(a.id, a.currentBalance);
-  }
-
-  // 3. Resúmenes por cuenta
+  // 2. Resúmenes por cuenta anclados al Saldo Actual real en vivo
   const activeAccounts = accounts.filter(
     (a) => a.status === 'active' && (accountIdFilter === 'all' || a.id === accountIdFilter)
   );
@@ -122,8 +117,6 @@ export function buildAccountStatementData(params: {
   const accountSummaries: AccountStatementItem[] = [];
 
   for (const acc of activeAccounts) {
-    const startBal = startBalanceMap.get(acc.id) ?? acc.initialBalance;
-
     let totalIncome = 0;
     let totalExpense = 0;
     let totalTransfersIn = 0;
@@ -153,11 +146,38 @@ export function buildAccountStatementData(params: {
     }
 
     const netMovement = Math.round((totalIncome + totalTransfersIn - totalExpense - totalTransfersOut) * 100) / 100;
-    const endingBalance = Math.round((startBal + netMovement) * 100) / 100;
+
+    // Calcular transacciones posteriores al período para conciliar saldo al corte
+    const txsAfterPeriod = transactions.filter((tx) => {
+      const isRelated = tx.accountId === acc.id || tx.originAccountId === acc.id || tx.destinationAccountId === acc.id;
+      return isRelated && tx.date > endDate;
+    });
+
+    let subsequentNetChange = 0;
+    for (const tx of txsAfterPeriod) {
+      const isOrigin = tx.accountId === acc.id || tx.originAccountId === acc.id;
+      const isDest = tx.destinationAccountId === acc.id;
+      if (tx.type === 'income' && isOrigin) {
+        subsequentNetChange += tx.amount;
+      } else if (tx.type === 'expense' && isOrigin) {
+        subsequentNetChange -= tx.amount;
+      } else if (tx.type === 'transfer') {
+        if (isOrigin) subsequentNetChange -= tx.amount;
+        if (isDest) subsequentNetChange += tx.amount;
+      }
+    }
+
+    // Saldo al corte final del período = Saldo actual - movimientos posteriores
+    const endingBalance = Math.round((acc.currentBalance - subsequentNetChange) * 100) / 100;
+    // Saldo inicial del período = Saldo al corte - variación neta del período
+    const startingBalance = Math.round((endingBalance - netMovement) * 100) / 100;
+
+    const liveBalance = Math.round(acc.currentBalance * 100) / 100;
 
     const item: AccountStatementItem = {
       account: acc,
-      startingBalance: Math.round(startBal * 100) / 100,
+      currentBalance: liveBalance,
+      startingBalance,
       totalIncome: Math.round(totalIncome * 100) / 100,
       totalExpense: Math.round(totalExpense * 100) / 100,
       totalTransfersIn: Math.round(totalTransfersIn * 100) / 100,
@@ -170,14 +190,15 @@ export function buildAccountStatementData(params: {
     if (acc.type === 'credit_card') {
       const limit = acc.creditLimit || 0;
       item.creditLimit = limit;
-      item.debt = endingBalance < 0 ? Math.abs(endingBalance) : 0;
-      item.availableCredit = Math.max(0, limit + endingBalance);
+      item.debt = liveBalance < 0 ? Math.abs(liveBalance) : 0;
+      item.availableCredit = Math.max(0, limit + liveBalance);
+      item.paymentsReceived = Math.round(totalTransfersIn * 100) / 100;
     }
 
     accountSummaries.push(item);
   }
 
-  // 4. Totales consolidados del período
+  // 3. Totales consolidados del período (Sin doble conteo de transferencias)
   let grandTotalIncome = 0;
   let grandTotalExpense = 0;
   let grandTotalTransfers = 0;
@@ -189,9 +210,6 @@ export function buildAccountStatementData(params: {
       grandTotalExpense += tx.amount;
     } else if (tx.type === 'transfer') {
       grandTotalTransfers += tx.amount;
-      if (tx.categoryId && !tx.isCreditCardPayment) {
-        grandTotalExpense += tx.amount;
-      }
     }
   }
 
@@ -321,15 +339,15 @@ export function exportStatementToCSV(data: PeriodAccountStatementData): void {
   lines.push([
     escapeCsv('Cuenta'),
     escapeCsv('Tipo'),
-    escapeCsv('Saldo Inicial'),
-    escapeCsv('Ingresos/Entradas'),
-    escapeCsv('Gastos/Salidas'),
-    escapeCsv('Transf. Recibidas'),
-    escapeCsv('Transf. Enviadas'),
-    escapeCsv('Movimiento Neto'),
-    escapeCsv('Saldo Final'),
+    escapeCsv('Saldo Actual (en Vivo)'),
+    escapeCsv('Saldo Inicial Período'),
+    escapeCsv('Entradas (+)'),
+    escapeCsv('Salidas (-)'),
+    escapeCsv('Flujo Neto Período'),
+    escapeCsv('Saldo Final Período'),
     escapeCsv('Límite Crédito'),
     escapeCsv('Deuda Tarjeta'),
+    escapeCsv('Crédito Disponible'),
   ].join(','));
 
   for (const s of data.accountSummaries) {
@@ -342,18 +360,21 @@ export function exportStatementToCSV(data: PeriodAccountStatementData): void {
         ? 'Efectivo'
         : 'Ahorro';
 
+    const inflows = s.totalIncome + s.totalTransfersIn;
+    const outflows = s.totalExpense + s.totalTransfersOut;
+
     lines.push([
       escapeCsv(s.account.name),
       escapeCsv(typeLabel),
+      escapeCsv(formatGTQ(s.currentBalance)),
       escapeCsv(formatGTQ(s.startingBalance)),
-      escapeCsv(formatGTQ(s.totalIncome)),
-      escapeCsv(formatGTQ(s.totalExpense)),
-      escapeCsv(formatGTQ(s.totalTransfersIn)),
-      escapeCsv(formatGTQ(s.totalTransfersOut)),
+      escapeCsv(formatGTQ(inflows)),
+      escapeCsv(formatGTQ(outflows)),
       escapeCsv(formatGTQ(s.netMovement)),
       escapeCsv(formatGTQ(s.endingBalance)),
       escapeCsv(s.creditLimit !== undefined ? formatGTQ(s.creditLimit) : '-'),
       escapeCsv(s.debt !== undefined ? formatGTQ(s.debt) : '-'),
+      escapeCsv(s.availableCredit !== undefined ? formatGTQ(s.availableCredit) : '-'),
     ].join(','));
   }
   lines.push('');

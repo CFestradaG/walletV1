@@ -12,6 +12,7 @@ import {
   CreditCard,
   Landmark,
   PiggyBank,
+  PieChart,
   ReceiptText,
   Search,
   Wallet,
@@ -33,6 +34,8 @@ export interface DrilldownTarget {
   isNearLimit?: boolean;
   transactions: Transaction[];
   emptyMessage?: string;
+  // Category-specific details
+  categoryId?: string;
   // Account-specific details
   accountId?: string;
   accountType?: AccountType;
@@ -72,12 +75,18 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
   const isDark = resolvedTheme === 'dark';
   const [searchTerm, setSearchTerm] = useState('');
   const [filterScope, setFilterScope] = useState<'period' | 'all'>('period');
+  const [activeTab, setActiveTab] = useState<'transactions' | 'subcategories'>('transactions');
+  const [selectedSubFilter, setSelectedSubFilter] = useState<string | null>(null);
+  const [hoveredSubId, setHoveredSubId] = useState<string | null>(null);
 
   // Reset search and tab scope when modal opens/changes target
   useEffect(() => {
     if (isOpen) {
       setSearchTerm('');
       setFilterScope('period');
+      setActiveTab('transactions');
+      setSelectedSubFilter(null);
+      setHoveredSubId(null);
     }
   }, [isOpen, target?.title, target?.accountId]);
 
@@ -108,10 +117,139 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
     return target.transactions;
   }, [target, hasPeriodTabs, filterScope]);
 
+  const isCategoryDrilldown = Boolean(
+    target &&
+      !target.accountId &&
+      !target.accountType &&
+      !target.creditCardInfo &&
+      !target.liquidAccountInfo
+  );
+
+  const matchingCategory = useMemo(() => {
+    if (!target) return undefined;
+    if (target.categoryId) {
+      return categories.find((c) => c.id === target.categoryId);
+    }
+    const byName = categories.find((c) => c.name.toLowerCase() === target.title.toLowerCase());
+    if (byName) return byName;
+    const catIds = new Set(target.transactions.map((t) => t.categoryId).filter(Boolean));
+    if (catIds.size === 1) {
+      const singleId = Array.from(catIds)[0];
+      return categories.find((c) => c.id === singleId);
+    }
+    return undefined;
+  }, [target, categories]);
+
+  const subcategoriesBreakdown = useMemo(() => {
+    if (!target || !isCategoryDrilldown || !activeTransactionsList.length) return [];
+
+    const totalSpent = activeTransactionsList.reduce((acc, tx) => acc + tx.amount, 0);
+    if (totalSpent <= 0) return [];
+
+    const subMap = new Map<string, { id: string; name: string; amount: number; count: number }>();
+
+    if (matchingCategory?.subcategories) {
+      for (const sub of matchingCategory.subcategories) {
+        subMap.set(sub.id, {
+          id: sub.id,
+          name: sub.name,
+          amount: 0,
+          count: 0,
+        });
+      }
+    }
+
+    let unassignedAmount = 0;
+    let unassignedCount = 0;
+
+    for (const tx of activeTransactionsList) {
+      if (tx.subcategoryId && subMap.has(tx.subcategoryId)) {
+        const item = subMap.get(tx.subcategoryId)!;
+        item.amount += tx.amount;
+        item.count += 1;
+      } else if (tx.subcategoryId) {
+        let name = 'Subcategoría';
+        for (const cat of categories) {
+          const found = cat.subcategories?.find((s) => s.id === tx.subcategoryId);
+          if (found) {
+            name = found.name;
+            break;
+          }
+        }
+        const item = subMap.get(tx.subcategoryId) || {
+          id: tx.subcategoryId,
+          name,
+          amount: 0,
+          count: 0,
+        };
+        item.amount += tx.amount;
+        item.count += 1;
+        subMap.set(tx.subcategoryId, item);
+      } else {
+        unassignedAmount += tx.amount;
+        unassignedCount += 1;
+      }
+    }
+
+    const result = Array.from(subMap.values()).filter((s) => s.amount > 0 || s.count > 0);
+
+    if (unassignedCount > 0) {
+      result.push({
+        id: '__unassigned__',
+        name: 'General / Sin subcategoría',
+        amount: unassignedAmount,
+        count: unassignedCount,
+      });
+    }
+
+    result.sort((a, b) => b.amount - a.amount);
+
+    const PALETTE = [
+      accentColor,
+      '#3B82F6',
+      '#8B5CF6',
+      '#EC4899',
+      '#F59E0B',
+      '#10B981',
+      '#06B6D4',
+      '#F97316',
+      '#6366F1',
+      '#14B8A6',
+      '#84CC16',
+    ];
+
+    return result.map((sub, idx) => ({
+      ...sub,
+      amount: Math.round(sub.amount * 100) / 100,
+      pct: totalSpent > 0 ? (sub.amount / totalSpent) * 100 : 0,
+      color: sub.id === '__unassigned__' ? '#94A3B8' : PALETTE[idx % PALETTE.length],
+    }));
+  }, [target, isCategoryDrilldown, activeTransactionsList, matchingCategory, categories, accentColor]);
+
+  const selectedSubName = useMemo(() => {
+    if (!selectedSubFilter) return null;
+    if (selectedSubFilter === '__unassigned__') return 'General / Sin subcategoría';
+    const found = subcategoriesBreakdown.find((s) => s.id === selectedSubFilter);
+    return found?.name || 'Subcategoría';
+  }, [selectedSubFilter, subcategoriesBreakdown]);
+
   // Sort and filter transactions
   const sortedAndFilteredTransactions = useMemo(() => {
     if (!target) return [];
-    let list = [...activeTransactionsList].sort((a, b) => {
+    let list = [...activeTransactionsList];
+
+    // Filtro por subcategoría seleccionada
+    if (selectedSubFilter) {
+      if (selectedSubFilter === '__unassigned__') {
+        list = list.filter(
+          (tx) => !tx.subcategoryId || !matchingCategory?.subcategories.some((s) => s.id === tx.subcategoryId)
+        );
+      } else {
+        list = list.filter((tx) => tx.subcategoryId === selectedSubFilter);
+      }
+    }
+
+    list.sort((a, b) => {
       const dateCmp = b.date.localeCompare(a.date);
       if (dateCmp !== 0) return dateCmp;
       return (b.createdAt || '').localeCompare(a.createdAt || '');
@@ -140,7 +278,7 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
     }
 
     return list;
-  }, [target, activeTransactionsList, searchTerm, categories, accounts]);
+  }, [target, activeTransactionsList, selectedSubFilter, matchingCategory, searchTerm, categories, accounts]);
 
   if (!isOpen || !target) return null;
 
@@ -489,42 +627,300 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
             </div>
           )}
 
-          {/* SEARCH INPUT */}
-          {activeTransactionsList.length > 3 && (
-            <div className="relative">
-              <Search className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por nota, categoría, fecha o cuenta..."
-                className={`w-full pl-9 pr-3 py-1.5 rounded-xl border text-xs focus:outline-hidden transition-colors ${
-                  isDark
-                    ? 'bg-black/20 border-white/10 text-white placeholder:text-slate-500 focus:border-emerald-500/50'
-                    : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-emerald-500'
+          {/* CATEGORY VIEW TABS (MOVIMIENTOS VS DISTRIBUCIÓN SUBCATEGORÍAS) */}
+          {isCategoryDrilldown && subcategoriesBreakdown.length > 0 && (
+            <div className={`p-1 rounded-xl border flex items-center gap-1 text-xs transition-colors ${
+              isDark ? 'bg-black/30 border-white/5' : 'bg-slate-100 border-slate-200'
+            }`}>
+              <button
+                type="button"
+                onClick={() => setActiveTab('transactions')}
+                className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 text-[11px] ${
+                  activeTab === 'transactions'
+                    ? isDark
+                      ? 'bg-white/15 text-white shadow-xs'
+                      : 'bg-white text-slate-900 shadow-xs'
+                    : isDark
+                    ? 'text-slate-400 hover:text-white'
+                    : 'text-slate-500 hover:text-slate-900'
                 }`}
-              />
-              {searchTerm && (
-                <button
-                  type="button"
-                  onClick={() => setSearchTerm('')}
-                  aria-label="Limpiar búsqueda"
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
+              >
+                <ReceiptText className="w-3.5 h-3.5" />
+                <span>Movimientos</span>
+                <span className="opacity-75 font-mono">({activeTransactionsList.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveTab('subcategories')}
+                className={`flex-1 py-1.5 px-3 rounded-lg font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 text-[11px] ${
+                  activeTab === 'subcategories'
+                    ? isDark
+                      ? 'bg-white/15 text-white shadow-xs'
+                      : 'bg-white text-slate-900 shadow-xs'
+                    : isDark
+                    ? 'text-slate-400 hover:text-white'
+                    : 'text-slate-500 hover:text-slate-900'
+                }`}
+              >
+                <PieChart className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Subcategorías</span>
+                <span className="opacity-75 font-mono">({subcategoriesBreakdown.length})</span>
+              </button>
+            </div>
+          )}
+
+          {/* SEARCH INPUT (ONLY IN TRANSACTIONS TAB) */}
+          {activeTab === 'transactions' && (activeTransactionsList.length > 3 || selectedSubFilter) && (
+            <div className="space-y-2">
+              <div className="relative">
+                <Search className={`w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`} />
+                <input
+                  type="text"
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Buscar por nota, categoría, fecha o cuenta..."
+                  className={`w-full pl-9 pr-3 py-1.5 rounded-xl border text-xs focus:outline-hidden transition-colors ${
+                    isDark
+                      ? 'bg-black/20 border-white/10 text-white placeholder:text-slate-500 focus:border-emerald-500/50'
+                      : 'bg-white border-slate-200 text-slate-900 placeholder:text-slate-400 focus:border-emerald-500'
+                  }`}
+                />
+                {searchTerm && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchTerm('')}
+                    aria-label="Limpiar búsqueda"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* FILTER CHIP FOR SELECTED SUBCATEGORY */}
+              {selectedSubFilter && (
+                <div className={`p-2 px-3 rounded-xl border flex items-center justify-between text-xs animate-in fade-in ${
+                  isDark ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300' : 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                }`}>
+                  <div className="flex items-center gap-1.5 truncate">
+                    <PieChart className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                    <span className="truncate">
+                      Filtrando por subcategoría: <strong>{selectedSubName}</strong>
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedSubFilter(null)}
+                    className="text-[11px] font-bold text-rose-500 hover:underline cursor-pointer shrink-0 ml-2"
+                  >
+                    Quitar filtro
+                  </button>
+                </div>
               )}
             </div>
           )}
         </div>
 
-        {/* TRANSACTIONS LIST CONTAINER */}
-        <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-1.5 min-h-[140px]">
-          <div className="flex items-center justify-between pb-1 px-1">
-            <span className={`text-[11px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-              Movimientos ({sortedAndFilteredTransactions.length})
-            </span>
-            {onSelectTransaction && sortedAndFilteredTransactions.length > 0 && (
+        {/* BODY: SUBCATEGORIES DONUT CHART VIEW OR TRANSACTIONS LIST VIEW */}
+        {activeTab === 'subcategories' ? (
+          <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4 min-h-[220px]">
+            {/* SVG DONUT CHART CARD */}
+            <div
+              className={`p-4 rounded-2xl border flex flex-col items-center justify-center relative ${
+                isDark ? 'bg-black/20 border-white/5' : 'bg-white border-slate-200 shadow-2xs'
+              }`}
+            >
+              <div className="relative w-48 h-48 sm:w-52 sm:h-52 flex items-center justify-center">
+                {(() => {
+                  const R = 70;
+                  const C = 2 * Math.PI * R; // ~439.82
+                  let accum = 0;
+                  const hoveredItem = hoveredSubId
+                    ? subcategoriesBreakdown.find((s) => s.id === hoveredSubId)
+                    : null;
+                  const totalSpent = subcategoriesBreakdown.reduce((sum, s) => sum + s.amount, 0);
+
+                  return (
+                    <>
+                      <svg viewBox="0 0 200 200" className="w-full h-full transform -rotate-90">
+                        {/* Background Ring */}
+                        <circle
+                          cx="100"
+                          cy="100"
+                          r={R}
+                          fill="none"
+                          stroke={isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)'}
+                          strokeWidth="24"
+                        />
+                        {/* Slices */}
+                        {subcategoriesBreakdown.map((item) => {
+                          const sliceLength = (item.pct / 100) * C;
+                          const strokeDasharray = `${Math.max(0, sliceLength - (subcategoriesBreakdown.length > 1 ? 2.5 : 0))} ${C}`;
+                          const strokeDashoffset = -accum;
+                          accum += sliceLength;
+                          const isHovered = hoveredSubId === item.id;
+
+                          return (
+                            <circle
+                              key={item.id}
+                              cx="100"
+                              cy="100"
+                              r={R}
+                              fill="none"
+                              stroke={item.color}
+                              strokeWidth={isHovered ? 28 : 24}
+                              strokeDasharray={strokeDasharray}
+                              strokeDashoffset={strokeDashoffset}
+                              className="cursor-pointer transition-all duration-200"
+                              style={{
+                                opacity: hoveredSubId ? (isHovered ? 1 : 0.45) : 1,
+                              }}
+                              onMouseEnter={() => setHoveredSubId(item.id)}
+                              onMouseLeave={() => setHoveredSubId(null)}
+                              onClick={() => {
+                                setSelectedSubFilter(item.id);
+                                setActiveTab('transactions');
+                              }}
+                            />
+                          );
+                        })}
+                      </svg>
+
+                      {/* Center Info Overlay */}
+                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none text-center px-4">
+                        {hoveredItem ? (
+                          <>
+                            <p className="text-[10px] uppercase font-bold text-slate-400 truncate max-w-[120px]">
+                              {hoveredItem.name}
+                            </p>
+                            <p className="text-base font-extrabold font-mono text-slate-900 dark:text-white mt-0.5">
+                              {formatGTQ(hoveredItem.amount)}
+                            </p>
+                            <p
+                              className="text-xs font-bold mt-0.5"
+                              style={{ color: hoveredItem.color }}
+                            >
+                              {hoveredItem.pct.toFixed(1)}% · {hoveredItem.count} mov.
+                            </p>
+                          </>
+                        ) : (
+                          <>
+                            <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                              Total Categoría
+                            </p>
+                            <p className="text-base font-extrabold font-mono text-slate-900 dark:text-white mt-0.5">
+                              {formatGTQ(totalSpent)}
+                            </p>
+                            <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                              {subcategoriesBreakdown.length} subcategoría{subcategoriesBreakdown.length !== 1 ? 's' : ''}
+                            </p>
+                          </>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+
+              <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-2 text-center">
+                Toca una porción o subcategoría para ver sus movimientos
+              </p>
+            </div>
+
+            {/* SUBCATEGORIES BREAKDOWN LIST */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between px-1">
+                <span className={`text-[11px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  Desglose de Subcategorías
+                </span>
+                <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {subcategoriesBreakdown.length} registradas
+                </span>
+              </div>
+
+              <div className="space-y-1.5">
+                {subcategoriesBreakdown.map((sub) => {
+                  const isHovered = hoveredSubId === sub.id;
+                  return (
+                    <div
+                      key={sub.id}
+                      onMouseEnter={() => setHoveredSubId(sub.id)}
+                      onMouseLeave={() => setHoveredSubId(null)}
+                      onClick={() => {
+                        setSelectedSubFilter(sub.id);
+                        setActiveTab('transactions');
+                      }}
+                      className={`p-3 rounded-2xl border transition-all cursor-pointer group ${
+                        isHovered
+                          ? isDark
+                            ? 'bg-white/10 border-white/20 shadow-md'
+                            : 'bg-slate-50 border-slate-300 shadow-md'
+                          : isDark
+                          ? 'bg-black/20 border-white/5 hover:border-white/10'
+                          : 'bg-white border-slate-200 hover:border-slate-300 shadow-2xs'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1.5">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="w-3 h-3 rounded-full shrink-0 shadow-xs"
+                            style={{ backgroundColor: sub.color }}
+                          />
+                          <span className="font-semibold text-xs text-slate-900 dark:text-white truncate">
+                            {sub.name}
+                          </span>
+                          <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                            ({sub.count} mov.)
+                          </span>
+                        </div>
+
+                        <div className="text-right shrink-0 flex items-center gap-2">
+                          <span className="font-mono font-bold text-xs text-slate-900 dark:text-white">
+                            {formatGTQ(sub.amount)}
+                          </span>
+                          <span
+                            className="text-[10px] font-bold font-mono px-1.5 py-0.5 rounded-md"
+                            style={{
+                              backgroundColor: `${sub.color}18`,
+                              color: sub.color,
+                            }}
+                          >
+                            {sub.pct.toFixed(1)}%
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Progress Bar */}
+                      <div className={`w-full h-1.5 rounded-full overflow-hidden ${isDark ? 'bg-white/5' : 'bg-slate-100'}`}>
+                        <div
+                          className="h-full rounded-full transition-all duration-300"
+                          style={{
+                            width: `${Math.min(100, Math.max(2, sub.pct))}%`,
+                            backgroundColor: sub.color,
+                          }}
+                        />
+                      </div>
+
+                      <div className="flex items-center justify-end mt-1.5 pt-1 border-t border-dashed border-black/5 dark:border-white/5">
+                        <span className="text-[10.5px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 group-hover:translate-x-0.5 transition-transform">
+                          <span>Ver movimientos</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        ) : (
+          /* TRANSACTIONS LIST CONTAINER */
+          <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-1.5 min-h-[140px]">
+            <div className="flex items-center justify-between pb-1 px-1">
+              <span className={`text-[11px] font-bold uppercase tracking-wider ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Movimientos ({sortedAndFilteredTransactions.length})
+              </span>
+              {onSelectTransaction && sortedAndFilteredTransactions.length > 0 && (
               <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                 Toca una fila para editarla
               </span>
@@ -667,8 +1063,9 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
             </div>
           )}
         </div>
+      )}
 
-        {/* MODAL FOOTER */}
+      {/* MODAL FOOTER */}
         <div className={`p-3.5 px-5 border-t shrink-0 flex items-center justify-between gap-3 ${
           isDark ? 'border-white/5 bg-[#0B0F17]/50' : 'border-slate-100 bg-slate-50'
         }`}>

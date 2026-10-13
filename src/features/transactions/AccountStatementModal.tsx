@@ -396,7 +396,10 @@ export const AccountStatementModal: React.FC<AccountStatementModalProps> = ({
                     }`}
                   >
                     <th className="py-2.5 px-3 font-semibold">Cuenta</th>
-                    <th className="py-2.5 px-3 font-semibold text-right">Saldo Inicial</th>
+                    <th className="py-2.5 px-3 font-semibold text-right text-indigo-600 dark:text-indigo-400">
+                      Saldo Actual (en Vivo)
+                    </th>
+                    <th className="py-2.5 px-3 font-semibold text-right">Saldo Inicial Período</th>
                     <th className="py-2.5 px-3 font-semibold text-right text-emerald-600 dark:text-emerald-400">
                       Entradas (+)
                     </th>
@@ -404,7 +407,7 @@ export const AccountStatementModal: React.FC<AccountStatementModalProps> = ({
                       Salidas (-)
                     </th>
                     <th className="py-2.5 px-3 font-semibold text-right">Flujo Neto</th>
-                    <th className="py-2.5 px-3 font-semibold text-right font-bold">Saldo Final</th>
+                    <th className="py-2.5 px-3 font-semibold text-right font-bold">Saldo Final Período</th>
                     <th className="py-2.5 px-3 font-semibold text-right">Límite / Deuda</th>
                   </tr>
                 </thead>
@@ -437,6 +440,10 @@ export const AccountStatementModal: React.FC<AccountStatementModalProps> = ({
                               </p>
                             </div>
                           </div>
+                        </td>
+
+                        <td className="py-2.5 px-3 text-right tabular-nums font-bold text-indigo-600 dark:text-indigo-400">
+                          {formatGTQ(item.currentBalance, { hide: hideBalances })}
                         </td>
 
                         <td className="py-2.5 px-3 text-right tabular-nums text-slate-600 dark:text-slate-400">
