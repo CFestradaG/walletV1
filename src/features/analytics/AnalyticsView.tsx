@@ -5,9 +5,9 @@ import {
   ArrowRight,
   ArrowUpRight,
   BarChart3,
+  CalendarDays,
   Download,
   FileSpreadsheet,
-  Landmark,
   PieChart,
   ReceiptText,
   SlidersHorizontal,
@@ -20,7 +20,7 @@ import { PeriodSelectorBar } from '../../core/widgets/PeriodSelectorBar';
 import { DrilldownTarget, DrilldownTransactionsModal } from '../../core/widgets/DrilldownTransactionsModal';
 import { AccountStatementModal } from '../transactions/AccountStatementModal';
 import { Transaction } from '../../core/types/models';
-import { formatGTQ } from '../../core/utils/formatters';
+import { addDaysISO, formatDateShortES, formatGTQ } from '../../core/utils/formatters';
 import { subscribeAnnualProjections } from '../../core/firebase/firestoreSync';
 import {
   calculateCategoryMatrix,
@@ -41,6 +41,25 @@ interface AnalyticsViewProps {
   onNavigateTab?: (tab: any) => void;
 }
 
+interface ActivityDay {
+  date: string;
+  income: number;
+  expense: number;
+}
+
+interface ActivityBucket {
+  name: string;
+  start: string;
+  end: string;
+  days: ActivityDay[];
+  income: number;
+  expense: number;
+}
+
+interface ActivityCalendar extends ActivityBucket {
+  leadingDays: number;
+}
+
 export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   onOpenPeriodsModal,
   onOpenBudgetsModal,
@@ -56,7 +75,6 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     transactions,
     budgets,
     categories,
-    accounts,
     currentUser,
     saveAnnualProjections,
     resolvedTheme,
@@ -67,6 +85,9 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   const [drilldownTarget, setDrilldownTarget] = useState<DrilldownTarget | null>(null);
   const [isDrilldownOpen, setIsDrilldownOpen] = useState(false);
   const [isAccountStatementModalOpen, setIsAccountStatementModalOpen] = useState(false);
+  const [activityView, setActivityView] = useState<'month' | 'week' | 'fortnight'>('month');
+  const [selectedActivityDay, setSelectedActivityDay] = useState('');
+  const [selectedActivityInterval, setSelectedActivityInterval] = useState(0);
 
   const annualYear = activePeriod ? Number(activePeriod.startDate.slice(0, 4)) : new Date().getFullYear();
   const annualUserId = currentUser?.id || 'default_user';
@@ -100,12 +121,115 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
   // Period transactions
   const periodTransactions = useMemo(() => {
     if (!activePeriod) return [];
-    const currentPeriodTransactions = transactions.filter((t) => t.periodId === activePeriod.id);
+    const currentPeriodTransactions = transactions.filter(
+      (t) => t.date >= activePeriod.startDate && t.date <= activePeriod.endDate
+    );
     if (!selectedSubperiodId) return currentPeriodTransactions;
     const subperiod = activePeriod.subperiods.find((item) => item.id === selectedSubperiodId);
-    return currentPeriodTransactions.filter((t) => t.subperiodId === selectedSubperiodId ||
-      (!t.subperiodId && subperiod && t.date >= subperiod.startDate && t.date <= subperiod.endDate));
+    return currentPeriodTransactions.filter((t) =>
+      Boolean(subperiod && t.date >= subperiod.startDate && t.date <= subperiod.endDate)
+    );
   }, [transactions, activePeriod, selectedSubperiodId]);
+
+  const activityData = useMemo(() => {
+    if (!activePeriod) return { calendar: null as ActivityCalendar | null, weeks: [] as ActivityBucket[], fortnights: [] as ActivityBucket[] };
+    const selectedSubperiod = activePeriod.subperiods.find((item) => item.id === selectedSubperiodId);
+    const rangeStart = selectedSubperiod?.startDate || activePeriod.startDate;
+    const rangeEnd = selectedSubperiod?.endDate || activePeriod.endDate;
+
+    const dailyTotals = new Map<string, { income: number; expense: number }>();
+    for (const transaction of periodTransactions) {
+      const current = dailyTotals.get(transaction.date) || { income: 0, expense: 0 };
+      if (transaction.type === 'income') current.income += transaction.amount;
+      if (transaction.type === 'expense') current.expense += transaction.amount;
+      dailyTotals.set(transaction.date, current);
+    }
+
+    const createDays = (start: string, end: string) => {
+      const days: Array<{ date: string; income: number; expense: number }> = [];
+      for (let date = start; date <= end; date = addDaysISO(date, 1)) {
+        const totals = dailyTotals.get(date) || { income: 0, expense: 0 };
+        days.push({ date, ...totals });
+      }
+      return days;
+    };
+
+    const createBucket = (name: string, start: string, end: string) => {
+      const days = createDays(start, end);
+      return {
+        name,
+        start,
+        end,
+        days,
+        income: days.reduce((sum, day) => sum + day.income, 0),
+        expense: days.reduce((sum, day) => sum + day.expense, 0),
+      };
+    };
+
+    const weekday = (date: string) => new Date(`${date}T12:00:00Z`).getUTCDay();
+    const calendar = {
+      ...createBucket('Período completo', rangeStart, rangeEnd),
+      leadingDays: (weekday(rangeStart) + 6) % 7,
+    };
+
+    const createWeeks = (): ActivityBucket[] => {
+      const intervals: ActivityBucket[] = [];
+      let start = rangeStart;
+      let index = 0;
+      while (start <= rangeEnd) {
+        const dayOfWeek = weekday(start);
+        const daysUntilSunday = dayOfWeek === 0 ? 0 : 7 - dayOfWeek;
+        const proposedEnd = addDaysISO(start, daysUntilSunday);
+        const end = proposedEnd < rangeEnd ? proposedEnd : rangeEnd;
+        intervals.push(createBucket(`Semana ${index + 1}`, start, end));
+        start = addDaysISO(end, 1);
+        index += 1;
+      }
+      return intervals;
+    };
+
+    const createFortnights = (): ActivityBucket[] => {
+      const intervals: ActivityBucket[] = [];
+      let start = rangeStart;
+      let index = 0;
+      while (start <= rangeEnd) {
+        const proposedEnd = addDaysISO(start, 14);
+        const end = proposedEnd < rangeEnd ? proposedEnd : rangeEnd;
+        intervals.push(createBucket(`Quincena ${index + 1}`, start, end));
+        start = addDaysISO(end, 1);
+        index += 1;
+      }
+      return intervals;
+    };
+
+    return {
+      calendar,
+      weeks: createWeeks(),
+      fortnights: createFortnights(),
+    };
+  }, [activePeriod, periodTransactions, selectedSubperiodId]);
+
+  useEffect(() => {
+    setSelectedActivityDay('');
+    setSelectedActivityInterval(0);
+  }, [activePeriod?.id, selectedSubperiodId, activityData.weeks.length, activityData.fortnights.length]);
+
+  const activityIntervals = activityView === 'week' ? activityData.weeks : activityData.fortnights;
+  const biggestExpenseWeek = activityData.weeks.reduce(
+    (biggest, week) => week.expense > (biggest?.expense ?? -1) ? week : biggest,
+    null as (typeof activityData.weeks[number] | null)
+  );
+  const activityChartColumnWidth = Math.max(112, 320 / Math.max(1, activityIntervals.length));
+  const activityChartWidth = activityChartColumnWidth * Math.max(1, activityIntervals.length);
+  const activityChartMaximum = Math.max(
+    1,
+    ...activityIntervals.flatMap((interval) => [interval.income, interval.expense])
+  );
+  const getActivityLinePoints = (key: 'income' | 'expense') => activityIntervals.map((interval, index) => {
+    const x = activityChartColumnWidth / 2 + index * activityChartColumnWidth;
+    const y = 96 - interval[key] / activityChartMaximum * 78;
+    return `${x},${y}`;
+  }).join(' ');
 
   // MODULE 1: Ingresos vs Gastos vs Balance Neto
   const totalIncome = useMemo(() => {
@@ -179,25 +303,7 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     return list.slice(0, 5);
   }, [periodTransactions, categories]);
 
-  // MODULE 4: Gastos por Cuenta
-  const accountUsage = useMemo(() => {
-    const map = new Map<string, { id: string; name: string; type: string; spent: number; income: number }>();
-    for (const a of accounts) {
-      map.set(a.id, { id: a.id, name: a.name, type: a.type, spent: 0, income: 0 });
-    }
-
-    for (const t of periodTransactions) {
-      if (t.accountId && t.type === 'expense' && map.has(t.accountId)) {
-        map.get(t.accountId)!.spent += t.amount;
-      } else if (t.accountId && t.type === 'income' && map.has(t.accountId)) {
-        map.get(t.accountId)!.income += t.amount;
-      }
-    }
-
-    return Array.from(map.values()).filter((a) => a.spent > 0 || a.income > 0);
-  }, [accounts, periodTransactions]);
-
-  // MODULE 5: Cumplimiento de Presupuestos (Solo categorías de egreso, desduplicadas)
+  // MODULE 4: Cumplimiento de Presupuestos (Solo categorías de egreso, desduplicadas)
   const budgetPerformance = useMemo(() => {
     if (!activePeriod) return [];
     // Use the same monthly matrix as Panorama Anual so projection overrides,
@@ -339,82 +445,19 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
     setIsDrilldownOpen(true);
   };
 
-  const handleOpenAccountDrilldown = (acc: {
-    id: string;
-    name: string;
-    type: string;
-    spent: number;
-    income: number;
-  }) => {
-    const accountObj = accounts.find((a) => a.id === acc.id);
-    const allAccountTxs = transactions.filter(
-      (t) =>
-        t.accountId === acc.id ||
-        t.originAccountId === acc.id ||
-        t.destinationAccountId === acc.id
+  const openActivityDrilldown = (startDate: string, endDate: string, label: string) => {
+    const matchingTransactions = periodTransactions.filter(
+      (transaction) => transaction.date >= startDate && transaction.date <= endDate
     );
-    const periodAccountTxs = periodTransactions.filter(
-      (t) =>
-        t.accountId === acc.id ||
-        t.originAccountId === acc.id ||
-        t.destinationAccountId === acc.id
-    );
-
-    const currentBal = accountObj ? (accountObj.currentBalance ?? accountObj.balance ?? 0) : 0;
-
-    if (accountObj?.type === 'credit_card') {
-      const debt = Math.max(0, -currentBal);
-      const limit = accountObj.creditLimit || 0;
-      const available = Math.max(0, limit - debt);
-      const utilization = limit > 0 ? Math.min(100, Math.round((debt / limit) * 100)) : 0;
-
-      setDrilldownTarget({
-        title: acc.name,
-        subtitle: `Actividad en ${activePeriod?.name || 'Período analizado'}`,
-        icon: '💳',
-        color: accountObj.color || '#F43F5E',
-        totalAmount: debt,
-        transactions: periodAccountTxs,
-        accountId: acc.id,
-        accountType: 'credit_card',
-        creditCardInfo: {
-          debt,
-          creditLimit: limit,
-          availableCredit: available,
-          utilization,
-          cutoffDay: accountObj.cutoffDay,
-          paymentDueDay: accountObj.paymentDueDay,
-        },
-        allTransactions: allAccountTxs,
-        periodTransactions: periodAccountTxs,
-        periodName: activePeriod?.name || 'Período actual',
-        emptyMessage: `No hay transacciones registradas para ${acc.name}.`,
-      });
-    } else {
-      setDrilldownTarget({
-        title: acc.name,
-        subtitle: `Actividad en ${activePeriod?.name || 'Período analizado'}`,
-        icon:
-          accountObj?.type === 'bank'
-            ? '🏦'
-            : accountObj?.type === 'cash'
-            ? '💵'
-            : '💰',
-        color: accountObj?.color || '#38BDF8',
-        totalAmount: currentBal,
-        transactions: periodAccountTxs,
-        accountId: acc.id,
-        accountType: accountObj?.type,
-        liquidAccountInfo: {
-          currentBalance: currentBal,
-        },
-        allTransactions: allAccountTxs,
-        periodTransactions: periodAccountTxs,
-        periodName: activePeriod?.name || 'Período actual',
-        emptyMessage: `No hay transacciones registradas para ${acc.name}.`,
-      });
-    }
-
+    setDrilldownTarget({
+      title: label,
+      subtitle: `${formatDateShortES(startDate, true)}${startDate === endDate ? '' : ` → ${formatDateShortES(endDate, true)}`}`,
+      icon: '📅',
+      color: '#0EA5E9',
+      totalAmount: matchingTransactions.reduce((sum, transaction) => sum + transaction.amount, 0),
+      transactions: matchingTransactions,
+      emptyMessage: `No hay transacciones registradas para ${label.toLowerCase()}.`,
+    });
     setIsDrilldownOpen(true);
   };
 
@@ -760,65 +803,183 @@ export const AnalyticsView: React.FC<AnalyticsViewProps> = ({
         </div>
       )}
 
-      {/* MODULE 6: ACCOUNT ROTATION / USAGE */}
-      {accountUsage.length > 0 && (
-        <div
-          className={`p-4 rounded-3xl border transition-all ${
-            isDark ? 'bg-[#131927] border-white/10' : 'bg-white border-slate-200 shadow-xs'
-          }`}
-        >
-          <div className="flex items-center gap-2 mb-3">
-            <Landmark className="w-4 h-4 text-sky-400" />
-            <h2 className="text-xs font-bold">Actividad por Cuenta</h2>
-          </div>
-
-          <div className={`divide-y ${isDark ? 'divide-white/5' : 'divide-slate-100'}`}>
-            {accountUsage.map((acc, i) => (
-              <div
-                key={i}
-                onClick={() => handleOpenAccountDrilldown(acc)}
-                className={`py-2.5 px-2 rounded-xl flex items-center justify-between text-xs transition-colors cursor-pointer group ${
-                  isDark ? 'hover:bg-white/5' : 'hover:bg-slate-50'
-                }`}
-                title={`Ver transacciones de ${acc.name}`}
-              >
-                <div>
-                  <span className={`font-bold block group-hover:text-sky-400 transition-colors ${
-                    isDark ? 'text-white' : 'text-slate-900'
-                  }`}>
-                    {acc.name}
-                  </span>
-                  <span className={`text-[10px] capitalize ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                    {acc.type === 'credit_card'
-                      ? 'Tarjeta de Crédito'
-                      : acc.type === 'bank'
-                      ? 'Banco'
-                      : acc.type === 'cash'
-                      ? 'Efectivo'
-                      : 'Ahorro'}
-                  </span>
-                </div>
-
-                <div className="text-right font-mono text-[11px] flex items-center gap-2">
-                  <div>
-                    {acc.income > 0 && (
-                      <span className={`block font-semibold ${isDark ? 'text-emerald-400' : 'text-emerald-600'}`}>
-                        +{formatGTQ(acc.income)}
-                      </span>
-                    )}
-                    {acc.spent > 0 && (
-                      <span className={`block font-semibold ${isDark ? 'text-rose-400' : 'text-rose-600'}`}>
-                        -{formatGTQ(acc.spent)}
-                      </span>
-                    )}
-                  </div>
-                  <ArrowRight className="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                </div>
-              </div>
-            ))}
+      {/* MODULE 5: DAILY ACTIVITY BY MONTH, WEEK OR FORTNIGHT */}
+      <section
+        className={`p-4 rounded-3xl border transition-all ${
+          isDark ? 'bg-[#131927] border-white/10' : 'bg-white border-slate-200 shadow-xs'
+        }`}
+      >
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <CalendarDays className="w-4 h-4 text-sky-400 shrink-0" />
+            <div className="min-w-0">
+              <h2 className="text-xs font-bold">Ingresos y egresos por fecha</h2>
+              <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                {selectedSubperiodId
+                  ? activePeriod?.subperiods.find((item) => item.id === selectedSubperiodId)?.name
+                  : activePeriod?.name || 'Período activo'}
+                {' · '}las transferencias no se cuentan como ingreso ni egreso
+              </p>
+            </div>
           </div>
         </div>
-      )}
+
+        <div className={`grid grid-cols-3 gap-1 p-1 rounded-xl mb-4 ${isDark ? 'bg-black/20' : 'bg-slate-100'}`}>
+          {([
+            ['month', 'Mes'],
+            ['week', 'Semana'],
+            ['fortnight', 'Quincena'],
+          ] as const).map(([view, label]) => (
+            <button
+              key={view}
+              type="button"
+              onClick={() => {
+                setActivityView(view);
+                setSelectedActivityInterval(0);
+              }}
+              className={`py-2 rounded-lg text-[11px] font-semibold transition-colors cursor-pointer ${
+                activityView === view
+                  ? 'bg-sky-600 text-white shadow-sm'
+                  : isDark ? 'text-slate-400 hover:text-white' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {activityView === 'month' ? (
+          activityData.calendar ? (
+            <>
+              <div className="mb-3">
+                <h3 className={`text-xs font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                  Calendario completo · {activePeriod?.name || 'Período'}
+                </h3>
+                <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {formatDateShortES(activityData.calendar.start, true)} → {formatDateShortES(activityData.calendar.end, true)} · toca un día para ver sus movimientos
+                </p>
+              </div>
+              <div className={`grid grid-cols-7 text-center text-[9px] font-bold mb-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((day, index) => <span key={`${day}-${index}`} className="py-1">{day}</span>)}
+              </div>
+              <div className="grid grid-cols-7 gap-1">
+                {Array.from({ length: activityData.calendar.leadingDays }, (_, index) => <div key={`blank-${index}`} />)}
+                {activityData.calendar.days.map((day) => {
+                  const hasActivity = day.income > 0 || day.expense > 0;
+                  return (
+                    <button
+                      key={day.date}
+                      type="button"
+                      onClick={() => {
+                        setSelectedActivityDay(day.date);
+                        openActivityDrilldown(day.date, day.date, `Movimientos del ${formatDateShortES(day.date, true)}`);
+                      }}
+                      title={`${formatDateShortES(day.date, true)} · Ingresos ${formatGTQ(day.income)} · Egresos ${formatGTQ(day.expense)}`}
+                      className={`min-w-0 min-h-[58px] sm:min-h-[66px] p-1 rounded-lg border text-left transition-colors cursor-pointer ${
+                        selectedActivityDay === day.date
+                          ? 'border-sky-500 bg-sky-500/15'
+                          : hasActivity
+                          ? isDark ? 'bg-white/5 border-white/10 hover:border-sky-500/50' : 'bg-slate-50 border-slate-200 hover:border-sky-400'
+                          : isDark ? 'border-white/5 hover:border-sky-500/40' : 'border-slate-100 hover:border-sky-300'
+                      }`}
+                    >
+                      <span className={`block text-[10px] font-semibold ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
+                        {Number(day.date.slice(8, 10))}
+                      </span>
+                      {day.income > 0 && <span className="block truncate text-[8px] leading-3 font-semibold text-emerald-500">+{formatGTQ(day.income, { compact: true, decimals: 0 })}</span>}
+                      {day.expense > 0 && <span className="block truncate text-[8px] leading-3 font-semibold text-rose-500">−{formatGTQ(day.expense, { compact: true, decimals: 0 })}</span>}
+                    </button>
+                  );
+                })}
+              </div>
+              <div className={`mt-3 flex flex-wrap justify-between gap-2 text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                <span>Ingresos del período: <strong className="text-emerald-500">{formatGTQ(activityData.calendar.income)}</strong></span>
+                <span>Egresos del período: <strong className="text-rose-500">{formatGTQ(activityData.calendar.expense)}</strong></span>
+              </div>
+            </>
+          ) : (
+            <p className={`py-6 text-center text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Selecciona un período para ver el calendario.</p>
+          )
+        ) : activityIntervals.length > 0 ? (
+          <>
+            {activityView === 'week' && biggestExpenseWeek && (
+              <div className={`mb-3 p-3 rounded-xl border ${isDark ? 'bg-rose-500/10 border-rose-500/20' : 'bg-rose-50 border-rose-100'}`}>
+                <p className={`text-[10px] ${isDark ? 'text-rose-200' : 'text-rose-700'}`}>
+                  Semana con más egresos: <strong>{biggestExpenseWeek.name}</strong> ({formatDateShortES(biggestExpenseWeek.start)}–{formatDateShortES(biggestExpenseWeek.end)})
+                </p>
+                <p className="text-xs font-bold text-rose-500 mt-0.5">{formatGTQ(biggestExpenseWeek.expense)}</p>
+              </div>
+            )}
+
+            <div className="overflow-x-auto overscroll-x-contain mb-3">
+              <svg
+                role="img"
+                aria-label={`Comparación de ingresos y egresos por ${activityView === 'week' ? 'semana' : 'quincena'}`}
+                viewBox={`0 0 ${activityChartWidth} 132`}
+                width={activityChartWidth}
+                height="132"
+                className="max-w-none"
+              >
+                <line x1="18" y1="96" x2={activityChartWidth - 18} y2="96" stroke={isDark ? '#334155' : '#CBD5E1'} strokeWidth="1" />
+                <polyline points={getActivityLinePoints('income')} fill="none" stroke="#10B981" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                <polyline points={getActivityLinePoints('expense')} fill="none" stroke="#F43F5E" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                {activityIntervals.map((interval, index) => {
+                  const x = activityChartColumnWidth / 2 + index * activityChartColumnWidth;
+                  const incomeY = 96 - interval.income / activityChartMaximum * 78;
+                  const expenseY = 96 - interval.expense / activityChartMaximum * 78;
+                  const shortLabel = activityView === 'week' ? `S${index + 1}` : `Q${index + 1}`;
+                  return (
+                    <g key={`${interval.start}-points`}>
+                      <circle cx={x} cy={incomeY} r="3.5" fill="#10B981" />
+                      <circle cx={x} cy={expenseY} r="3.5" fill="#F43F5E" />
+                      <text x={x} y="119" textAnchor="middle" fontSize="9" fill={isDark ? '#94A3B8' : '#64748B'}>{shortLabel}</text>
+                    </g>
+                  );
+                })}
+              </svg>
+            </div>
+
+            <div className="flex items-center gap-4 mb-3 text-[10px]">
+              <span className="inline-flex items-center gap-1.5 text-emerald-500"><span className="w-2 h-2 rounded-full bg-emerald-500" />Ingresos</span>
+              <span className="inline-flex items-center gap-1.5 text-rose-500"><span className="w-2 h-2 rounded-full bg-rose-500" />Egresos</span>
+              <span className={`ml-auto ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>Toca un bloque para ver movimientos</span>
+            </div>
+
+            <div className="flex overflow-x-auto overscroll-x-contain gap-2 pb-1 mb-4">
+              {activityIntervals.map((interval, index) => (
+                <button
+                  key={`${interval.start}-${interval.end}`}
+                  type="button"
+                  onClick={() => {
+                    setSelectedActivityInterval(index);
+                    openActivityDrilldown(interval.start, interval.end, interval.name);
+                  }}
+                  style={{ width: activityChartColumnWidth }}
+                  className={`shrink-0 p-3 rounded-xl border text-left transition-colors cursor-pointer ${
+                    selectedActivityInterval === index
+                      ? isDark ? 'bg-sky-500/10 border-sky-500/40' : 'bg-sky-50 border-sky-200'
+                      : isDark ? 'bg-black/10 border-white/5 hover:border-white/15' : 'bg-white border-slate-100 hover:border-slate-200'
+                  }`}
+                >
+                  <div className="mb-1.5">
+                    <span className={`block text-[11px] font-bold truncate ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+                      {interval.name}
+                    </span>
+                    <span className={`block text-[9px] font-normal whitespace-nowrap ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                      {formatDateShortES(interval.start)} – {formatDateShortES(interval.end)}
+                    </span>
+                  </div>
+                  <span className="block text-[10px] text-emerald-500 font-semibold">+{formatGTQ(interval.income, { compact: true })}</span>
+                  <span className="block text-[10px] text-rose-500 font-semibold">−{formatGTQ(interval.expense, { compact: true })}</span>
+                </button>
+              ))}
+            </div>
+
+          </>
+        ) : (
+          <p className={`py-6 text-center text-xs ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>No hay fechas dentro del período seleccionado.</p>
+        )}
+      </section>
 
       {/* DRILLDOWN TRANSACTIONS MODAL */}
       <DrilldownTransactionsModal

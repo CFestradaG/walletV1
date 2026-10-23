@@ -166,6 +166,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     return Array.from(map.entries());
   }, [displayedTransactions]);
 
+  const filteredTotal = useMemo(
+    () => displayedTransactions.reduce((total, transaction) => total + transaction.amount, 0),
+    [displayedTransactions]
+  );
+
   const hasActiveFilters =
     filterType !== 'all' ||
     filterAccountId !== 'all' ||
@@ -184,7 +189,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   return (
     <div className="space-y-4">
       {/* PERIOD SELECTOR BAR */}
-      <PeriodSelectorBar onOpenPeriodsModal={onOpenPeriodsModal} />
+      <PeriodSelectorBar onOpenPeriodsModal={onOpenPeriodsModal} compact />
 
       {/* SCOPE TOGGLE: Active Period vs All Transactions */}
       <div className="flex items-center justify-between gap-2 px-1">
@@ -242,7 +247,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             }`}
           >
             <CheckSquare className="w-4 h-4 text-sky-500" />
-            <span className="hidden sm:inline">{isSelectionMode ? 'Cancelar' : 'Seleccionar'}</span>
+            <span className="sm:hidden">{isSelectionMode ? 'Cancelar' : 'Seleccionar'}</span>
+            <span className="hidden sm:inline">{isSelectionMode ? 'Cancelar' : 'Selección múltiple'}</span>
           </button>
 
           <button
@@ -272,7 +278,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2">
+      <div className="hidden sm:grid grid-cols-2 gap-2">
         <label className={`text-[10px] uppercase tracking-wide font-semibold ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
           Período
           <select
@@ -369,7 +375,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
         {/* QUICK TAG FILTER CHIPS */}
         {tags.length > 0 && (
-          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 no-scrollbar text-xs">
+          <div className="hidden sm:flex items-center gap-1.5 overflow-x-auto pb-1 pt-0.5 no-scrollbar text-xs">
             <span className={`text-[10px] font-bold uppercase shrink-0 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
               Etiqueta:
             </span>
@@ -424,6 +430,41 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         {/* EXPANDABLE FILTER ROW */}
         {isFilterPanelOpen && (
           <div className={`pt-2 border-t grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 text-xs ${isDark ? 'border-white/5' : 'border-slate-100'}`}>
+            <div className="sm:hidden">
+              <label className={`block text-[10px] uppercase font-bold mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                Período
+              </label>
+              <select
+                value={periodFilterMode === 'all' ? 'all' : activePeriod?.id || ''}
+                onChange={(e) => {
+                  if (e.target.value === 'all') setPeriodFilterMode('all');
+                  else {
+                    setActivePeriodId(e.target.value);
+                    setPeriodFilterMode('period');
+                  }
+                }}
+                className={`w-full p-2 rounded-xl border text-xs ${isDark ? 'bg-black/30 border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
+              >
+                <option value="all">Todos los períodos</option>
+                {periods.map((period) => <option key={period.id} value={period.id}>{period.name}</option>)}
+              </select>
+            </div>
+
+            <div className="sm:hidden">
+              <label className={`block text-[10px] uppercase font-bold mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                Subperíodo
+              </label>
+              <select
+                value={filterSubperiodId}
+                disabled={periodFilterMode === 'all' || !activePeriod}
+                onChange={(e) => setFilterSubperiodId(e.target.value)}
+                className={`w-full p-2 rounded-xl border text-xs disabled:opacity-50 ${isDark ? 'bg-black/30 border-white/10 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
+              >
+                <option value="">Todos los subperíodos</option>
+                {activePeriod?.subperiods.map((subperiod) => <option key={subperiod.id} value={subperiod.id}>{subperiod.name}</option>)}
+              </select>
+            </div>
+
             <div>
               <label className={`block text-[10px] uppercase font-bold mb-1 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                 Tipo
@@ -589,6 +630,26 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         </div>
       )}
 
+      {/* FILTERED RESULTS TOTAL */}
+      <div
+        className={`px-4 py-3 rounded-2xl border flex items-center justify-between gap-3 ${
+          isDark ? 'bg-[#131927] border-white/10' : 'bg-white border-slate-200 shadow-xs'
+        }`}
+        aria-live="polite"
+      >
+        <div>
+          <p className={`text-xs font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
+            Total de resultados filtrados
+          </p>
+          <p className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+            {displayedTransactions.length} registro{displayedTransactions.length === 1 ? '' : 's'}
+          </p>
+        </div>
+        <span className={`font-mono text-sm font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
+          {hideBalances ? '••••' : formatGTQ(filteredTotal)}
+        </span>
+      </div>
+
       {/* TRANSACTIONS LIST GROUPED BY DATE */}
       {displayedTransactions.length === 0 ? (
         <div
@@ -613,7 +674,7 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
           </button>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="max-h-[42dvh] sm:max-h-[55dvh] overflow-y-auto overscroll-contain space-y-4 pr-1">
           {groupedByDate.map(([dateKey, txList]) => {
             const dayTotalExpense = txList
               .filter((t) => t.type === 'expense')
@@ -746,19 +807,27 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                               )}
                             </div>
 
-                            <p className={`text-[11px] mt-0.5 truncate ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                            {tx.type === 'transfer' && (
+                              <p className={`text-[11px] mt-0.5 truncate ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                                Sale −{formatGTQ(tx.amount)} → Entra +{formatGTQ(tx.amount)}
+                              </p>
+                            )}
+
+                            <div className="flex flex-wrap items-center gap-1.5 mt-1">
                               {tx.type === 'transfer' ? (
-                                <span>
-                                  {originAcc?.name} (−{formatGTQ(tx.amount)}) → {destAcc?.name} (+{formatGTQ(tx.amount)})
-                                </span>
-                              ) : (
-                                <span>
-                                  {sub?.name ? `${sub.name} · ` : ''}
-                                  {acc?.name}
-                                </span>
+                                <>
+                                  {originAcc && <AccountBadge account={originAcc} />}
+                                  <span className={`text-[10px] ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>→</span>
+                                  {destAcc && <AccountBadge account={destAcc} />}
+                                </>
+                              ) : acc && (
+                                <>
+                                  {sub?.name && <span className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{sub.name} ·</span>}
+                                  <AccountBadge account={acc} />
+                                </>
                               )}
-                              {tx.note && ` — "${tx.note}"`}
-                            </p>
+                              {tx.note && <span className={`text-[10px] truncate ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>— "{tx.note}"</span>}
+                            </div>
 
                             {/* TAGS BADGES */}
                             {tx.tagIds && tx.tagIds.length > 0 && (
@@ -864,5 +933,18 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         onClose={() => setIsAccountStatementOpen(false)}
       />
     </div>
+  );
+};
+
+const AccountBadge: React.FC<{ account: { name: string; color?: string } }> = ({ account }) => {
+  const color = account.color || '#10B981';
+  return (
+    <span
+      className="inline-flex max-w-full items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-semibold border"
+      style={{ backgroundColor: `${color}15`, borderColor: `${color}35`, color }}
+    >
+      <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: color }} />
+      <span className="truncate">{account.name}</span>
+    </span>
   );
 };
