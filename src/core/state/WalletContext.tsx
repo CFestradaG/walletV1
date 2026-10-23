@@ -7,6 +7,7 @@ import {
   FinancialPeriod,
   MonthlyExecutiveReport,
   SubdivisionMode,
+  Tag,
   ThemeMode,
   Transaction,
   TransactionType,
@@ -66,6 +67,7 @@ import {
   deleteBudgetFromDb,
   deleteCategoryFromDb,
   deletePeriodFromDb,
+  deleteTagFromDb,
   deleteTransactionFromDb,
   deleteTransactionWithAccounts,
   seedUserInitialData,
@@ -74,6 +76,7 @@ import {
   syncCategory,
   syncPeriod,
   syncProfile,
+  syncTag,
   syncTransaction,
   syncTransactionWithAccounts,
   resetUserFinancialData,
@@ -133,6 +136,7 @@ function mergeLocalStoreForUpload(defaultStore: UserDataStore, localStore: UserD
     periods: localStore.periods && localStore.periods.length > 0 ? localStore.periods : defaultStore.periods,
     transactions: defaultStore.transactions,
     budgets: localStore.budgets || [],
+    tags: localStore.tags || [],
   };
 }
 
@@ -264,6 +268,7 @@ interface WalletContextValue {
     date: string;
     time?: string;
     note: string;
+    tagIds?: string[];
   }) => TransactionValidationResult;
   updateTransaction: (
     txId: string,
@@ -279,9 +284,20 @@ interface WalletContextValue {
       date: string;
       time?: string;
       note: string;
+      tagIds?: string[];
     }
   ) => TransactionValidationResult;
   deleteTransaction: (txId: string) => void;
+  bulkAssignTags: (
+    transactionIds: string[],
+    tagIdsToAdd: string[],
+    tagIdsToRemove?: string[]
+  ) => Promise<{ ok: boolean; count: number; error?: string }>;
+
+  tags: Tag[];
+  createTag: (input: { name: string; color: string; description?: string }) => { ok: boolean; error?: string; tag?: Tag };
+  updateTag: (tagId: string, input: { name: string; color: string; description?: string }) => { ok: boolean; error?: string };
+  deleteTag: (tagId: string) => { ok: boolean; error?: string; count?: number };
 
   budgets: Budget[];
   activePeriodBudgetsProgress: BudgetProgress[];
@@ -874,6 +890,56 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           (err) => reportReadError(err, 'los presupuestos', `users/${uid}/budgets`)
         );
         unsubs.push(unsubBudgets);
+ 
+        // Real-time listener for tags
+        const unsubTags = onSnapshot(
+          collection(firestoreDb, 'users', uid, 'tags'),
+          (snap) => {
+            const remoteTags = normalizeOwnedDocuments<Tag>(snap.docs, uid, (tag) => {
+              offlineQueue.enqueue(uid, 'SAVE_TAG', { tag });
+            });
+            const pendingQueue = loadQueueFromStorage(uid);
+            const pendingDeletes = new Set(
+              pendingQueue
+                .filter((m) => m.type === 'DELETE_TAG')
+                .map((m) => m.payload.tagId)
+            );
+            const pendingSaves = new Map<string, Tag>(
+              pendingQueue
+                .filter((m) => m.type === 'SAVE_TAG')
+                .map((m) => [m.payload.tag.id, m.payload.tag])
+            );
+
+            let reconciled = remoteTags.filter((t) => !pendingDeletes.has(t.id));
+            reconciled = reconciled.map((t) => {
+              if (pendingSaves.has(t.id)) {
+                const local = pendingSaves.get(t.id)!;
+                pendingSaves.delete(t.id);
+                return local;
+              }
+              return t;
+            });
+            for (const localTag of pendingSaves.values()) {
+              reconciled.push(localTag);
+            }
+
+            setDb((prev) => {
+              const current = prev.users[uid] || initialStore;
+              return {
+                ...prev,
+                users: {
+                  ...prev.users,
+                  [uid]: {
+                    ...current,
+                    tags: reconciled,
+                  },
+                },
+              };
+            });
+          },
+          (err) => reportReadError(err, 'las etiquetas', `users/${uid}/tags`)
+        );
+        unsubs.push(unsubTags);
 
         const unsubSettings = onSnapshot(
           collection(firestoreDb, 'users', uid, 'settings'),
@@ -1703,6 +1769,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     date: string;
     time?: string;
     note: string;
+    tagIds?: string[];
   }): TransactionValidationResult => {
     if (!currentUserId || !currentUserStore) {
       return { valid: false, error: 'Usuario no autenticado.' };
@@ -1763,6 +1830,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       note: input.note.trim() || (input.type === 'transfer' ? 'Transferencia entre cuentas' : ''),
       periodId: assignedPeriod?.id,
       subperiodId: assignedSubperiod?.id,
+      tagIds: input.tagIds,
       createdAt: now,
       updatedAt: now,
     };
@@ -1799,6 +1867,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       date: string;
       time?: string;
       note: string;
+      tagIds?: string[];
     }
   ): TransactionValidationResult => {
     if (!currentUserId || !currentUserStore) {
@@ -1866,6 +1935,7 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       note: input.note.trim(),
       periodId: assignedPeriod?.id,
       subperiodId: assignedSubperiod?.id,
+      tagIds: input.tagIds !== undefined ? input.tagIds : existingTx.tagIds,
       updatedAt: new Date().toISOString(),
     };
 
@@ -1906,6 +1976,141 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         transactions: store.transactions.filter((t) => t.id !== txId),
       };
     });
+  };
+
+  const bulkAssignTags = async (
+    transactionIds: string[],
+    tagIdsToAdd: string[],
+    tagIdsToRemove: string[] = []
+  ): Promise<{ ok: boolean; count: number; error?: string }> => {
+    if (!currentUserId || !currentUserStore) return { ok: false, count: 0, error: 'Usuario no autenticado.' };
+    if (!transactionIds.length) return { ok: true, count: 0 };
+
+    const txIdSet = new Set(transactionIds);
+    const removeSet = new Set(tagIdsToRemove);
+    const now = new Date().toISOString();
+
+    const updatedTransactions = currentUserStore.transactions.map((tx) => {
+      if (!txIdSet.has(tx.id)) return tx;
+      const currentTags = tx.tagIds || [];
+      const filtered = currentTags.filter((t) => !removeSet.has(t));
+      const combined = Array.from(new Set([...filtered, ...tagIdsToAdd]));
+      return {
+        ...tx,
+        tagIds: combined,
+        updatedAt: now,
+      };
+    });
+
+    updateCurrentUserStore((store) => ({
+      ...store,
+      transactions: updatedTransactions,
+    }));
+
+    if (auth.currentUser?.uid === currentUserId) {
+      for (const tx of updatedTransactions) {
+        if (txIdSet.has(tx.id)) {
+          offlineQueue.enqueue(currentUserId, 'SAVE_TX_AND_ACCOUNTS', { transaction: tx, accounts: [] });
+        }
+      }
+    }
+
+    return { ok: true, count: transactionIds.length };
+  };
+
+  const tags = useMemo(() => {
+    const raw = currentUserStore?.tags ?? [];
+    return [...raw].sort((a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' }));
+  }, [currentUserStore?.tags]);
+
+  const createTag = (input: { name: string; color: string; description?: string }): { ok: boolean; error?: string; tag?: Tag } => {
+    if (!currentUserId || !currentUserStore) return { ok: false, error: 'Usuario no autenticado.' };
+    const trimmed = input.name.trim();
+    if (!trimmed) return { ok: false, error: 'El nombre de la etiqueta es obligatorio.' };
+    if (trimmed.length > 50) return { ok: false, error: 'El nombre no puede exceder 50 caracteres.' };
+
+    const exists = currentUserStore.tags?.some((t) => t.name.toLowerCase() === trimmed.toLowerCase());
+    if (exists) return { ok: false, error: 'Ya existe una etiqueta con este nombre.' };
+
+    const now = new Date().toISOString();
+    const newTag: Tag = {
+      id: `tag_${Date.now()}`,
+      userId: currentUserId,
+      name: trimmed,
+      color: input.color || '#0284C7',
+      description: input.description?.trim() || undefined,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    updateCurrentUserStore((store) => ({
+      ...store,
+      tags: [...(store.tags || []), newTag],
+    }));
+
+    if (auth.currentUser?.uid === currentUserId) {
+      offlineQueue.enqueue(currentUserId, 'SAVE_TAG', { tag: newTag });
+    }
+
+    return { ok: true, tag: newTag };
+  };
+
+  const updateTag = (
+    tagId: string,
+    input: { name: string; color: string; description?: string }
+  ): { ok: boolean; error?: string } => {
+    if (!currentUserId || !currentUserStore) return { ok: false, error: 'Usuario no autenticado.' };
+    const trimmed = input.name.trim();
+    if (!trimmed) return { ok: false, error: 'El nombre de la etiqueta es obligatorio.' };
+    if (trimmed.length > 50) return { ok: false, error: 'El nombre no puede exceder 50 caracteres.' };
+
+    const duplicate = currentUserStore.tags?.some((t) => t.id !== tagId && t.name.toLowerCase() === trimmed.toLowerCase());
+    if (duplicate) return { ok: false, error: 'Ya existe otra etiqueta con este nombre.' };
+
+    const existing = currentUserStore.tags?.find((t) => t.id === tagId);
+    if (!existing) return { ok: false, error: 'La etiqueta no existe.' };
+
+    const updatedTag: Tag = {
+      ...existing,
+      name: trimmed,
+      color: input.color || existing.color,
+      description: input.description?.trim() || undefined,
+      updatedAt: new Date().toISOString(),
+    };
+
+    updateCurrentUserStore((store) => ({
+      ...store,
+      tags: (store.tags || []).map((t) => (t.id === tagId ? updatedTag : t)),
+    }));
+
+    if (auth.currentUser?.uid === currentUserId) {
+      offlineQueue.enqueue(currentUserId, 'SAVE_TAG', { tag: updatedTag });
+    }
+
+    return { ok: true };
+  };
+
+  const deleteTag = (tagId: string): { ok: boolean; error?: string; count?: number } => {
+    if (!currentUserId || !currentUserStore) return { ok: false, error: 'Usuario no autenticado.' };
+    const relatedCount = currentUserStore.transactions.filter((tx) => tx.tagIds?.includes(tagId)).length;
+    if (relatedCount > 0) {
+      return {
+        ok: false,
+        error: `No se puede eliminar la etiqueta «${currentUserStore.tags?.find((t) => t.id === tagId)?.name || ''}» porque está asignada a ${relatedCount} registro${relatedCount === 1 ? '' : 's'}. Desvincula la etiqueta de los registros antes de eliminarla.`,
+        count: relatedCount,
+      };
+    }
+
+    updateCurrentUserStore((store) => ({
+      ...store,
+      tags: (store.tags || []).filter((t) => t.id !== tagId),
+    }));
+
+    if (auth.currentUser?.uid === currentUserId) {
+      offlineQueue.enqueue(currentUserId, 'DELETE_TAG', { tagId });
+    }
+
+    return { ok: true };
   };
 
   const budgets = currentUserStore?.budgets ?? [];
@@ -2247,6 +2452,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
         createTransaction,
         updateTransaction,
         deleteTransaction,
+        bulkAssignTags,
+
+        tags,
+        createTag,
+        updateTag,
+        deleteTag,
 
         budgets,
         activePeriodBudgetsProgress,

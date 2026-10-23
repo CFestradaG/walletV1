@@ -3,6 +3,7 @@ import {
   deleteBudgetFromDb,
   deleteCategoryFromDb,
   deletePeriodFromDb,
+  deleteTagFromDb,
   deleteTransactionWithAccounts,
   syncAccount,
   syncBudget,
@@ -12,6 +13,7 @@ import {
   syncPeriod,
   syncSecurityPreferences,
   syncSettings,
+  syncTag,
   syncTransactionWithAccounts,
 } from '../firebase/firestoreSync';
 
@@ -26,6 +28,8 @@ export type MutationType =
   | 'DELETE_PERIOD'
   | 'SAVE_BUDGET'
   | 'DELETE_BUDGET'
+  | 'SAVE_TAG'
+  | 'DELETE_TAG'
   | 'SAVE_SETTINGS'
   | 'SAVE_SECURITY_PREFERENCES'
   | 'SAVE_ANNUAL_PROJECTIONS'
@@ -251,6 +255,12 @@ class OfflineQueueManager {
         break;
       case 'DELETE_BUDGET':
         await deleteBudgetFromDb(userId, payload.budgetId);
+        break;
+      case 'SAVE_TAG':
+        await syncTag(userId, payload.tag);
+        break;
+      case 'DELETE_TAG':
+        await deleteTagFromDb(userId, payload.tagId);
         break;
       case 'SAVE_SETTINGS':
         await syncSettings(userId, payload.settings);

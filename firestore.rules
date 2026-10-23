@@ -115,6 +115,21 @@ service cloud.firestore {
         allow delete: if isOwner(userId) && isValidId(templateId);
       }
 
+      // Tags (Etiquetas)
+      match /tags/{tagId} {
+        allow read: if isOwner(userId);
+        allow create, update: if isOwner(userId)
+          && isValidId(tagId)
+          && request.resource.data.id == tagId
+          && request.resource.data.userId == userId
+          && request.resource.data.name is string
+          && request.resource.data.name.size() > 0
+          && request.resource.data.name.size() <= 60
+          && request.resource.data.color is string
+          && request.resource.data.color.size() <= 30;
+        allow delete: if isOwner(userId) && isValidId(tagId);
+      }
+
       // Financial Health Reports: monthly and weekly summaries per user
       match /financial_reports/{reportId} {
         allow read: if isOwner(userId);

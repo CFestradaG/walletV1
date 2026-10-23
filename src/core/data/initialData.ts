@@ -3,6 +3,7 @@ import {
   Budget,
   Category,
   FinancialPeriod,
+  Tag,
   Transaction,
   UserProfile,
   UserSettings,
@@ -22,6 +23,7 @@ export interface UserDataStore {
   activePeriodId: string;
   transactions: Transaction[];
   budgets: Budget[];
+  tags: Tag[];
 }
 
 export function createDefaultCategories(userId: string): Category[] {
@@ -278,6 +280,7 @@ export function createCleanUserStore(profile: UserProfile): UserDataStore {
     activePeriodId: defaultPeriodId,
     transactions: [],
     budgets: [],
+    tags: [],
   };
 }
 
@@ -418,6 +421,7 @@ export function createActiveDemoUserStore(): UserDataStore {
       accountId: `acc_cash_${userId}`,
       categoryId: `cat_food_${userId}`,
       subcategoryId: `sub_rest_${userId}`,
+      tagIds: [`tag_work_${userId}`],
       date: '2026-10-03',
       time: '11:20 AM',
       note: 'Almuerzo Ejecutivo',
@@ -433,6 +437,7 @@ export function createActiveDemoUserStore(): UserDataStore {
       accountId: `acc_bank_${userId}`,
       categoryId: `cat_salary_${userId}`,
       subcategoryId: `sub_sal_q_${userId}`,
+      tagIds: [`tag_work_${userId}`, `tag_recurring_${userId}`],
       date: '2026-10-03',
       time: '08:00 AM',
       note: 'Depósito Nómina Quincenal',
@@ -448,6 +453,7 @@ export function createActiveDemoUserStore(): UserDataStore {
       accountId: `acc_savings_${userId}`,
       categoryId: `cat_food_${userId}`,
       subcategoryId: `sub_super_${userId}`,
+      tagIds: [`tag_essential_${userId}`],
       date: '2026-10-02',
       time: '06:45 PM',
       note: 'Supermercado La Torre',
@@ -565,6 +571,13 @@ export function createActiveDemoUserStore(): UserDataStore {
     },
   ];
 
+  const demoTags: Tag[] = [
+    { id: `tag_work_${userId}`, userId, name: 'Trabajo', color: '#0284C7', createdAt: now },
+    { id: `tag_personal_${userId}`, userId, name: 'Personal', color: '#8B5CF6', createdAt: now },
+    { id: `tag_essential_${userId}`, userId, name: 'Imprescindible', color: '#10B981', createdAt: now },
+    { id: `tag_recurring_${userId}`, userId, name: 'Fijo / Recurrente', color: '#F59E0B', createdAt: now },
+  ];
+
   return {
     profile,
     settings: {
@@ -582,5 +595,6 @@ export function createActiveDemoUserStore(): UserDataStore {
     activePeriodId: p2Id,
     transactions: syncedTransactions,
     budgets,
+    tags: demoTags,
   };
 }

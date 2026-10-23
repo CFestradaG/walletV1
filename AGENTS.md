@@ -99,6 +99,13 @@ Modelos relevantes en `src/core/types/models.ts`:
     - **Seguridad de Credenciales:** La clave de API de Gemini reside exclusivamente en el entorno del servidor (`GEMINI_API_KEY`); el cliente web nunca accede ni almacena credenciales de IA.
     - **Contingencia Heurística Offline:** Si el usuario no tiene conexión a internet o el servicio de IA no responde, el sistema ejecuta de forma transparente un motor de inferencia heurístico local con reglas financieras deterministas, garantizando diagnósticos y recomendaciones inmediatas en cualquier circunstancia.
     - **Control bajo demanda:** En el modal de salud financiera, cada tarjeta de semana de la bitácora incluye controles interactivos para solicitar o regenerar la inferencia semanal según la necesidad del usuario.
+- **Gestión de Etiquetas (Tags) y Asignación Masiva:**
+  - **Modelo y Sincronización:** Cada etiqueta (`Tag`) cuenta con `id`, `name`, `color` (paleta financiera de alto contraste y código hex) y se persiste en Firestore bajo `users/{uid}/tags/{tagId}` con replicación en `offlineQueue.ts` (`SAVE_TAG`, `DELETE_TAG`).
+  - **Administración en Configuración:** Accesible desde `Más > Etiquetas` mediante `TagsSettingsModal.tsx`. Permite crear y editar etiquetas con vista previa en tiempo real y contador de registros asociados.
+  - **Protección de Integridad Referencial:** Bloquea estrictamente la eliminación de cualquier etiqueta que esté vinculada a uno o más movimientos (`usageCount > 0`), informando al usuario y requiriendo desvincularla previamente.
+  - **Filtrado Avanzado:** En `Transacciones`, permite filtrar por etiqueta desde el panel de filtros (`filterTagId`), mediante barra horizontal de chips de acceso rápido o escribiendo el nombre de la etiqueta en el buscador principal.
+  - **Asignación en Movimientos:** En el formulario de transacción (`TransactionModal.tsx`), el usuario puede asignar y deseleccionar etiquetas con selector visual tipo pill.
+  - **Asignación Masiva:** Modo de selección múltiple con casillas de verificación en `TransactionsView.tsx` y barra flotante de acciones para seleccionar varios o todos los registros visibles y abrir `BulkTagModal.tsx`, permitiendo vincular o remover etiquetas a gran escala de forma atómica.
 
 ## Comandos
 

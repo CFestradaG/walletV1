@@ -47,6 +47,16 @@ export interface Category {
   subcategories: Subcategory[];
 }
 
+export interface Tag {
+  id: string;
+  userId: string;
+  name: string;
+  color: string;
+  description?: string;
+  createdAt: string;
+  updatedAt?: string;
+}
+
 export interface Transaction {
   id: string;
   userId: string;
@@ -64,6 +74,7 @@ export interface Transaction {
   note: string;
   periodId?: string;
   subperiodId?: string;
+  tagIds?: string[];
   createdAt: string;
   updatedAt: string;
 }

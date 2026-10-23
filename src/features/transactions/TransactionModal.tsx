@@ -10,6 +10,7 @@ import {
   CreditCard,
   Delete,
   FileText,
+  Tag as TagIcon,
   Trash2,
   TrendingDown,
   TrendingUp,
@@ -58,6 +59,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const {
     accounts,
     categories,
+    tags,
     createTransaction,
     updateTransaction,
     deleteTransaction,
@@ -77,6 +79,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   const [isBrowsingCategories, setIsBrowsingCategories] = useState<boolean>(false);
   const [dateStr, setDateStr] = useState<string>(toISODate(new Date()));
   const [note, setNote] = useState<string>('');
+  const [selectedTagIds, setSelectedTagIds] = useState<string[]>([]);
   const [showKeypad, setShowKeypad] = useState<boolean>(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [saveAsTemplate, setSaveAsTemplate] = useState(false);
@@ -145,6 +148,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
       setSubcategoryId(editingTransaction.subcategoryId || '');
       setDateStr(editingTransaction.date);
       setNote(editingTransaction.note || '');
+      setSelectedTagIds(editingTransaction.tagIds || []);
       setShowKeypad(false);
       setIsBrowsingCategories(false);
       setErrorMsg(null);
@@ -157,6 +161,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
 
       setSaveAsTemplate(false);
       setSelectedTemplateId(initialTemplate?.id || '');
+      setSelectedTagIds([]);
       setType(initialTemplate
         ? initialTemplate.transactionType || categories.find((category) => category.id === initialTemplate.categoryId)?.type || 'expense'
         : initialType);
@@ -365,6 +370,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           date: dateStr,
           note: note.trim(),
           isCreditCardPayment: isCreditCardDestination,
+          tagIds: selectedTagIds,
         });
         if (!res.valid) {
           setErrorMsg(res.error || 'Error al actualizar la transacción.');
@@ -382,6 +388,7 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
           date: dateStr,
           note: note.trim(),
           isCreditCardPayment: isCreditCardDestination,
+          tagIds: selectedTagIds.length > 0 ? selectedTagIds : undefined,
         });
         if (!res.valid) {
           setErrorMsg(res.error || 'Error al guardar la transacción.');
@@ -645,6 +652,68 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
               </div>
             </div>
           </div>
+
+          {/* TAGS SELECTOR */}
+          {tags.length > 0 && (
+            <div className="pt-1">
+              <div className="flex items-center justify-between mb-1.5">
+                <label className={`text-[11px] font-semibold uppercase tracking-wider flex items-center gap-1.5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+                  <TagIcon className="w-3.5 h-3.5" />
+                  <span>Etiquetas {selectedTagIds.length > 0 ? `(${selectedTagIds.length})` : ''}</span>
+                </label>
+                {selectedTagIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTagIds([])}
+                    className="text-[10px] text-slate-400 hover:text-rose-400 transition-colors cursor-pointer"
+                  >
+                    Limpiar selección
+                  </button>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto py-0.5">
+                {tags.map((tag) => {
+                  const isSelected = selectedTagIds.includes(tag.id);
+                  return (
+                    <button
+                      key={tag.id}
+                      type="button"
+                      onClick={() =>
+                        setSelectedTagIds((prev) =>
+                          prev.includes(tag.id)
+                            ? prev.filter((id) => id !== tag.id)
+                            : [...prev, tag.id]
+                        )
+                      }
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs transition-all cursor-pointer border ${
+                        isSelected
+                          ? 'shadow-xs font-bold'
+                          : isDark
+                          ? 'bg-white/4 border-white/10 text-slate-300 hover:bg-white/8 hover:border-white/20'
+                          : 'bg-slate-100/70 border-slate-200 text-slate-600 hover:bg-slate-100 hover:border-slate-300'
+                      }`}
+                      style={
+                        isSelected
+                          ? {
+                              backgroundColor: `${tag.color}25`,
+                              borderColor: `${tag.color}60`,
+                              color: tag.color,
+                            }
+                          : undefined
+                      }
+                    >
+                      <span
+                        className="w-2 h-2 rounded-full"
+                        style={{ backgroundColor: tag.color }}
+                      />
+                      <span>{tag.name}</span>
+                      {isSelected && <Check className="w-3 h-3 stroke-3" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           {!editingTransaction && type !== 'transfer' && auth.currentUser && (
             <label className="flex items-center gap-2 text-xs mt-3 cursor-pointer">

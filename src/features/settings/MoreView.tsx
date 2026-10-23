@@ -23,6 +23,7 @@ import {
   Sun,
   Target,
   Trash2,
+  Tag as TagIcon,
   User,
   Wallet,
   Wifi,
@@ -33,6 +34,7 @@ import { Category, CategoryType, ThemeMode } from '../../core/types/models';
 import { getSecurityConfig } from '../../core/security/securityService';
 import { usePWAInstall } from '../../core/pwa/usePWAInstall';
 import { AboutSecurityModal } from './AboutSecurityModal';
+import { TagsSettingsModal } from './TagsSettingsModal';
 import type { AccountReconciliationResult } from '../transactions/financialEngine';
 import { formatGTQ } from '../../core/utils/formatters';
 
@@ -71,6 +73,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
     removeSubcategory,
     transactions,
     budgets,
+    tags,
     isOnline,
     isSyncing,
     pendingOfflineCount,
@@ -80,6 +83,9 @@ export const MoreView: React.FC<MoreViewProps> = ({
   } = useWallet();
 
   const isDark = resolvedTheme === 'dark';
+
+  // Tags modal
+  const [isTagsModalOpen, setIsTagsModalOpen] = useState(false);
 
   // Category Manager modal
   const [isCatManagerOpen, setIsCatManagerOpen] = useState(false);
@@ -390,6 +396,32 @@ export const MoreView: React.FC<MoreViewProps> = ({
               </div>
             </div>
             <ChevronRight className="w-4 h-4 text-slate-400" />
+          </button>
+
+          {/* Etiquetas */}
+          <button
+            type="button"
+            onClick={() => setIsTagsModalOpen(true)}
+            className={`w-full p-3 rounded-2xl border flex items-center justify-between text-left transition-colors cursor-pointer ${
+              isDark
+                ? 'border-white/5 hover:bg-white/5'
+                : 'border-slate-200 hover:bg-slate-50'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-sky-500/15 text-sky-600 dark:text-sky-400 flex items-center justify-center">
+                <TagIcon className="w-4 h-4" />
+              </div>
+              <div>
+                <span className={`font-bold text-xs block ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  Etiquetas
+                </span>
+                <span className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                  {tags.length} etiqueta{tags.length === 1 ? '' : 's'} para clasificar y organizar registros
+                </span>
+              </div>
+            </div>
+            <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
           </button>
 
           {/* Presupuesto y Panorama Anual */}
@@ -1143,6 +1175,12 @@ export const MoreView: React.FC<MoreViewProps> = ({
       <AboutSecurityModal
         isOpen={isAboutSecurityOpen}
         onClose={() => setIsAboutSecurityOpen(false)}
+      />
+
+      {/* MODAL: ADMINISTRADOR DE ETIQUETAS */}
+      <TagsSettingsModal
+        isOpen={isTagsModalOpen}
+        onClose={() => setIsTagsModalOpen(false)}
       />
     </div>
   );

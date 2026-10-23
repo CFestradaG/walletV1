@@ -15,6 +15,7 @@ import {
   Category,
   FinancialPeriod,
   MonthlyExecutiveReport,
+  Tag,
   Transaction,
   TransactionTemplate,
   UserProfile,
@@ -309,6 +310,26 @@ export async function deleteBudgetFromDb(userId: string, budgetId: string): Prom
   }
 }
 
+export async function syncTag(userId: string, tag: Tag): Promise<void> {
+  if (auth.currentUser?.uid !== userId || tag.userId !== userId) throw new Error('Usuario no autenticado.');
+  const path = `users/${userId}/tags/${tag.id}`;
+  try {
+    await setDoc(doc(db, 'users', userId, 'tags', tag.id), ownedRecord(tag, userId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, path);
+  }
+}
+
+export async function deleteTagFromDb(userId: string, tagId: string): Promise<void> {
+  if (auth.currentUser?.uid !== userId) throw new Error('Usuario no autenticado.');
+  const path = `users/${userId}/tags/${tagId}`;
+  try {
+    await deleteDoc(doc(db, 'users', userId, 'tags', tagId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, path);
+  }
+}
+
 export async function seedUserInitialData(userId: string, initialStore: UserDataStore): Promise<void> {
   const path = `users/${userId}`;
   try {
@@ -388,7 +409,7 @@ export async function seedUserInitialData(userId: string, initialStore: UserData
 /** Borra los datos financieros del usuario y vuelve a crear el conjunto inicial. */
 export async function resetUserFinancialData(userId: string, initialStore: UserDataStore): Promise<void> {
   if (auth.currentUser?.uid !== userId) throw new Error('Usuario no autenticado.');
-  const collectionNames = ['settings', 'categories', 'periods', 'budgets', 'accounts', 'transactions', 'templates', 'financial_reports'] as const;
+  const collectionNames = ['settings', 'categories', 'periods', 'budgets', 'accounts', 'transactions', 'templates', 'tags', 'financial_reports'] as const;
   const snapshots = await Promise.all(
     collectionNames.map((name) => getDocs(collection(db, 'users', userId, name)))
   );

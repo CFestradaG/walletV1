@@ -115,6 +115,7 @@
         "note": { "type": "string", "maxLength": 300 },
         "periodId": { "type": "string", "maxLength": 128 },
         "subperiodId": { "type": "string", "maxLength": 128 },
+        "tagIds": { "type": "array", "description": "List of associated tag IDs" },
         "createdAt": { "type": "string", "maxLength": 60 },
         "updatedAt": { "type": "string", "maxLength": 60 }
       },
@@ -168,6 +169,21 @@
         "updatedAt": { "type": "string", "maxLength": 60 }
       },
       "required": ["id", "userId", "schemaVersion", "year", "month", "score", "level"]
+    },
+    "Tag": {
+      "title": "Tag",
+      "description": "User custom transaction tag with label and color",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "maxLength": 128 },
+        "userId": { "type": "string", "maxLength": 128 },
+        "name": { "type": "string", "maxLength": 60 },
+        "color": { "type": "string", "maxLength": 30 },
+        "description": { "type": "string", "maxLength": 200 },
+        "createdAt": { "type": "string", "maxLength": 60 },
+        "updatedAt": { "type": "string", "maxLength": 60 }
+      },
+      "required": ["id", "userId", "name", "color"]
     }
   },
   "firestore": {
@@ -198,6 +214,10 @@
     "/users/{userId}/budgets/{budgetId}": {
       "schema": { "$ref": "#/entities/Budget" },
       "description": "User budget targets per period and category"
+    },
+    "/users/{userId}/tags/{tagId}": {
+      "schema": { "$ref": "#/entities/Tag" },
+      "description": "User custom transaction tags"
     },
     "/users/{userId}/financial_reports/{reportId}": {
       "schema": { "$ref": "#/entities/FinancialHealthReport" },
