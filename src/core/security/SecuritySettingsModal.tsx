@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   AlertTriangle,
   X,
-  Wifi,
   Smartphone,
   Eye,
   EyeOff,
@@ -476,18 +475,18 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
             </div>
           )}
 
-          {/* Offline & Security Guarantee */}
+          {/* Alcance real del bloqueo local */}
           <div className={`p-3.5 rounded-2xl border text-xs space-y-1.5 ${
             isDark
               ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
               : 'bg-emerald-50 border-emerald-200 text-emerald-900'
           }`}>
             <div className="flex items-center gap-2 font-bold">
-              <Wifi className="w-4 h-4 text-emerald-500" />
-              <span>Seguridad 100% Offline Garantizada</span>
+              <Shield className="w-4 h-4 text-emerald-500" />
+              <span>Bloqueo local de acceso</span>
             </div>
             <p className={`text-[11px] leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-              La verificación de PIN y biometría se ejecuta en el enclave seguro de tu propio dispositivo utilizando la API nativa Web Crypto y WebAuthn. No viaja por internet ni depende de servidores externos.
+              El PIN y la verificación del dispositivo ayudan a bloquear el acceso a esta pantalla. Wallet no recibe ni guarda tu huella o imagen facial. Este bloqueo no cifra por sí solo los datos guardados en el dispositivo.
             </p>
           </div>
         </div>
