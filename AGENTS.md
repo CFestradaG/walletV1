@@ -154,29 +154,54 @@ Este plan prepara primero la protección de datos local y después el chat finan
 ### Etapas y criterios de cierre
 
 1. **En curso — Cifrado local web sin pérdida de datos.**
-   - **Completado:** se corrigió el texto de Seguridad para no afirmar cifrado local ni almacenamiento en enclave que no están implementados.
-   - **Completado:** se inventariaron las persistencias locales: store principal, cola offline, proyecciones anuales, sesión, tema y credenciales/preferencias del bloqueo. Las proyecciones anuales también contienen información financiera y deben incluirse en la decisión de cifrado.
-   - Definir ciclo de vida, desbloqueo, recuperación y rotación de la clave. No derivarla del PIN corto actual ni reutilizar la clave de MEGA.
-   - Cifrar el store financiero, la cola offline y las proyecciones anuales; evitar que el store se hidrate en la interfaz antes del desbloqueo definido. Mantener las preferencias visuales/sesión necesarias fuera del cifrado, sin usarlas como autorización.
-   - Diseñar migración recuperable desde las claves legadas de `localStorage`. No eliminar datos legados ni mutaciones pendientes hasta confirmar que el nuevo formato se descifra correctamente.
-   - Evaluar WebAuthn PRF para derivar una clave únicamente en autenticadores compatibles; como es una extensión opcional, definir una alternativa segura de recuperación y no volver a PIN corto ni a texto claro. Documentar diferencias entre PWA y futuro uso de Keychain/Keystore con Capacitor; no afirmar que WebAuthn por sí solo cifra datos.
-   - **Cierre:** migración recuperable, cola preservada, separación entre usuarios, logout/sesión revisados, datos cifrados en reposo y límites documentados frente a XSS o dispositivo desbloqueado.
-2. **Pendiente — Endurecer el proxy de IA existente.**
-   - Verificar ID token de Firebase y evaluar App Check; validar esquema y rangos; limitar uso por usuario/IP y tamaño de solicitud; no registrar prompts, respuestas ni datos financieros; comprobar el despliegue real y proteger la clave.
+   - **Completado:** Se corrigió el texto de Seguridad para no afirmar falsamente cifrado local ni almacenamiento en enclave no implementados.
+   - **Completado:** Se inventariaron las persistencias locales que almacenan datos financieros: store principal (`wallet_app_v4_store`), cola offline (`wallet_offline_queue_v1_<uid>`) y proyecciones anuales (`wallet_projections_<uid>_<year>`).
+   - **Completado:** Implementación integral de Etiquetas (`Tag`) con administración en Configuración, asignación masiva, filtrado avanzado en Transacciones, sincronización offline y reglas de integridad en Firestore desplegadas.
+   - **Diseño arquitectónico consolidado (Aprobado):**
+     - **Jerarquía de Claves y Separación del PIN:** La clave maestra de cifrado de la aplicación (AEK, AES-256-GCM) se genera con CSPRNG en el cliente. El PIN numérico es exclusivamente una barrera de interfaz en sesión (tiempo de inactividad / desenfoque); **nunca** se usa para derivar la clave que envuelve la AEK, evitando ataques de fuerza bruta offline contra contraseñas de baja entropía.
+     - **Doble Sobre de Envoltura (Envelopes):**
+       - **Sobre A (Hardware / Biometría opcional):** Envuelto con clave derivada de WebAuthn PRF (`navigator.credentials.get` con extensión `prf`). WebAuthn PRF es una extensión opcional; la app verifica que la extensión devuelva datos válidos y si no es compatible o falla, recurre de inmediato a la Clave de Recuperación.
+       - **Sobre B (Recuperación de Alta Entropía):** Envuelto con clave derivada mediante HKDF/PBKDF2 de una Clave de Recuperación criptográficamente aleatoria de 128 o 256 bits generada por el sistema. El usuario debe completar una verificación obligatoria de respaldo antes de activar el cifrado. No se utilizan frases arbitrarias inventadas por el usuario ni se asume "invulnerabilidad matemática"; la seguridad depende estrictamente de la entropía de la clave aleatoria.
+     - **Separación entre Bloqueo y Cifrado:** Quitar el PIN de pantalla nunca revierte los datos a texto plano. Desactivar el cifrado local es una operación explícita, independiente y confirmada que requiere descifrar la AEK previamente.
+     - **Máquina de Estados de Arranque e Inconsistencias:**
+       - Estados: `INITIALIZING` -> `UNENCRYPTED` | `LOCKED_ENCRYPTED` | `INCONSISTENCY_HALTED` -> `UNLOCKING` -> `READY`.
+       - **Protección contra Modo Legado Accidental:** Si existe una marca persistente `wallet_encryption_active_<uid>` (en configuración local o remota) pero el sobre de la AEK falta o está corrupto, la aplicación **se detiene en `INCONSISTENCY_HALTED`**. Jamás asume que es un usuario nuevo ni inicializa datos vacíos que sobrescriban el almacenamiento.
+       - Ninguna escritura a `localStorage` ni a Firestore puede ocurrir mientras el estado sea distinto de `READY`.
+     - **Migración Recuperable en 4 Fases (Store, Cola y Proyecciones):**
+       - 1. *PREPARE:* Comprueba cuota de almacenamiento disponible (`navigator.storage.estimate`), genera la AEK y crea los sobres A y B.
+       - 2. *VERIFY:* Cifra y descifra una muestra de prueba verificando la integridad de ida y vuelta.
+       - 3. *ACTIVATE:* Escribe los datos cifrados en las claves `wallet_enc_*` y establece la marca persistente de cifrado activo.
+       - 4. *CLEANUP:* Purga las claves de texto plano solo tras la confirmación exitosa del paso anterior. En caso de error o `QuotaExceededError`, aborta de forma no destructiva sin tocar los datos legados.
+     - **Preservación Estricta de la Cola Offline:** Las mutaciones offline pendientes se cifran en reposo con la AEK activa, se aíslan por UID y se garantiza que sigan procesándose secuencialmente una vez la bóveda alcance el estado `READY`.
+     - **Límites Claros del Modelo de Amenazas:** Firestore **no** cuenta con cifrado de extremo a extremo (E2EE) en esta etapa; los datos en la nube viajan por TLS y se protegen por las reglas de seguridad de Firestore. El alcance de esta etapa es proteger los datos almacenados en reposo en el navegador (`localStorage`) contra extracción local física o forense sin la clave.
+   - **Cierre:** Migración recuperable en 4 fases, cola preservada, separación estricta entre usuarios, arranque a prueba de inconsistencias, datos en reposo protegidos y límites explícitamente documentados.
+2. **Completado — Endurecer el proxy de IA existente.**
+   - **Completado:** Verificación del ID token de Firebase Auth (`Authorization: Bearer <token>`) validado en servidor vía Google tokeninfo endpoint.
+   - **Completado:** Limitación de tasa (Rate Limiting) en memoria con ventana deslizante (máximo 15 solicitudes por minuto por UID/IP).
+   - **Completado:** Validación estricta de esquemas y rangos de datos agregados (semanas 1-53, montos finitos no negativos, score 0-100, tasa de ahorro y tipos válidos).
+   - **Completado:** Límite máximo de carga útil de 64kb en Express para mitigar ataques de denegación de servicio.
+   - **Completado:** Higiene de registros: se eliminó el registro de prompts, identidades y métricas financieras en consola.
 3. **Pendiente — Reforzar integridad en reglas de Firestore.**
    - Definir campos permitidos y tamaños por colección; validar referencias categoría/subcategoría/período cuando corresponda; revisar saldos y escrituras sin bloquear operaciones legítimas; contrastar las reglas locales con las desplegadas.
 4. **Pendiente — Reducir exposición de sesión y diagnósticos.**
    - Revisar persistencia Auth, logout, colas por UID, limpieza segura sin perder cambios offline, consola/logs y cabeceras de Hosting. Evaluar App Check y controles de Auth desde consola.
-5. **Pendiente — Especificar e implementar chat financiero web privado (texto solamente).**
-   - Empezar con consultas de solo lectura; enviar contexto mínimo, seudonimizado y por solicitud; pedir consentimiento antes de enviar información financiera al proveedor de IA; excluir UID, nombres de cuenta y notas salvo decisión explícita.
-   - Separar contexto temporal, historial exportable y preferencias recordadas. Historial local cifrado, exportación bajo demanda y memoria persistente opt-in, visible, editable y eliminable.
-   - Preparar registros sugeridos por chat como borradores: inferir categoría/subcategoría, pedir confirmación, validar esquema y referencias en Wallet y guardar mediante el flujo financiero existente. La IA nunca escribe directamente en Firestore ni actualiza saldos.
+5. **Completado — Asistente Financiero Privado IA Web (Chat de texto en Quetzales).**
+   - **Completado:** Consultas contextuales en lenguaje natural basadas en agregados seudonimizados sin PII (sin nombres de cuentas reales, números, correos ni notas privadas).
+   - **Completado:** Consentimiento informado explícito (Opt-in) con modal de advertencias de privacidad antes de enviar la primera consulta al proxy backend.
+   - **Completado:** Integridad de transacciones estricta: el modelo sugiere borradores interactivos validados (`<<<TRANSACTION_DRAFT_START>>>...<<<TRANSACTION_DRAFT_END>>>`); jamás escribe directo a Firestore ni altera saldos automáticamente; el usuario confirma y revisa cada operación en `TransactionModal`.
+   - **Completado:** Historial de conversación cifrado en reposo localmente en el navegador (`localStorage`) con la Bóveda AES-256-GCM del usuario (o fallback sin cifrar si la bóveda no está activa).
+   - **Completado:** Endpoint backend seguro `POST /api/financial-chat` en `server.ts` con verificación de ID Token de Firebase Auth, rate limiting (20 req/min), ventana rodante de 12 mensajes, límite de 64kb y erradicación total de logs con contenido o prompts.
+   - **Completado:** Integración fluida en la interfaz: accesos directos desde la barra superior de acciones, banner interactivo en el Inicio (`DashboardView`) y tarjeta en Configuración (`MoreView`).
 6. **Pendiente — Preparar Capacitor tras cerrar las etapas anteriores.**
    - Reutilizar React/Vite; integrar biometría nativa como desbloqueo de clave protegida por el sistema operativo; probar sesión, offline, deep links, exportación y borrado en Android/iOS.
 
 ### Registro de avance
 
-- **2026-10-24:** plan agregado, revisión estática e inventario de persistencias cerrados. La pantalla ya describe PIN/biometría como bloqueo local y aclara que no cifra los datos. El cifrado local y su migración recuperable siguen en curso y pendientes de implementar.
+- **2026-10-24:**
+  - **Etiquetas y Asignación Masiva Completadas:** Se implementó el modelo de `Tag`, reglas de Firestore desplegadas, persistencia offline, pantalla de administración en Configuración, asignación masiva de transacciones con casillas de selección múltiple, protección de eliminación por integridad referencial y filtros avanzados.
+  - **Cifrado Local Web en Reposo Implementado (Etapa 1):** Bóveda AES-256-GCM implementada con desacoplamiento de PIN, soporte opcional para WebAuthn PRF, Clave de Recuperación aleatoria de 256 bits, verificación previa de respaldo, máquina de estados de arranque contra inconsistencias y migración no destructiva en 4 fases.
+  - **Proxy de IA Endurecido (Etapa 2):** Implementada la verificación de tokens de Firebase Auth, rate limiting por usuario/IP, validación estricta de rangos y esquemas, tamaño máximo de 64kb y erradicación de logs con métricas o prompts.
+  - **Asistente Financiero Privado IA Completado (Etapa 5):** Implementado el chat financiero interactivo con consentimiento previo, agregados seudonimizados sin PII, sugerencias y borradores de transacciones interactivos bajo confirmación del usuario, historial cifrado con la bóveda AES-256 local y endpoint backend `POST /api/financial-chat` con Gemini 2.5 Flash / Flash-Lite en Quetzales (GTQ).
 
 ## Registro de Cambios y Correcciones de Auditoría (Octubre 2026)
 

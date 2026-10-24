@@ -14,6 +14,7 @@ import {
   Plus,
   ReceiptText,
   SlidersHorizontal,
+  Sparkles,
   Target,
   TrendingDown,
   TrendingUp,
@@ -40,6 +41,7 @@ interface DashboardViewProps {
   onNavigateTab: (tab: any) => void;
   onOpenAnnualBudgetModal?: () => void;
   onOpenHealthReport?: () => void;
+  onOpenChat?: () => void;
 }
 
 export const DashboardView: React.FC<DashboardViewProps> = ({
@@ -50,6 +52,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
   onNavigateTab,
   onOpenAnnualBudgetModal,
   onOpenHealthReport,
+  onOpenChat,
 }) => {
   const {
     activePeriod,
@@ -645,6 +648,38 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
           )}
         </div>
       </div>
+
+      {/* ASISTENTE FINANCIERO IA BANNER */}
+      {onOpenChat && (
+        <div
+          className={`p-4 rounded-3xl border flex items-center justify-between gap-3 transition-all ${
+            isDark
+              ? 'bg-gradient-to-r from-purple-950/30 via-[#131927] to-[#131927] border-purple-500/25'
+              : 'bg-gradient-to-r from-purple-50 via-white to-white border-purple-200 shadow-xs'
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-2xl bg-purple-500/20 text-purple-600 dark:text-purple-300 flex items-center justify-center shrink-0">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div>
+              <span className={`text-xs font-bold block ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                Asistente Financiero IA
+              </span>
+              <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                Pregunta sobre tus gastos, ritmo de ahorro o pide borradores de transacciones.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onOpenChat}
+            className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-500 text-white text-xs font-bold shrink-0 transition-colors cursor-pointer shadow-xs"
+          >
+            Preguntar
+          </button>
+        </div>
+      )}
 
       {/* TRANSACCIONES RECIENTES */}
       <div

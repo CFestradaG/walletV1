@@ -88,6 +88,8 @@ import {
   offlineQueue,
   loadQueueFromStorage,
   QueueProcessResult,
+  unlockUserQueue,
+  lockUserQueue,
 } from '../sync/offlineQueue';
 import {
   applySyncedSecurityPreferences,
@@ -95,6 +97,15 @@ import {
   hasPinConfigured,
   SyncedSecurityPreferences,
 } from '../security/securityService';
+import {
+  decryptString,
+  encryptString,
+  getEncryptedStoreKey,
+  isLocalEncryptionActiveForUser,
+  loadEncryptionMetadata,
+  EncryptionMetadata,
+  disableLocalEncryption,
+} from '../security/cryptoService';
 import {
   AnnualProjectionsPlan,
   loadAllSavedProjectionsPlans,
@@ -105,11 +116,22 @@ import {
 const STORAGE_KEY = 'wallet_app_v4_store';
 const SESSION_USER_KEY = 'wallet_app_v4_user_id';
 
+export type EncryptionState =
+  | 'INITIALIZING'
+  | 'UNENCRYPTED'
+  | 'LOCKED_ENCRYPTED'
+  | 'INCONSISTENCY_HALTED'
+  | 'UNLOCKING'
+  | 'READY';
+
 interface StoredDatabase {
   users: Record<string, UserDataStore>;
 }
 
 function readLocalUserStore(userId: string): UserDataStore | null {
+  if (isLocalEncryptionActiveForUser(userId)) {
+    return null; // El store local está cifrado y protegido
+  }
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
@@ -367,6 +389,13 @@ interface WalletContextValue {
   lastSyncTime: number | null;
   forceSyncNow: () => Promise<QueueProcessResult>;
   previewBalanceReconciliation: () => AccountReconciliationResult[];
+
+  encryptionState: EncryptionState;
+  isLocalEncryptionActive: boolean;
+  encryptionMetadata: EncryptionMetadata | null;
+  enableLocalEncryptionWithKey: (dataKey: CryptoKey) => void;
+  unlockVaultWithKey: (dataKey: CryptoKey) => Promise<void>;
+  disableLocalEncryptionConfirmed: () => Promise<void>;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
@@ -468,13 +497,131 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     return () => mediaQuery.removeEventListener('change', handler);
   }, []);
 
+  const [encryptionState, setEncryptionState] = useState<EncryptionState>('INITIALIZING');
+  const [activeAek, setActiveAek] = useState<CryptoKey | null>(null);
+  const [encryptionMetadata, setEncryptionMetadata] = useState<EncryptionMetadata | null>(null);
+
   useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
-    } catch {
-      // ignore
+    if (!currentUserId) {
+      setEncryptionState('UNENCRYPTED');
+      return;
     }
-  }, [db]);
+    const isEncrypted = isLocalEncryptionActiveForUser(currentUserId);
+    if (!isEncrypted) {
+      setEncryptionState('UNENCRYPTED');
+      return;
+    }
+
+    const meta = loadEncryptionMetadata(currentUserId);
+    if (!meta) {
+      // Bandera activa pero metadatos faltantes o corruptos: detenerse preventivamente
+      setEncryptionState('INCONSISTENCY_HALTED');
+      return;
+    }
+
+    setEncryptionMetadata(meta);
+    if (activeAek) {
+      setEncryptionState('READY');
+    } else {
+      setEncryptionState('LOCKED_ENCRYPTED');
+    }
+  }, [currentUserId, activeAek]);
+
+  const unlockVaultWithKey = async (dataKey: CryptoKey) => {
+    if (!currentUserId) return;
+    setEncryptionState('UNLOCKING');
+    try {
+      const encStoreRaw = localStorage.getItem(getEncryptedStoreKey(currentUserId));
+      if (encStoreRaw) {
+        const decrypted = await decryptString(dataKey, encStoreRaw);
+        const parsedStore = JSON.parse(decrypted);
+        setDb((prev) => ({
+          ...prev,
+          users: {
+            ...prev.users,
+            [currentUserId]: parsedStore,
+          },
+        }));
+      }
+      await unlockUserQueue(currentUserId, dataKey);
+      setActiveAek(dataKey);
+      setEncryptionState('READY');
+    } catch (err) {
+      console.error('Error hidratando almacén descifrado:', err);
+      setEncryptionState('LOCKED_ENCRYPTED');
+      throw err;
+    }
+  };
+
+  const enableLocalEncryptionWithKey = (dataKey: CryptoKey) => {
+    if (!currentUserId) return;
+    setActiveAek(dataKey);
+    const meta = loadEncryptionMetadata(currentUserId);
+    setEncryptionMetadata(meta);
+    void unlockUserQueue(currentUserId, dataKey);
+    setEncryptionState('READY');
+  };
+
+  const disableLocalEncryptionConfirmed = async () => {
+    if (!currentUserId || !activeAek || !encryptionMetadata) return;
+    await disableLocalEncryption(
+      currentUserId,
+      activeAek,
+      encryptionMetadata,
+      (plaintextJson) => {
+        try {
+          const parsed = JSON.parse(plaintextJson);
+          setDb((prev) => ({
+            ...prev,
+            users: { ...prev.users, [currentUserId]: parsed },
+          }));
+        } catch {
+          // ignore
+        }
+      }
+    );
+    setActiveAek(null);
+    setEncryptionMetadata(null);
+    setEncryptionState('UNENCRYPTED');
+  };
+
+  useEffect(() => {
+    // BARRERA ESTRICTA DE ESCRITURA: Nunca escribir cuando la app está bloqueada, en inicialización o inconsistencia
+    if (encryptionState !== 'READY' && encryptionState !== 'UNENCRYPTED') {
+      return;
+    }
+
+    if (!currentUserId) {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+      } catch {
+        // ignore
+      }
+      return;
+    }
+
+    const isEncrypted = isLocalEncryptionActiveForUser(currentUserId);
+    if (isEncrypted) {
+      if (!activeAek) return; // No escribir sin la clave activa
+      const userStore = db.users[currentUserId];
+      if (!userStore) return;
+
+      void (async () => {
+        try {
+          const ct = await encryptString(activeAek, JSON.stringify(userStore));
+          localStorage.setItem(getEncryptedStoreKey(currentUserId), ct);
+        } catch (err) {
+          console.error('Error guardando almacén local cifrado:', err);
+        }
+      })();
+    } else {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
+      } catch {
+        // ignore
+      }
+    }
+  }, [db, currentUserId, encryptionState, activeAek]);
 
   useEffect(() => {
     try {
@@ -1145,6 +1292,12 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   };
 
   const logout = async () => {
+    if (currentUserId) {
+      lockUserQueue(currentUserId);
+    }
+    setActiveAek(null);
+    setEncryptionMetadata(null);
+    setEncryptionState('UNENCRYPTED');
     try {
       await signOut(auth);
     } catch (err) {
@@ -2468,6 +2621,13 @@ export const WalletProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
         resetPassword,
         updateSettings,
+
+        encryptionState,
+        isLocalEncryptionActive: encryptionState !== 'UNENCRYPTED' && encryptionState !== 'INITIALIZING',
+        encryptionMetadata,
+        enableLocalEncryptionWithKey,
+        unlockVaultWithKey,
+        disableLocalEncryptionConfirmed,
       }}
     >
       {children}

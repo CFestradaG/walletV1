@@ -44,6 +44,7 @@ interface MoreViewProps {
   onOpenSecurityModal?: () => void;
   onOpenInstallModal?: () => void;
   onOpenTemplates: () => void;
+  onOpenChat?: () => void;
 }
 
 export const MoreView: React.FC<MoreViewProps> = ({
@@ -52,6 +53,7 @@ export const MoreView: React.FC<MoreViewProps> = ({
   onOpenSecurityModal,
   onOpenInstallModal,
   onOpenTemplates,
+  onOpenChat,
 }) => {
   const {
     currentUser,
@@ -357,6 +359,37 @@ export const MoreView: React.FC<MoreViewProps> = ({
             <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
           </button>
 
+          {/* Asistente Financiero IA */}
+          <button
+            type="button"
+            onClick={onOpenChat}
+            className={`w-full p-3 rounded-2xl border flex items-center justify-between text-left transition-colors cursor-pointer ${
+              isDark
+                ? 'border-emerald-500/30 bg-emerald-500/10 hover:bg-emerald-500/15'
+                : 'border-emerald-300 bg-emerald-50/70 hover:bg-emerald-100/70'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                <Sparkles className="w-4 h-4" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className={`font-bold text-xs block ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                    Asistente Financiero IA
+                  </span>
+                  <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    Privado
+                  </span>
+                </div>
+                <span className={`text-[11px] ${isDark ? 'text-slate-300' : 'text-slate-600'}`}>
+                  Consultas en lenguaje natural y borradores de transacciones
+                </span>
+              </div>
+            </div>
+            <ChevronRight className="w-4 h-4 text-emerald-500" />
+          </button>
+
           {/* Períodos Financieros */}
           <button
             type="button"
@@ -542,6 +575,39 @@ export const MoreView: React.FC<MoreViewProps> = ({
                   <ChevronRight className={`w-4 h-4 ${isDark ? 'text-slate-400' : 'text-slate-400'}`} />
                 </div>
               </button>
+
+              {/* Asistente Financiero IA (Chat Privado) */}
+              {onOpenChat && (
+                <button
+                  type="button"
+                  onClick={onOpenChat}
+                  className={`w-full p-3 rounded-2xl border flex items-center justify-between text-left transition-colors cursor-pointer ${
+                    isDark
+                      ? 'border-purple-500/30 bg-purple-500/10 hover:bg-purple-500/15'
+                      : 'border-purple-200 bg-purple-50/70 hover:bg-purple-100/70'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-600 dark:text-purple-300 flex items-center justify-center">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <span className={`font-bold text-xs block ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                        Asistente Financiero IA (Chat)
+                      </span>
+                      <span className={`text-[11px] ${isDark ? 'text-purple-300' : 'text-purple-700'}`}>
+                        Consultas y borradores de movimientos con métricas agregadas
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/30">
+                      Abrir
+                    </span>
+                    <ChevronRight className={`w-4 h-4 ${isDark ? 'text-purple-300' : 'text-purple-600'}`} />
+                  </div>
+                </button>
+              )}
 
               {/* Análisis Inferencial con IA (Semanal) */}
               <div

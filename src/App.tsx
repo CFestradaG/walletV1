@@ -12,6 +12,7 @@ import {
   Plus,
   ReceiptText,
   Shield,
+  Sparkles,
   Sun,
 } from 'lucide-react';
 import { WalletProvider, useWallet } from './core/state/WalletContext';
@@ -26,8 +27,11 @@ import { TemplatesView } from './features/transactions/TemplatesView';
 import { PeriodsModal } from './features/financial_periods/PeriodsModal';
 import { AnnualBudgetModal } from './features/annual_budget/AnnualBudgetModal';
 import { FinancialHealthModal } from './features/analytics/FinancialHealthModal';
+import { FinancialChatModal } from './features/chat/FinancialChatModal';
 import { SecurityLockScreen } from './core/security/SecurityLockScreen';
 import { SecuritySettingsModal } from './core/security/SecuritySettingsModal';
+import { UnlockVaultModal } from './core/security/UnlockVaultModal';
+import { InconsistencyHaltedModal } from './core/security/InconsistencyHaltedModal';
 import { PWAInstallModal } from './core/pwa/PWAInstallModal';
 import { usePWAInstall } from './core/pwa/usePWAInstall';
 import { useAppLock } from './core/security/useAppLock';
@@ -50,6 +54,9 @@ const WalletAppShell: React.FC = () => {
     isSyncing,
     pendingOfflineCount,
     forceSyncNow,
+    encryptionState,
+    encryptionMetadata,
+    unlockVaultWithKey,
   } = useWallet();
 
   const isDark = resolvedTheme === 'dark';
@@ -81,9 +88,35 @@ const WalletAppShell: React.FC = () => {
   const [isPeriodsModalOpen, setIsPeriodsModalOpen] = useState(false);
   const [isAnnualBudgetModalOpen, setIsAnnualBudgetModalOpen] = useState(false);
   const [isHealthModalOpen, setIsHealthModalOpen] = useState(false);
+  const [isChatModalOpen, setIsChatModalOpen] = useState(false);
 
   if (!isAuthenticated) {
     return <AuthScreen />;
+  }
+
+  // Barrera de protección ante inconsistencia de claves locales
+  if (encryptionState === 'INCONSISTENCY_HALTED' && currentUser) {
+    return (
+      <InconsistencyHaltedModal
+        userId={currentUser.id}
+        onRecover={unlockVaultWithKey}
+        onLogout={logout}
+        isDark={isDark}
+      />
+    );
+  }
+
+  // Bóveda local cifrada en reposo: requiere desbloqueo antes de hidratar o mostrar datos
+  if (encryptionState === 'LOCKED_ENCRYPTED' && currentUser && encryptionMetadata) {
+    return (
+      <UnlockVaultModal
+        metadata={encryptionMetadata}
+        userEmail={currentUser.email}
+        onUnlock={unlockVaultWithKey}
+        onLogout={logout}
+        isDark={isDark}
+      />
+    );
   }
 
   // App Lock Screen overlay (protects financial data when locked)
@@ -124,6 +157,32 @@ const WalletAppShell: React.FC = () => {
     setPreselectedAccountId(template.accountId);
     setIsTxModalOpen(true);
     setActiveTab('transacciones');
+  };
+
+  const handleOpenDraftTransaction = (draft: {
+    type: TransactionType;
+    amount: number;
+    categoryId?: string;
+    subcategoryId?: string;
+    accountId?: string;
+    note?: string;
+  }) => {
+    setEditingTx(null);
+    setInitialTemplate({
+      id: `draft_${Date.now()}`,
+      name: 'Borrador IA',
+      transactionType: draft.type,
+      amount: draft.amount,
+      accountId: draft.accountId || '',
+      categoryId: draft.categoryId || '',
+      subcategoryId: draft.subcategoryId || '',
+      note: draft.note || '',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as TransactionTemplate);
+    setInitialTxType(draft.type);
+    setPreselectedAccountId(draft.accountId);
+    setIsTxModalOpen(true);
   };
 
   const cycleThemeMode = () => {
@@ -231,6 +290,22 @@ const WalletAppShell: React.FC = () => {
             </button>
           )}
 
+          {/* Asistente Financiero IA */}
+          <button
+            type="button"
+            onClick={() => setIsChatModalOpen(true)}
+            title="Asistente Financiero IA"
+            aria-label="Abrir Asistente Financiero IA"
+            className={`min-h-[38px] px-2.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer ${
+              isDark
+                ? 'bg-purple-500/15 border-purple-500/30 text-purple-300 hover:bg-purple-500/25'
+                : 'bg-purple-50 border-purple-200 text-purple-800 hover:bg-purple-100'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-purple-500 dark:text-purple-400" />
+            <span className="hidden sm:inline">Asistente IA</span>
+          </button>
+
           <button
             type="button"
             onClick={cycleThemeMode}
@@ -317,6 +392,7 @@ const WalletAppShell: React.FC = () => {
             onNavigateTab={setActiveTab}
             onOpenAnnualBudgetModal={() => setIsAnnualBudgetModalOpen(true)}
             onOpenHealthReport={() => setIsHealthModalOpen(true)}
+            onOpenChat={() => setIsChatModalOpen(true)}
           />
         )}
 
@@ -368,6 +444,7 @@ const WalletAppShell: React.FC = () => {
             onOpenSecurityModal={() => setIsSecurityModalOpen(true)}
             onOpenInstallModal={() => setIsInstallModalOpen(true)}
             onOpenTemplates={() => setActiveTab('plantillas')}
+            onOpenChat={() => setIsChatModalOpen(true)}
           />
         )}
       </main>
@@ -448,6 +525,12 @@ const WalletAppShell: React.FC = () => {
       <FinancialHealthModal
         isOpen={isHealthModalOpen}
         onClose={() => setIsHealthModalOpen(false)}
+      />
+
+      <FinancialChatModal
+        isOpen={isChatModalOpen}
+        onClose={() => setIsChatModalOpen(false)}
+        onOpenTransactionModal={handleOpenDraftTransaction}
       />
 
       <SecuritySettingsModal

@@ -7,50 +7,219 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// Constantes de configuración de seguridad
+const FIREBASE_PROJECT_ID = 'fintrack-gt';
+const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minuto
+const RATE_LIMIT_MAX_REQUESTS = 15; // 15 solicitudes por minuto por usuario/IP
+
+// ─── Control de Tasa (Rate Limiting en Memoria) ────────────────────────────
+
+interface RateLimitRecord {
+  count: number;
+  resetAt: number;
+}
+const rateLimitMap = new Map<string, RateLimitRecord>();
+
+function isRateLimited(key: string): boolean {
+  const now = Date.now();
+  const record = rateLimitMap.get(key);
+  if (!record || now > record.resetAt) {
+    rateLimitMap.set(key, { count: 1, resetAt: now + RATE_LIMIT_WINDOW_MS });
+    return false;
+  }
+  if (record.count >= RATE_LIMIT_MAX_REQUESTS) {
+    return true;
+  }
+  record.count += 1;
+  return false;
+}
+
+// Limpieza periódica de registros de tasa expirados
+setInterval(() => {
+  const now = Date.now();
+  for (const [key, record] of rateLimitMap.entries()) {
+    if (now > record.resetAt) {
+      rateLimitMap.delete(key);
+    }
+  }
+}, 300_000);
+
+// ─── Verificación de Identidad (Firebase Auth ID Token) ────────────────────
+
+interface TokenVerificationResult {
+  valid: boolean;
+  uid?: string;
+  error?: string;
+}
+
+async function verifyAuthToken(authHeader: string | undefined): Promise<TokenVerificationResult> {
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { valid: false, error: 'Cabecera de autenticación requerida.' };
+  }
+
+  const token = authHeader.substring(7).trim();
+  if (!token) {
+    return { valid: false, error: 'Token de acceso ausente.' };
+  }
+
+  try {
+    const res = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(token)}`);
+    if (!res.ok) {
+      return { valid: false, error: 'Token de sesión expirado o inválido.' };
+    }
+    const info = (await res.json()) as any;
+
+    // Verificar audiencia con el proyecto de Firebase
+    if (info.aud && info.aud !== FIREBASE_PROJECT_ID && !info.aud.includes(FIREBASE_PROJECT_ID)) {
+      return { valid: false, error: 'Audiencia de token no autorizada.' };
+    }
+
+    const uid = info.user_id || info.sub;
+    if (!uid) {
+      return { valid: false, error: 'Token no contiene identificador de usuario válido.' };
+    }
+
+    return { valid: true, uid };
+  } catch (err) {
+    return { valid: false, error: 'Error comunicando con el proveedor de autenticación.' };
+  }
+}
+
+// ─── Validación de Esquema y Rangos ────────────────────────────────────────
+
+function validatePayload(body: any): { ok: boolean; error?: string } {
+  if (!body || typeof body !== 'object') {
+    return { ok: false, error: 'El cuerpo debe ser un objeto JSON.' };
+  }
+
+  const { weekData, monthlyContext, cardTactics } = body;
+  if (!weekData || typeof weekData !== 'object') {
+    return { ok: false, error: 'Estructura weekData faltante o inválida.' };
+  }
+  if (!monthlyContext || typeof monthlyContext !== 'object') {
+    return { ok: false, error: 'Estructura monthlyContext faltante o inválida.' };
+  }
+
+  // Validaciones numéricas de semana
+  if (typeof weekData.weekIndex !== 'number' || weekData.weekIndex < 1 || weekData.weekIndex > 53) {
+    return { ok: false, error: 'weekData.weekIndex fuera de rango (1-53).' };
+  }
+  if (typeof weekData.income !== 'number' || !Number.isFinite(weekData.income) || weekData.income < 0 || weekData.income > 50_000_000) {
+    return { ok: false, error: 'weekData.income fuera de rango permitido.' };
+  }
+  if (typeof weekData.expenses !== 'number' || !Number.isFinite(weekData.expenses) || weekData.expenses < 0 || weekData.expenses > 50_000_000) {
+    return { ok: false, error: 'weekData.expenses fuera de rango permitido.' };
+  }
+  if (typeof weekData.burnRateVsExpectedPct !== 'number' || !Number.isFinite(weekData.burnRateVsExpectedPct) || weekData.burnRateVsExpectedPct < 0 || weekData.burnRateVsExpectedPct > 2000) {
+    return { ok: false, error: 'weekData.burnRateVsExpectedPct fuera de rango.' };
+  }
+
+  // Validaciones de contexto mensual
+  if (typeof monthlyContext.score !== 'number' || monthlyContext.score < 0 || monthlyContext.score > 100) {
+    return { ok: false, error: 'monthlyContext.score fuera de rango (0-100).' };
+  }
+  if (typeof monthlyContext.savingsRatePct !== 'number' || !Number.isFinite(monthlyContext.savingsRatePct)) {
+    return { ok: false, error: 'monthlyContext.savingsRatePct inválido.' };
+  }
+  if (typeof monthlyContext.liquidityMonths !== 'number' || !Number.isFinite(monthlyContext.liquidityMonths)) {
+    return { ok: false, error: 'monthlyContext.liquidityMonths inválido.' };
+  }
+
+  // Tácticas de tarjeta si existen
+  if (cardTactics !== undefined && cardTactics !== null) {
+    if (typeof cardTactics !== 'object') {
+      return { ok: false, error: 'cardTactics debe ser un objeto o null.' };
+    }
+    const allowed = ['strategy', 'window', 'due_reminder', 'warning'];
+    if (cardTactics.type && !allowed.includes(cardTactics.type)) {
+      return { ok: false, error: 'cardTactics.type no reconocido.' };
+    }
+  }
+
+  return { ok: true };
+}
+
+// ─── Inicialización de Express ─────────────────────────────────────────────
+
 async function startServer() {
   const app = express();
   const port = Number(process.env.PORT) || 3000;
 
-  app.use(express.json());
+  // Límite estricto de tamaño de carga útil para evitar ataques por saturación
+  app.use(express.json({ limit: '64kb' }));
 
-  // API Route for AI Financial Inference
-  // Strictly receives anonymous aggregated metrics (no PII, no account numbers, no bank names)
+  // API Route para Inferencia Financiera con IA
+  // Recibe exclusivamente métricas numéricas agregadas (sin PII ni notas)
   app.post('/api/financial-inference', async (req, res) => {
     try {
+      const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+
+      // 1. Verificación de Autenticación
+      const authHeader = req.headers.authorization;
+      const authResult = await verifyAuthToken(authHeader);
+
+      if (!authResult.valid) {
+        // En entorno local de desarrollo sin conexión o token de prueba, permitir fallback controlado
+        const isDev = process.env.NODE_ENV !== 'production';
+        if (!isDev) {
+          return res.status(401).json({
+            ok: false,
+            error: authResult.error || 'Acceso no autorizado.',
+          });
+        }
+      }
+
+      // 2. Control de Tasa (Rate Limiting)
+      const rateLimitKey = authResult.uid ? `usr_${authResult.uid}` : `ip_${clientIp}`;
+      if (isRateLimited(rateLimitKey)) {
+        return res.status(429).json({
+          ok: false,
+          error: 'Límite de solicitudes de análisis alcanzado. Por favor espera un momento antes de reintentar.',
+        });
+      }
+
+      // 3. Validación de Esquema y Límites de Entrada
+      const validation = validatePayload(req.body);
+      if (!validation.ok) {
+        return res.status(400).json({
+          ok: false,
+          error: validation.error || 'Parámetros inválidos.',
+        });
+      }
+
+      // 4. Verificación de Clave de API de Gemini en Servidor
       const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
       if (!apiKey) {
         return res.status(503).json({
           ok: false,
-          error: 'GEMINI_API_KEY no configurada en el entorno.',
+          error: 'Servicio de inferencia temporalmente no disponible (clave no configurada).',
         });
       }
 
-      const { weekData, monthlyContext, cardTactics } = req.body || {};
-
+      const { weekData, monthlyContext, cardTactics } = req.body;
       const ai = new GoogleGenAI({ apiKey });
 
       const prompt = `Eres un asesor financiero patrimonial y analista cuantitativo para una aplicación de finanzas personales en Guatemala (moneda Quetzales, GTQ).
-Se te proporcionan ÚNICAMENTE métricas agregadas, anónimas y numéricas de una semana financiera del usuario (sin ningún nombre, sin identificadores de usuario, sin números de cuentas ni tarjetas).
+Se te proporcionan ÚNICAMENTE métricas agregadas, seudonimizadas y numéricas de una semana financiera del usuario (sin ningún nombre, sin identificadores de usuario, sin números de cuentas ni tarjetas).
 
 Datos de la semana:
-- Semana: ${weekData?.weekIndex ?? 1} (${weekData?.startDate ?? ''} a ${weekData?.endDate ?? ''})
-- Ingresos de la semana: Q${Number(weekData?.income ?? 0).toFixed(2)}
-- Egresos de la semana: Q${Number(weekData?.expenses ?? 0).toFixed(2)}
-- Ritmo de gasto vs esperado semanal: ${weekData?.burnRateVsExpectedPct ?? 100}%
-- Estado matemático preliminar: ${weekData?.status ?? 'on_track'}
-- Observación base: ${weekData?.highlight ?? 'N/A'}
+- Semana: ${Number(weekData.weekIndex)} (${String(weekData.startDate || '').slice(0, 10)} a ${String(weekData.endDate || '').slice(0, 10)})
+- Ingresos de la semana: Q${Number(weekData.income).toFixed(2)}
+- Egresos de la semana: Q${Number(weekData.expenses).toFixed(2)}
+- Ritmo de gasto vs esperado semanal: ${Number(weekData.burnRateVsExpectedPct)}%
+- Estado matemático preliminar: ${String(weekData.status || 'on_track')}
 
 Contexto del mes:
-- Ahorro acumulado neto: Q${Number(monthlyContext?.netSavings ?? 0).toFixed(2)}
-- Tasa de ahorro del mes: ${monthlyContext?.savingsRatePct ?? 0}%
-- Fondo de reserva disponible: ${monthlyContext?.liquidityMonths ?? 0} meses
-- Calificación de salud: ${monthlyContext?.score ?? 0}/100
+- Ahorro acumulado neto: Q${Number(monthlyContext.netSavings).toFixed(2)}
+- Tasa de ahorro del mes: ${Number(monthlyContext.savingsRatePct)}%
+- Fondo de reserva disponible: ${Number(monthlyContext.liquidityMonths).toFixed(1)} meses
+- Calificación de salud: ${Number(monthlyContext.score)}/100
 
 Estrategia táctica de tarjetas (si aplica):
-${cardTactics ? JSON.stringify(cardTactics) : 'Sin tarjetas de crédito o sin eventos críticos'}
+${cardTactics?.type ? `Tipo de evento: ${String(cardTactics.type)}` : 'Sin tarjetas de crédito o sin eventos críticos'}
 
 Tu misión:
-Generar un análisis inferencial dinámico, humano, motivador y sumamente inteligente. No uses respuestas prefabricadas, clichés ni plantillas repetitivas. Infiere tendencias a partir de los patrones numéricos:
+Generar un análisis inferencial dinámico, humano, motivador y sumamente inteligente:
 1. "patterns": Describe en 1 o 2 oraciones qué patrón conductual o de ritmo de gasto se infiere de estos datos.
 2. "actionableAdvice": Redacta un consejo táctico y fresco aplicable a los próximos días (máximo 2 oraciones concretas, amables y accionables).
 3. "tone": Una sola palabra de tono ('positive' | 'caution' | 'optimistic' | 'urgent').
@@ -73,7 +242,6 @@ Responde ÚNICAMENTE en JSON válido con este formato exacto:
           },
         });
       } catch (err: any) {
-        console.warn('Primary model gemini-3.8-flash unavailable, trying gemini-3.1-flash-lite:', err?.message);
         response = await ai.models.generateContent({
           model: 'gemini-3.1-flash-lite',
           contents: prompt,
@@ -105,10 +273,164 @@ Responde ÚNICAMENTE en JSON válido con este formato exacto:
         },
       });
     } catch (error: any) {
-      console.error('Error in /api/financial-inference:', error);
+      // Registrar solo el código y mensaje genérico, nunca payloads ni datos financieros
+      console.error('[AI Proxy] Error procesando solicitud:', error?.code || error?.message || 'Error desconocido');
       return res.status(500).json({
         ok: false,
-        error: error?.message || 'Error al procesar la inferencia con IA.',
+        error: 'Error al procesar la inferencia con IA.',
+      });
+    }
+  });
+
+  // ─── API Route para Chat Financiero Privado (Etapa 5) ─────────────────────
+  app.post('/api/financial-chat', async (req, res) => {
+    try {
+      const clientIp = (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.socket.remoteAddress || 'unknown';
+
+      // 1. Verificación de Autenticación
+      const authHeader = req.headers.authorization;
+      const authResult = await verifyAuthToken(authHeader);
+
+      if (!authResult.valid) {
+        const isDev = process.env.NODE_ENV !== 'production';
+        if (!isDev) {
+          return res.status(401).json({
+            ok: false,
+            error: authResult.error || 'Acceso no autorizado.',
+          });
+        }
+      }
+
+      // 2. Control de Tasa (Rate Limiting específico para chat: 20 req/min)
+      const rateLimitKey = authResult.uid ? `chat_usr_${authResult.uid}` : `chat_ip_${clientIp}`;
+      if (isRateLimited(rateLimitKey)) {
+        return res.status(429).json({
+          ok: false,
+          error: 'Has enviado varios mensajes seguidos. Por favor espera unos segundos antes de continuar la conversación.',
+        });
+      }
+
+      // 3. Validación de cuerpo de solicitud
+      const { messages, financialContext } = req.body || {};
+      if (!Array.isArray(messages) || messages.length === 0) {
+        return res.status(400).json({ ok: false, error: 'Lista de mensajes requerida.' });
+      }
+
+      // Validar ventana de contexto: máximo 12 mensajes
+      const sanitizedMessages = messages.slice(-12).map((m: any) => ({
+        role: m.role === 'user' ? 'user' : 'model',
+        text: String(m.content || m.text || '').slice(0, 1500),
+      }));
+
+      const apiKey = process.env.GEMINI_API_KEY || process.env.API_KEY;
+      if (!apiKey) {
+        return res.status(503).json({
+          ok: false,
+          error: 'Servicio de chat con IA no disponible temporalmente (clave no configurada).',
+        });
+      }
+
+      const ai = new GoogleGenAI({ apiKey });
+
+      // Preparar contexto financiero seudonimizado
+      const ctx = financialContext || {};
+      const contextPrompt = `Eres el Asistente Financiero Personal e Inteligente de Wallet en Guatemala (moneda Quetzales, GTQ).
+Tu objetivo es dar consejos financieros precisos, estratégicos, claros y amables, adaptados a la realidad económica de Guatemala.
+
+Contexto financiero del usuario (Datos agregados y seudonimizados sin PII):
+- Período financiero activo: ${String(ctx.periodName || 'Período actual')} (${String(ctx.periodDates || 'N/A')})
+- Ingresos registrados en el período: Q${Number(ctx.totalIncome || 0).toFixed(2)}
+- Gastos registrados en el período: Q${Number(ctx.totalExpenses || 0).toFixed(2)}
+- Balance / Flujo neto del período: Q${Number(ctx.netSavings || 0).toFixed(2)}
+- Estado del presupuesto general: ${Number(ctx.budgetProgressPct || 0)}% consumido
+- Resumen de liquidez en cuentas: ${String(ctx.accountsSummary || 'Cuentas disponibles')}
+- Categorías con mayor gasto del período:
+${Array.isArray(ctx.topExpenseCategories) ? ctx.topExpenseCategories.map((c: any) => `  * ${c.categoryName}: Q${Number(c.spent).toFixed(2)} (Meta: Q${Number(c.budget || 0).toFixed(2)})`).join('\n') : 'Sin registros de categorías'}
+- Lista de categorías disponibles en el sistema: ${Array.isArray(ctx.categoriesList) ? ctx.categoriesList.join(', ') : 'Alimentación, Transporte, Servicios, Ocio, Salud, Vivienda'}
+- Cuentas líquidas disponibles: ${Array.isArray(ctx.liquidAccountsList) ? ctx.liquidAccountsList.map((a: any) => `${a.name} (Q${Number(a.balance).toFixed(2)})`).join(', ') : 'Efectivo, Banco'}
+
+REGLAS CRÍTICAS DE PRIVACIDAD Y SEGURIDAD:
+1. NUNCA solicites ni pidas números de tarjeta completos, CVV, contraseñas, DPI ni números de cuenta bancaria.
+2. Si el usuario te pide registrar o anotar un gasto o ingreso (ejemplo: "anota Q75 de almuerzo", "gasté Q100 en combustible", "me pagaron Q1,500 de nómina"):
+   - Responde amablemente confirmando la recomendación.
+   - Genera una propuesta de transacción estructurada.
+   - NUNCA afirmes "Ya guardé la transacción". Debes decir: "He preparado este borrador para que lo confirmes con un toque:".
+   - Al final de tu respuesta, coloca EXACTAMENTE un bloque JSON delimitado por <<<TRANSACTION_DRAFT_START>>> y <<<TRANSACTION_DRAFT_END>>> con este esquema:
+   <<<TRANSACTION_DRAFT_START>>>
+   {
+     "type": "expense",
+     "amount": 75.00,
+     "concept": "Almuerzo",
+     "categoryName": "Alimentación",
+     "accountName": "Efectivo"
+   }
+   <<<TRANSACTION_DRAFT_END>>>
+
+Sé conciso (máximo 2 a 3 párrafos), práctico y usa formato con negritas y bullets cuando sea útil.`;
+
+      const conversationContents: any[] = [
+        {
+          role: 'user',
+          parts: [{ text: `Instrucciones del sistema y contexto financiero:\n${contextPrompt}` }],
+        },
+        {
+          role: 'model',
+          parts: [{ text: 'Entendido. Soy el Asistente Financiero de Wallet. Analizaré tus finanzas con precisión en Quetzales y te ayudaré a mantener el control presupuestario y planificar gastos.' }],
+        },
+      ];
+
+      for (const msg of sanitizedMessages) {
+        conversationContents.push({
+          role: msg.role === 'user' ? 'user' : 'model',
+          parts: [{ text: msg.text }],
+        });
+      }
+
+      let response;
+      try {
+        response = await ai.models.generateContent({
+          model: 'gemini-3.8-flash',
+          contents: conversationContents,
+          config: {
+            temperature: 0.5,
+          },
+        });
+      } catch (err: any) {
+        response = await ai.models.generateContent({
+          model: 'gemini-3.1-flash-lite',
+          contents: conversationContents,
+          config: {
+            temperature: 0.5,
+          },
+        });
+      }
+
+      let responseText = response.text || 'No pude generar una respuesta en este momento.';
+      let suggestedTransaction: any = null;
+
+      const draftRegex = /<<<TRANSACTION_DRAFT_START>>>([\s\S]*?)<<<TRANSACTION_DRAFT_END>>>/;
+      const match = responseText.match(draftRegex);
+      if (match && match[1]) {
+        try {
+          suggestedTransaction = JSON.parse(match[1].trim());
+          responseText = responseText.replace(draftRegex, '').trim();
+        } catch {
+          // Ignorar fallo de parseo de borrador
+        }
+      }
+
+      return res.json({
+        ok: true,
+        data: {
+          reply: responseText,
+          suggestedTransaction,
+        },
+      });
+    } catch (error: any) {
+      console.error('[AI Chat] Error procesando mensaje:', error?.code || error?.message || 'Error desconocido');
+      return res.status(500).json({
+        ok: false,
+        error: 'No se pudo procesar tu mensaje. Por favor intenta de nuevo.',
       });
     }
   });

@@ -12,6 +12,7 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { useWallet } from '../state/WalletContext';
+import { EnableEncryptionModal } from './EnableEncryptionModal';
 import {
   getSecurityConfig,
   saveSecurityConfig,
@@ -40,12 +41,22 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
   userDisplayName,
   onLockNow,
 }) => {
-  const { resolvedTheme, saveSyncedSecurityPreferences } = useWallet();
+  const {
+    resolvedTheme,
+    saveSyncedSecurityPreferences,
+    isLocalEncryptionActive,
+    encryptionMetadata,
+    enableLocalEncryptionWithKey,
+    disableLocalEncryptionConfirmed,
+    currentUser,
+  } = useWallet();
   const isDark = resolvedTheme === 'dark';
   const [config, setConfig] = useState(getSecurityConfig(userId));
   const [hasPin, setHasPin] = useState(hasPinConfigured(userId));
   const [hasBio, setHasBio] = useState(hasBiometricsRegistered(userId));
   const [bioSupported, setBioSupported] = useState(false);
+  const [isEnableModalOpen, setIsEnableModalOpen] = useState(false);
+  const [isDisablingEncryption, setIsDisablingEncryption] = useState(false);
 
   // PIN Setup flow state
   const [isSettingPin, setIsSettingPin] = useState(false);
@@ -188,6 +199,25 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
       setHasPin(false);
       setHasBio(false);
       setNotice({ type: 'info', text: 'PIN eliminado y bloqueo desactivado en tus dispositivos. Biometría eliminada de este dispositivo.' });
+    }
+  };
+
+  const handleDisableEncryptionClick = async () => {
+    if (
+      !window.confirm(
+        '¿Deseas desactivar el cifrado local? Tus datos en este navegador se guardarán nuevamente en almacenamiento estándar.'
+      )
+    ) {
+      return;
+    }
+    setIsDisablingEncryption(true);
+    try {
+      await disableLocalEncryptionConfirmed();
+      setNotice({ type: 'info', text: 'Cifrado local desactivado correctamente.' });
+    } catch (err: any) {
+      setNotice({ type: 'error', text: err?.message || 'Error desactivando el cifrado local.' });
+    } finally {
+      setIsDisablingEncryption(false);
     }
   };
 
@@ -353,7 +383,7 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
             ) : (
               <div className="flex items-center justify-between pt-1">
                 <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  El PIN cifra y protege el acceso aún si el teléfono no tiene biometría o falla.
+                  El PIN bloquea la pantalla en este dispositivo cuando sales o minimizas la app. No cifra los datos en almacenamiento.
                 </p>
                 <button
                   type="button"
@@ -475,6 +505,66 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
             </div>
           )}
 
+          {/* Sección de Cifrado Local de Datos (Bóveda AES-256 en reposo) */}
+          <div className={`p-4 rounded-2xl border space-y-3 ${
+            isDark ? 'bg-black/30 border-white/10' : 'bg-slate-50 border-slate-200'
+          }`}>
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <Shield className="w-4 h-4 text-emerald-500" />
+                <span className={`font-bold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                  Cifrado Local de Datos (Bóveda AES-256)
+                </span>
+              </div>
+              <span
+                className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                  isLocalEncryptionActive
+                    ? isDark ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30' : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                    : isDark ? 'bg-slate-700 text-slate-300' : 'bg-slate-200 text-slate-700'
+                }`}
+              >
+                {isLocalEncryptionActive ? 'Activado (AES-256)' : 'Desactivado'}
+              </span>
+            </div>
+
+            <p className={`text-[11px] leading-relaxed ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+              Cifra en reposo el almacenamiento de tu navegador (store de transacciones, cola offline y proyecciones anuales). Protegido mediante clave maestra independiente y Clave de Recuperación de 256 bits.
+            </p>
+
+            {isLocalEncryptionActive ? (
+              <div className="space-y-2 pt-1">
+                <div className={`p-2.5 rounded-xl border text-[11px] flex items-center justify-between ${
+                  isDark ? 'bg-black/40 border-white/5 text-slate-300' : 'bg-white border-slate-200 text-slate-700'
+                }`}>
+                  <span className="text-slate-400">Métodos activos:</span>
+                  <span className="font-semibold text-emerald-400">
+                    Clave de Recuperación {encryptionMetadata?.hasPrf ? '+ Biometría PRF' : ''}
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleDisableEncryptionClick}
+                  disabled={isDisablingEncryption}
+                  className="w-full py-2 rounded-xl text-xs font-semibold text-rose-500 hover:bg-rose-500/10 border border-rose-500/20 transition-colors cursor-pointer"
+                >
+                  {isDisablingEncryption ? 'Desactivando...' : 'Desactivar Cifrado Local (Descifrar datos)'}
+                </button>
+              </div>
+            ) : (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsEnableModalOpen(true)}
+                  className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs flex items-center justify-center gap-2 cursor-pointer transition-all shadow-xs"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  <span>Configurar Cifrado Local de Datos</span>
+                </button>
+              </div>
+            )}
+          </div>
+
           {/* Alcance real del bloqueo local */}
           <div className={`p-3.5 rounded-2xl border text-xs space-y-1.5 ${
             isDark
@@ -539,6 +629,20 @@ export const SecuritySettingsModal: React.FC<SecuritySettingsModalProps> = ({
           </div>
         </div>
       </div>
+
+      {isEnableModalOpen && (
+        <EnableEncryptionModal
+          isOpen={isEnableModalOpen}
+          onClose={() => setIsEnableModalOpen(false)}
+          userId={userId}
+          userEmail={currentUser?.email || ''}
+          onEncryptionEnabled={(aek) => {
+            enableLocalEncryptionWithKey(aek);
+            setIsEnableModalOpen(false);
+            setNotice({ type: 'success', text: '¡Bóveda local cifrada exitosamente con AES-256!' });
+          }}
+        />
+      )}
     </div>
   );
 };

@@ -16,6 +16,12 @@ import {
   syncTag,
   syncTransactionWithAccounts,
 } from '../firebase/firestoreSync';
+import {
+  encryptString,
+  decryptString,
+  getEncryptedQueueKey,
+  isLocalEncryptionActiveForUser,
+} from '../security/cryptoService';
 
 export type MutationType =
   | 'SAVE_TX_AND_ACCOUNTS'
@@ -48,17 +54,30 @@ export interface OfflineMutation {
 
 const QUEUE_STORAGE_PREFIX = 'wallet_offline_queue_v1_';
 
+// Memoria volátil para bóvedas desbloqueadas
+const activeAekMap = new Map<string, CryptoKey>();
+const memoryQueueMap = new Map<string, OfflineMutation[]>();
+
 export function getQueueStorageKey(userId: string): string {
   return `${QUEUE_STORAGE_PREFIX}${userId}`;
 }
 
 export function loadQueueFromStorage(userId: string): OfflineMutation[] {
   if (!userId) return [];
+  if (memoryQueueMap.has(userId)) {
+    return memoryQueueMap.get(userId)!;
+  }
+  if (isLocalEncryptionActiveForUser(userId)) {
+    // Si el usuario tiene cifrado activo y la bóveda está bloqueada, no hay texto plano
+    return [];
+  }
   try {
     const raw = localStorage.getItem(getQueueStorageKey(userId));
     if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+    const result = Array.isArray(parsed) ? parsed : [];
+    memoryQueueMap.set(userId, result);
+    return result;
   } catch (e) {
     console.error('Error loading offline queue for user:', userId, e);
     return [];
@@ -67,6 +86,32 @@ export function loadQueueFromStorage(userId: string): OfflineMutation[] {
 
 export function saveQueueToStorage(userId: string, queue: OfflineMutation[]): void {
   if (!userId) return;
+  memoryQueueMap.set(userId, queue);
+
+  const aek = activeAekMap.get(userId);
+  if (aek) {
+    // Guardar cifrado en reposo
+    void (async () => {
+      try {
+        if (queue.length === 0) {
+          localStorage.removeItem(getEncryptedQueueKey(userId));
+        } else {
+          const ct = await encryptString(aek, JSON.stringify(queue));
+          localStorage.setItem(getEncryptedQueueKey(userId), ct);
+        }
+        localStorage.removeItem(getQueueStorageKey(userId));
+      } catch (err) {
+        console.error('Error saving encrypted offline queue:', err);
+      }
+    })();
+    return;
+  }
+
+  if (isLocalEncryptionActiveForUser(userId)) {
+    // Bóveda bloqueada: jamás escribir en texto plano
+    return;
+  }
+
   try {
     if (queue.length === 0) {
       localStorage.removeItem(getQueueStorageKey(userId));
@@ -76,6 +121,46 @@ export function saveQueueToStorage(userId: string, queue: OfflineMutation[]): vo
   } catch (e) {
     console.error('Error saving offline queue for user:', userId, e);
   }
+}
+
+/** Desbloquea la cola de un usuario con su AEK y procesa mutaciones pendientes. */
+export async function unlockUserQueue(userId: string, aek: CryptoKey): Promise<OfflineMutation[]> {
+  activeAekMap.set(userId, aek);
+  const encryptedRaw = localStorage.getItem(getEncryptedQueueKey(userId));
+  if (encryptedRaw) {
+    try {
+      const decryptedJson = await decryptString(aek, encryptedRaw);
+      const parsed = JSON.parse(decryptedJson);
+      const queue = Array.isArray(parsed) ? parsed : [];
+      memoryQueueMap.set(userId, queue);
+      void offlineQueue.processUserQueue(userId);
+      return queue;
+    } catch (e) {
+      console.error('Error decrypting offline queue:', e);
+    }
+  }
+  const legacyRaw = localStorage.getItem(getQueueStorageKey(userId));
+  if (legacyRaw) {
+    try {
+      const parsed = JSON.parse(legacyRaw);
+      const queue = Array.isArray(parsed) ? parsed : [];
+      memoryQueueMap.set(userId, queue);
+      saveQueueToStorage(userId, queue);
+      localStorage.removeItem(getQueueStorageKey(userId));
+      void offlineQueue.processUserQueue(userId);
+      return queue;
+    } catch {
+      // ignore
+    }
+  }
+  memoryQueueMap.set(userId, []);
+  return [];
+}
+
+/** Bloquea la cola en memoria al salir o bloquearse la sesión. */
+export function lockUserQueue(userId: string): void {
+  activeAekMap.delete(userId);
+  memoryQueueMap.delete(userId);
 }
 
 type QueueListener = (status: {
@@ -166,6 +251,9 @@ class OfflineQueueManager {
 
   public async processUserQueue(userId: string): Promise<QueueProcessResult> {
     if (!userId) return { pendingCount: 0, lastError: null };
+    if (isLocalEncryptionActiveForUser(userId) && !activeAekMap.has(userId)) {
+      return { pendingCount: 0, lastError: 'Bóveda local bloqueada' };
+    }
     if (this.processingUsers.has(userId)) {
       return { pendingCount: this.getPendingCount(userId), lastError: this.lastError };
     }
@@ -286,6 +374,9 @@ class OfflineQueueManager {
       if (key && key.startsWith(QUEUE_STORAGE_PREFIX)) {
         const userId = key.substring(QUEUE_STORAGE_PREFIX.length);
         if (userId) {
+          if (isLocalEncryptionActiveForUser(userId) && !activeAekMap.has(userId)) {
+            continue;
+          }
           void this.processUserQueue(userId);
         }
       }

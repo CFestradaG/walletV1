@@ -11,6 +11,7 @@ import {
   WeeklyAiInference,
 } from '../../core/types/models';
 import { MONTH_NAMES_ES } from '../annual_budget/annualBudgetEngine';
+import { auth } from '../../core/firebase/firebase';
 
 /**
  * Calculates a pure deterministic financial health diagnosis, weekly timeline, and prioritized advice.
@@ -613,11 +614,21 @@ export async function requestWeeklyAiInference(params: {
   const nowIso = new Date().toISOString();
 
   try {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    };
+    try {
+      const idToken = await auth.currentUser?.getIdToken();
+      if (idToken) {
+        headers['Authorization'] = `Bearer ${idToken}`;
+      }
+    } catch {
+      // Ignorar si no se puede obtener el token; el servidor devolverá 401 y se activará la heurística local
+    }
+
     const res = await fetch('/api/financial-inference', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
+      headers,
       body: JSON.stringify({
         weekData: {
           weekIndex: weekData.weekIndex,
