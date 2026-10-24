@@ -166,10 +166,15 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
     return Array.from(map.entries());
   }, [displayedTransactions]);
 
-  const filteredTotal = useMemo(
-    () => displayedTransactions.reduce((total, transaction) => total + transaction.amount, 0),
+  const filteredTotals = useMemo(
+    () => displayedTransactions.reduce((totals, transaction) => {
+      if (transaction.type === 'income') totals.income += transaction.amount;
+      if (transaction.type === 'expense') totals.expense += transaction.amount;
+      return totals;
+    }, { income: 0, expense: 0 }),
     [displayedTransactions]
   );
+  const filteredNet = filteredTotals.income - filteredTotals.expense;
 
   const hasActiveFilters =
     filterType !== 'all' ||
@@ -630,24 +635,38 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
         </div>
       )}
 
-      {/* FILTERED RESULTS TOTAL */}
+      {/* FILTERED RESULTS SUMMARY */}
       <div
-        className={`px-4 py-3 rounded-2xl border flex items-center justify-between gap-3 ${
+        className={`px-4 py-3 rounded-2xl border ${
           isDark ? 'bg-[#131927] border-white/10' : 'bg-white border-slate-200 shadow-xs'
         }`}
         aria-live="polite"
       >
-        <div>
+        <div className="flex items-center justify-between gap-3">
           <p className={`text-xs font-bold ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-            Total de resultados filtrados
+            Resumen de resultados filtrados
           </p>
           <p className={`text-[11px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
             {displayedTransactions.length} registro{displayedTransactions.length === 1 ? '' : 's'}
           </p>
         </div>
-        <span className={`font-mono text-sm font-bold ${isDark ? 'text-emerald-400' : 'text-emerald-700'}`}>
-          {hideBalances ? '••••' : formatGTQ(filteredTotal)}
-        </span>
+        <div className="grid grid-cols-3 gap-2 mt-3">
+          {([
+            { label: 'Ingresos', amount: filteredTotals.income, color: isDark ? 'text-emerald-400' : 'text-emerald-700' },
+            { label: 'Egresos', amount: filteredTotals.expense, color: isDark ? 'text-rose-400' : 'text-rose-700' },
+            { label: 'Neto', amount: filteredNet, color: filteredNet >= 0 ? (isDark ? 'text-emerald-400' : 'text-emerald-700') : (isDark ? 'text-rose-400' : 'text-rose-700') },
+          ]).map((item) => (
+            <div key={item.label} className={`min-w-0 rounded-xl px-2.5 py-2 ${isDark ? 'bg-black/20' : 'bg-slate-50'}`}>
+              <p className={`text-[10px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>{item.label}</p>
+              <p className={`font-mono text-xs sm:text-sm font-bold truncate ${item.color}`}>
+                {hideBalances ? '••••' : formatGTQ(item.amount)}
+              </p>
+            </div>
+          ))}
+        </div>
+        <p className={`text-[10px] mt-2 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+          Las transferencias no se incluyen en estos importes.
+        </p>
       </div>
 
       {/* TRANSACTIONS LIST GROUPED BY DATE */}
@@ -828,6 +847,9 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
                               )}
                               {tx.note && <span className={`text-[10px] truncate ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>— "{tx.note}"</span>}
                             </div>
+                            <p className={`text-[10px] mt-1 ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                              Registrada {formatRecordedAt(tx.createdAt)}
+                            </p>
 
                             {/* TAGS BADGES */}
                             {tx.tagIds && tx.tagIds.length > 0 && (
@@ -934,6 +956,21 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
       />
     </div>
   );
+};
+
+const formatRecordedAt = (value?: string) => {
+  if (!value) return 'sin fecha de registro disponible';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'sin fecha de registro disponible';
+  return date.toLocaleString('es-GT', {
+    timeZone: 'America/Guatemala',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true,
+  });
 };
 
 const AccountBadge: React.FC<{ account: { name: string; color?: string } }> = ({ account }) => {

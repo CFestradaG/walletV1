@@ -241,9 +241,9 @@ export const DrilldownTransactionsModal: React.FC<DrilldownTransactionsModalProp
     // Filtro por subcategoría seleccionada
     if (selectedSubFilter) {
       if (selectedSubFilter === '__unassigned__') {
-        list = list.filter(
-          (tx) => !tx.subcategoryId || !matchingCategory?.subcategories.some((s) => s.id === tx.subcategoryId)
-        );
+        // "General / Sin subcategoría" solo incluye registros realmente sin ID.
+        // No depende de que el catálogo de esta categoría esté disponible o sincronizado.
+        list = list.filter((tx) => !tx.subcategoryId);
       } else {
         list = list.filter((tx) => tx.subcategoryId === selectedSubFilter);
       }
