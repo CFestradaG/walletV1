@@ -23,7 +23,7 @@ export interface ChatMessage {
   suggestedTransaction?: SuggestedTransactionDraft;
 }
 
-const CHAT_CONSENT_PREFIX = 'wallet_chat_consent_v1_';
+const CHAT_CONSENT_PREFIX = 'wallet_chat_consent_v3_';
 const CHAT_STORAGE_PREFIX = 'wallet_chat_history_v1_';
 const CHAT_ENC_STORAGE_PREFIX = 'wallet_enc_chat_v1_';
 const MAX_SAVED_MESSAGES = 50; // Mantiene el documento consolidado en < 30 KB en Firestore
@@ -31,17 +31,28 @@ const MAX_SAVED_MESSAGES = 50; // Mantiene el documento consolidado en < 30 KB e
 export function hasUserConsentedChat(userId: string): boolean {
   if (!userId) return false;
   try {
-    return localStorage.getItem(`${CHAT_CONSENT_PREFIX}${userId}`) === 'true';
+    const timestamp = Number(localStorage.getItem(`${CHAT_CONSENT_PREFIX}${userId}`));
+    return Number.isFinite(timestamp) && timestamp > 0;
   } catch {
     return false;
   }
 }
 
-export function setUserChatConsent(userId: string, consented: boolean): void {
+export function getUserChatConsentTimestamp(userId: string): number | null {
+  if (!userId) return null;
+  try {
+    const timestamp = Number(localStorage.getItem(`${CHAT_CONSENT_PREFIX}${userId}`));
+    return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
+  } catch {
+    return null;
+  }
+}
+
+export function setUserChatConsent(userId: string, consented: boolean, timestamp = Date.now()): void {
   if (!userId) return;
   try {
     if (consented) {
-      localStorage.setItem(`${CHAT_CONSENT_PREFIX}${userId}`, 'true');
+      localStorage.setItem(`${CHAT_CONSENT_PREFIX}${userId}`, String(timestamp));
     } else {
       localStorage.removeItem(`${CHAT_CONSENT_PREFIX}${userId}`);
     }

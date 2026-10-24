@@ -13,23 +13,19 @@ import {
   Edit3,
   Bot,
   User,
-  RefreshCw,
-  CreditCard,
-  PieChart,
-  HelpCircle,
 } from 'lucide-react';
 import { useWallet } from '../../core/state/WalletContext';
-import { auth } from '../../core/firebase/firebase';
 import {
   ChatMessage,
   SuggestedTransactionDraft,
   hasUserConsentedChat,
+  getUserChatConsentTimestamp,
   setUserChatConsent,
   loadChatMessages,
   saveChatMessages,
   clearChatMessages,
 } from './chatStorage';
-import { buildPseudonymizedContext } from './chatContextEngine';
+import { sendGenericChatMessage } from './financialChatAi';
 import { TransactionType } from '../../core/types/models';
 
 interface FinancialChatModalProps {
@@ -52,12 +48,8 @@ export const FinancialChatModal: React.FC<FinancialChatModalProps> = ({
   const {
     currentUser,
     resolvedTheme,
-    activePeriod,
     accounts,
     categories,
-    transactions,
-    budgets,
-    portfolioSummary,
     createTransaction,
   } = useWallet();
 
@@ -65,6 +57,7 @@ export const FinancialChatModal: React.FC<FinancialChatModalProps> = ({
   const userId = currentUser?.id || '';
 
   const [hasConsented, setHasConsented] = useState<boolean>(false);
+  const [chatSessionStartedAt, setChatSessionStartedAt] = useState<number | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -77,6 +70,7 @@ export const FinancialChatModal: React.FC<FinancialChatModalProps> = ({
   useEffect(() => {
     if (isOpen && userId) {
       const consented = hasUserConsentedChat(userId);
+      setChatSessionStartedAt(getUserChatConsentTimestamp(userId));
       setHasConsented(consented);
       if (consented) {
         void loadChatMessages(userId).then((loaded) => {
@@ -86,7 +80,7 @@ export const FinancialChatModal: React.FC<FinancialChatModalProps> = ({
               id: 'msg_welcome',
               role: 'assistant',
               content:
-                '¡Hola! Soy tu **Asistente Financiero de Wallet**. Puedo analizar tu período actual, revisar tu ritmo de gasto o preparar borradores de transacciones para registrar tus movimientos al instante en Quetzales (GTQ).\n\n¿En qué te puedo asesorar hoy?',
+                '¡Hola! Soy el asistente general de Wallet. Puedo explicar conceptos y responder preguntas generales, pero no tengo acceso a tus cuentas ni a tus movimientos.\n\n¿En qué te puedo ayudar?',
               timestamp: Date.now(),
             };
             setMessages([welcomeMsg]);
@@ -94,6 +88,8 @@ export const FinancialChatModal: React.FC<FinancialChatModalProps> = ({
             setMessages(loaded);
           }
         });
+      } else {
+        setMessages([]);
       }
     }
   }, [isOpen, userId]);
@@ -107,18 +103,24 @@ export const FinancialChatModal: React.FC<FinancialChatModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleGrantConsent = () => {
-    setUserChatConsent(userId, true);
+  const handleGrantConsent = async () => {
+    setIsLoading(true);
+    const startedAt = Date.now();
+    setUserChatConsent(userId, true, startedAt);
+    setChatSessionStartedAt(startedAt);
     setHasConsented(true);
+    const previousHistory = await loadChatMessages(userId);
     const welcomeMsg: ChatMessage = {
-      id: 'msg_welcome',
+      id: `msg_general_welcome_${startedAt}`,
       role: 'assistant',
       content:
-        '¡Bienvenido! He cargado el resumen seudonimizado de tu período financiero activo. Pregúntame sobre tus presupuestos, fechas de corte de tarjetas o pídeme registrar compras diarias.',
+        '¡Bienvenido! Este asistente responde preguntas generales y no recibe datos de tu Wallet. ¿Qué te gustaría consultar?',
       timestamp: Date.now(),
     };
-    setMessages([welcomeMsg]);
-    void saveChatMessages(userId, [welcomeMsg]);
+    const preservedHistory = [...previousHistory, welcomeMsg];
+    setMessages(preservedHistory);
+    void saveChatMessages(userId, preservedHistory);
+    setIsLoading(false);
   };
 
   const handleClearHistory = () => {
@@ -153,66 +155,25 @@ export const FinancialChatModal: React.FC<FinancialChatModalProps> = ({
     setIsLoading(true);
 
     try {
-      // 1. Obtener token de autenticación
-      let token: string | undefined;
-      try {
-        token = await auth.currentUser?.getIdToken();
-      } catch {
-        // En dev puede continuar
-      }
-
-      // 2. Extraer contexto financiero seudonimizado
-      const financialContext = buildPseudonymizedContext({
-        activePeriod,
-        accounts,
-        categories,
-        transactions,
-        budgets,
-        portfolioSummary,
-      });
-
-      const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
-      };
-      if (token) {
-        headers['Authorization'] = `Bearer ${token}`;
-      }
-
-      const res = await fetch('/api/financial-chat', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          messages: newMessages.map((m) => ({
-            role: m.role,
-            content: m.content,
-          })),
-          financialContext,
-        }),
-      });
-
-      if (!res.ok) {
-        const errorJson = await res.json().catch(() => ({}));
-        throw new Error(errorJson.error || `Error del servidor (${res.status})`);
-      }
-
-      const json = await res.json();
-      if (!json.ok || !json.data) {
-        throw new Error(json.error || 'Respuesta vacía del servidor.');
-      }
+      // No enviamos datos de Wallet ni conversaciones anteriores al consentimiento
+      // de este modo general, que pueden contener preguntas financieras.
+      const currentSessionMessages = chatSessionStartedAt
+        ? messages.filter((message) => message.timestamp >= chatSessionStartedAt)
+        : [];
+      const assistantReply = await sendGenericChatMessage(currentSessionMessages, text);
 
       const assistantMsg: ChatMessage = {
         id: `msg_ast_${Date.now()}`,
         role: 'assistant',
-        content: json.data.reply || 'He recibido tu mensaje.',
+        content: assistantReply,
         timestamp: Date.now(),
-        suggestedTransaction: json.data.suggestedTransaction || undefined,
       };
 
       const updatedHistory = [...newMessages, assistantMsg];
       setMessages(updatedHistory);
       void saveChatMessages(userId, updatedHistory);
     } catch (err: any) {
-      console.error('[FinancialChat] Error:', err);
+      setMessages(messages);
       setErrorMessage(err?.message || 'No se pudo enviar el mensaje.');
     } finally {
       setIsLoading(false);
@@ -294,10 +255,10 @@ export const FinancialChatModal: React.FC<FinancialChatModalProps> = ({
   };
 
   const quickPrompts = [
-    '¿Cómo voy con mi presupuesto este mes?',
-    '¿Qué tarjeta me conviene usar hoy?',
-    '¿En qué categoría he gastado más?',
-    'Anotar gasto de Q50 en combustible',
+    '¿Qué es un fondo de emergencia?',
+    '¿Cómo funciona el interés compuesto?',
+    '¿Qué diferencia hay entre ahorro e inversión?',
+    'Explícame cómo se calcula una tasa de interés',
   ];
 
   return (
@@ -315,13 +276,13 @@ export const FinancialChatModal: React.FC<FinancialChatModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="text-sm font-bold">Asistente Financiero</h2>
+                <h2 className="text-sm font-bold">Asistente general</h2>
                 <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 flex items-center gap-1">
                   <ShieldCheck className="w-3 h-3" />
-                  <span>Sin PII</span>
+                  <span>Sin datos de Wallet</span>
                 </span>
               </div>
-              <p className="text-[11px] text-slate-400">Consultas y borradores inteligentes en GTQ</p>
+              <p className="text-[11px] text-slate-400">Preguntas generales · no accede a tus finanzas</p>
             </div>
           </div>
 
@@ -355,10 +316,9 @@ export const FinancialChatModal: React.FC<FinancialChatModalProps> = ({
             </div>
 
             <div className="space-y-2">
-              <h3 className="text-lg font-bold">Privacidad de tu Asistente Financiero</h3>
+              <h3 className="text-lg font-bold">Privacidad del asistente general</h3>
               <p className="text-xs text-slate-400 leading-relaxed">
-                Wallet te permite consultar en lenguaje natural tu situación financiera con inteligencia artificial.
-                Antes de comenzar, conoce cómo protegemos tu información:
+                Este chat usa Gemini mediante Firebase AI Logic. Lee qué se transmite antes de continuar:
               </p>
             </div>
 
@@ -368,19 +328,19 @@ export const FinancialChatModal: React.FC<FinancialChatModalProps> = ({
               <div className="flex items-start gap-2.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <span>
-                  <strong>Cero datos personales (Sin PII):</strong> Nunca enviamos tu nombre, correo, números de cuenta, notas personales ni datos bancarios sensibles.
+                  <strong>Tu mensaje se envía a Google Gemini:</strong> Wallet no adjunta información de tus cuentas, movimientos, categorías, saldos ni presupuestos. No escribas datos personales, financieros, confidenciales o que te identifiquen.
                 </span>
               </div>
               <div className="flex items-start gap-2.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <span>
-                  <strong>Métricas agregadas:</strong> Solo se analizan totales numéricos, categorías y límites del período activo.
+                  <strong>Tratamiento del nivel gratuito:</strong> Google puede usar consultas y respuestas para mejorar sus productos; revisores humanos podrían procesarlas. Por eso este asistente es general y no debe recibir información sensible.
                 </span>
               </div>
               <div className="flex items-start gap-2.5">
                 <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
                 <span>
-                  <strong>Tú tienes el control:</strong> La IA nunca escribe directamente en tu base de datos; genera borradores para que tú los confirmes con un toque.
+                  <strong>Sin acceso a Wallet:</strong> La IA solo recibe los mensajes de esta conversación; no puede leer ni modificar tu información financiera.
                 </span>
               </div>
             </div>
@@ -437,7 +397,7 @@ export const FinancialChatModal: React.FC<FinancialChatModalProps> = ({
                       </div>
 
                       {/* Tarjeta de Borrador Interactivo de Transacción */}
-                      {msg.suggestedTransaction && (
+                      {msg.suggestedTransaction && !chatSessionStartedAt && (
                         <div
                           className={`mt-2 p-3 rounded-xl border space-y-2 ${
                             isDark
@@ -573,7 +533,7 @@ export const FinancialChatModal: React.FC<FinancialChatModalProps> = ({
                   value={inputText}
                   onChange={(e) => setInputText(e.target.value)}
                   onKeyDown={handleKeyDown}
-                  placeholder="Pregunta sobre presupuestos, tarjetas o pide registrar un gasto..."
+                  placeholder="Haz una pregunta general; no incluyas datos personales o financieros..."
                   className={`flex-1 max-h-32 p-3 text-xs sm:text-sm rounded-2xl border resize-none focus:outline-none focus:ring-2 focus:ring-emerald-400 ${
                     isDark ? 'bg-black/40 border-white/10 text-white' : 'bg-white border-slate-300 text-slate-900 shadow-xs'
                   }`}

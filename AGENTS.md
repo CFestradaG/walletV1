@@ -11,7 +11,7 @@ Wallet es una aplicación web de finanzas personales en español, orientada a qu
 | Interfaz | React 19, TypeScript 7, Vite 8, Tailwind CSS 4 |
 | Componentes y animación | Lucide React y Motion |
 | Datos y autenticación | Firebase Auth y Cloud Firestore mediante SDK web |
-| Servidor backend y proxy IA | Servidor Express en `server.ts` con Vite middlewares y ruta `POST /api/financial-inference` usando `@google/genai`; la clave vive en el entorno del servidor y el cliente envía métricas financieras agregadas |
+| IA en cliente y servidor | El chat usa Firebase AI Logic desde el SDK web con Gemini Developer API; la inferencia semanal continúa usando `POST /api/financial-inference` en `server.ts` |
 | PWA | `vite-plugin-pwa`/Workbox, actualización automática, manifest `standalone`, caché de recursos y caché de fuentes Google |
 | Backend adicional | Firebase Cloud Functions v2 callable en `functions/`, Node.js 22 y Firebase Admin |
 | Hosting | Firebase Hosting publica `dist/` y reescribe rutas a `index.html` |
@@ -23,7 +23,7 @@ La aplicación móvil Flutter ya no forma parte del repositorio. La experiencia 
 
 | Ruta | Responsabilidad |
 |---|---|
-| `server.ts` | Servidor backend Express con Vite middleware en desarrollo y endpoint `POST /api/financial-inference` para análisis inferencial con Google Gemini. |
+| `server.ts` | Servidor Express con Vite middleware en desarrollo y endpoint `POST /api/financial-inference` para análisis inferencial con Google Gemini. No es el backend del chat. |
 | `src/main.tsx`, `src/App.tsx`, `src/index.css` | Punto de entrada, shell/navegación, tema y estilos globales. |
 | `src/core/types/models.ts` | Tipos de cuentas, movimientos, plantillas, categorías, períodos, presupuestos, perfil, reporte de salud financiera y preferencias. |
 | `src/core/data/initialData.ts` | Tienda inicial, categorías y períodos predeterminados. |
@@ -102,6 +102,14 @@ Modelos relevantes en `src/core/types/models.ts`:
     - **Seguridad de Credenciales:** La clave de API de Gemini reside exclusivamente en el entorno del servidor (`GEMINI_API_KEY`); el cliente web nunca accede ni almacena credenciales de IA.
     - **Contingencia Heurística Offline:** Si el usuario no tiene conexión a internet o el servicio de IA no responde, el sistema ejecuta de forma transparente un motor de inferencia heurístico local con reglas financieras deterministas, garantizando diagnósticos y recomendaciones inmediatas en cualquier circunstancia.
     - **Control bajo demanda:** En el modal de salud financiera, cada tarjeta de semana de la bitácora incluye controles interactivos para solicitar o regenerar la inferencia semanal según la necesidad del usuario.
+- **Chat con Firebase AI Logic:**
+  - El chat general llama al SDK `firebase/ai` en el navegador con Gemini Developer API; no requiere un servidor Express para `POST /api/financial-chat` ni expone una clave de Gemini.
+  - Firebase AI Logic requiere habilitar el proveedor Gemini Developer API en Firebase Console. Para proteger el acceso se inicializa App Check con reCAPTCHA v3; el site key se configura con `VITE_FIREBASE_APP_CHECK_SITE_KEY` o `recaptchaSiteKey` en la configuración de Firebase.
+  - En desarrollo local se puede activar el token debug con `VITE_FIREBASE_APP_CHECK_DEBUG_TOKEN=true`; debe registrarse en Firebase Console y nunca incluirse como token fijo en producción.
+  - En el modo gratuito no se adjunta contexto de Wallet (cuentas, saldos, categorías, presupuestos ni transacciones). Se envía el texto escrito por el usuario y hasta 12 mensajes de la conversación iniciada tras aceptar el consentimiento; las conversaciones anteriores al consentimiento no entran en el prompt.
+  - El consentimiento informa que Google puede usar consultas y respuestas del nivel gratuito para mejorar productos y que revisores humanos podrían procesarlas. La interfaz indica que no se escriban datos personales, financieros, confidenciales ni identificables.
+  - El chat es general: no prepara nuevos borradores ni recibe acceso a funciones/datos financieros de Wallet. App Check y límites/cuotas de Firebase AI Logic ayudan a mitigar abuso, pero el usuario debe respetar las cuotas del modelo.
+  - El uso gratuito depende del modelo y las cuotas vigentes del Gemini Developer API. Para enviar contexto financiero se requiere una alternativa cuyos términos permitan procesar información sensible; el nivel gratuito no es apropiado para ello.
 - **Gestión de Etiquetas (Tags) y Asignación Masiva:**
   - **Modelo y Sincronización:** Cada etiqueta (`Tag`) cuenta con `id`, `name`, `color` (paleta financiera de alto contraste y código hex) y se persiste en Firestore bajo `users/{uid}/tags/{tagId}` con replicación en `offlineQueue.ts` (`SAVE_TAG`, `DELETE_TAG`).
   - **Administración en Configuración:** Accesible desde `Más > Etiquetas` mediante `TagsSettingsModal.tsx`. Permite crear y editar etiquetas con vista previa en tiempo real y contador de registros asociados.
@@ -185,12 +193,12 @@ Este plan prepara primero la protección de datos local y después el chat finan
    - Definir campos permitidos y tamaños por colección; validar referencias categoría/subcategoría/período cuando corresponda; revisar saldos y escrituras sin bloquear operaciones legítimas; contrastar las reglas locales con las desplegadas.
 4. **Pendiente — Reducir exposición de sesión y diagnósticos.**
    - Revisar persistencia Auth, logout, colas por UID, limpieza segura sin perder cambios offline, consola/logs y cabeceras de Hosting. Evaluar App Check y controles de Auth desde consola.
-5. **Completado — Asistente Financiero Privado IA Web (Chat de texto en Quetzales).**
-   - **Completado:** Consultas contextuales en lenguaje natural basadas en agregados seudonimizados sin PII (sin nombres de cuentas reales, números, correos ni notas privadas).
-   - **Completado:** Consentimiento informado explícito (Opt-in) con modal de advertencias de privacidad antes de enviar la primera consulta al proxy backend.
-   - **Completado:** Integridad de transacciones estricta: el modelo sugiere borradores interactivos validados (`<<<TRANSACTION_DRAFT_START>>>...<<<TRANSACTION_DRAFT_END>>>`); jamás escribe directo a Firestore ni altera saldos automáticamente; el usuario confirma y revisa cada operación en `TransactionModal`.
+5. **Completado — Asistente General con Firebase AI Logic.**
+   - **Completado:** Chat general sin contexto de Wallet; el nivel gratuito no recibe cuentas, saldos, categorías, presupuestos ni movimientos.
+   - **Completado:** Consentimiento informado explícito (Opt-in) con modal de advertencias antes de enviar la primera consulta a Firebase AI Logic.
+   - **Completado:** Conversaciones anteriores al consentimiento del modo general no se agregan al prompt.
    - **Completado:** Historial de conversación cifrado en reposo localmente en el navegador (`localStorage`) con la Bóveda AES-256-GCM del usuario (o fallback sin cifrar si la bóveda no está activa).
-   - **Completado:** Endpoint backend seguro `POST /api/financial-chat` en `server.ts` con verificación de ID Token de Firebase Auth, rate limiting (20 req/min), ventana rodante de 12 mensajes, límite de 64kb y erradicación total de logs con contenido o prompts.
+   - **Completado en cliente:** Integración con Firebase AI Logic (`firebase/ai`) y Gemini Developer API; se eliminó la dependencia funcional de `/api/financial-chat`. App Check y su configuración deben activarse/verificarse en Firebase Console antes de publicar.
    - **Completado:** Integración fluida en la interfaz: accesos directos desde la barra superior de acciones, banner interactivo en el Inicio (`DashboardView`) y tarjeta en Configuración (`MoreView`).
 6. **Pendiente — Preparar Capacitor tras cerrar las etapas anteriores.**
    - Reutilizar React/Vite; integrar biometría nativa como desbloqueo de clave protegida por el sistema operativo; probar sesión, offline, deep links, exportación y borrado en Android/iOS.
@@ -201,7 +209,7 @@ Este plan prepara primero la protección de datos local y después el chat finan
   - **Etiquetas y Asignación Masiva Completadas:** Se implementó el modelo de `Tag`, reglas de Firestore desplegadas, persistencia offline, pantalla de administración en Configuración, asignación masiva de transacciones con casillas de selección múltiple, protección de eliminación por integridad referencial y filtros avanzados.
   - **Cifrado Local Web en Reposo Implementado (Etapa 1):** Bóveda AES-256-GCM implementada con desacoplamiento de PIN, soporte opcional para WebAuthn PRF, Clave de Recuperación aleatoria de 256 bits, verificación previa de respaldo, máquina de estados de arranque contra inconsistencias y migración no destructiva en 4 fases.
   - **Proxy de IA Endurecido (Etapa 2):** Implementada la verificación de tokens de Firebase Auth, rate limiting por usuario/IP, validación estricta de rangos y esquemas, tamaño máximo de 64kb y erradicación de logs con métricas o prompts.
-  - **Asistente Financiero Privado IA Completado (Etapa 5):** Implementado el chat financiero interactivo con consentimiento previo, agregados seudonimizados sin PII, sugerencias y borradores de transacciones interactivos bajo confirmación del usuario, historial cifrado con la bóveda AES-256 local y endpoint backend `POST /api/financial-chat` con Gemini 2.5 Flash / Flash-Lite en Quetzales (GTQ).
+  - **Asistente General con Firebase AI Logic:** El chat usa el SDK web `firebase/ai` y Gemini Developer API sin adjuntar datos de Wallet. El consentimiento advierte del tratamiento del nivel gratuito y las conversaciones anteriores no se incluyen en la sesión enviada. La publicación requiere configurar App Check y habilitar Firebase AI Logic en el proyecto.
 
 ## Registro de Cambios y Correcciones de Auditoría (Octubre 2026)
 

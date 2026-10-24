@@ -6,10 +6,29 @@ import {
   setPersistence,
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
 import firebaseConfig from '../../../firebase-applet-config.json';
 
 // Initialize Firebase App
 export const firebaseApp = initializeApp(firebaseConfig);
+
+const appCheckSiteKey =
+  import.meta.env.VITE_FIREBASE_APP_CHECK_SITE_KEY || firebaseConfig.recaptchaSiteKey;
+export let appCheckReady = false;
+
+if (appCheckSiteKey) {
+  if (import.meta.env.DEV && import.meta.env.VITE_FIREBASE_APP_CHECK_DEBUG_TOKEN === 'true') {
+    (self as typeof self & { FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean }).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+  }
+
+  initializeAppCheck(firebaseApp, {
+    provider: new ReCaptchaV3Provider(appCheckSiteKey),
+    isTokenAutoRefreshEnabled: true,
+  });
+  appCheckReady = true;
+} else {
+  console.warn('[App Check] Falta configurar VITE_FIREBASE_APP_CHECK_SITE_KEY.');
+}
 
 // CRITICAL: The app will break without this line
 export const db = getFirestore(firebaseApp, firebaseConfig.firestoreDatabaseId);
