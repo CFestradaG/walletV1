@@ -6,7 +6,7 @@ import {
   setPersistence,
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
-import { initializeAppCheck, ReCaptchaV3Provider } from 'firebase/app-check';
+import { initializeAppCheck, ReCaptchaEnterpriseProvider } from 'firebase/app-check';
 import firebaseConfig from '../../../firebase-applet-config.json';
 
 // Initialize Firebase App
@@ -17,12 +17,14 @@ const appCheckSiteKey =
 export let appCheckReady = false;
 
 if (appCheckSiteKey) {
-  if (import.meta.env.DEV && import.meta.env.VITE_FIREBASE_APP_CHECK_DEBUG_TOKEN === 'true') {
-    (self as typeof self & { FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean }).FIREBASE_APPCHECK_DEBUG_TOKEN = true;
+  if (import.meta.env.DEV) {
+    // In dev environment, set the registered App Check debug token so development domains and local proxies authenticate cleanly
+    (self as typeof self & { FIREBASE_APPCHECK_DEBUG_TOKEN?: boolean | string }).FIREBASE_APPCHECK_DEBUG_TOKEN =
+      import.meta.env.VITE_FIREBASE_APP_CHECK_DEBUG_TOKEN || 'CC0CA449-E31D-4869-BC32-2C42DF2C7251';
   }
 
   initializeAppCheck(firebaseApp, {
-    provider: new ReCaptchaV3Provider(appCheckSiteKey),
+    provider: new ReCaptchaEnterpriseProvider(appCheckSiteKey),
     isTokenAutoRefreshEnabled: true,
   });
   appCheckReady = true;
